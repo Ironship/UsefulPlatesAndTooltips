@@ -49,7 +49,7 @@ local PRESETS = {
     } },
     { id = "debug", label = "Debug", values = {
         showSkull = true, skullIcon = "cross", skullPulse = false,
-        showMarkers = true, fillTexture = "flat", fillOpacity = 60, dotColors = "school", segmentDividers = true,
+        showMarkers = true, fillTexture = "flat", fillOpacity = 60, dotColors = "each", segmentDividers = true,
         outlineStyle = "solid", outlineThickness = 1, outlineColor = "white", outlineOpacity = 100,
         smoothMotion = false, flashOnApply = true, pulseOutline = false,
         showSpark = false, showGlow = false, showShine = false, scrollStripes = false,
@@ -558,7 +558,7 @@ local function buildTabs()
     marker:checkbox("showMarkers", "Show damage marker", { tooltip = "Marks the damage your DoTs still have to "
         .. "deal on the target's health bar. If the health ends inside it, the target dies." })
     marker:choice("dotColors", "DoT colors", lists.dotColors, { tooltip = "One color, or one segment per DoT "
-        .. "colored by spell school or with a different color each." })
+        .. "with green poisons, purple curses/shadow damage and red bleeds. Rainbow gives each spell a separate color." })
     marker:choice("fillTexture", "Fill style", lists.fills)
     marker:choice("fillColor", "Fill color", lists.colors, { enabledIf = singleColor,
         tooltip = "Used when DoT colors is set to one color." })
@@ -611,7 +611,8 @@ local function buildTabs()
     plates:slider("plateIconOffsetY", "Icon vertical offset", -40, 40, 1,
         { enabledIf = plateIcon, tooltip = "Pixels up (+) or down (-) from the chosen position." })
     plates:gap()
-    plates:choice("plateDotColors", "DoT colors", lists.dotColors, { enabledIf = platesOn })
+    plates:choice("plateDotColors", "DoT colors", lists.dotColors, { enabledIf = platesOn,
+        tooltip = "By effect type: green poisons, purple curses/shadow damage and red bleeds. Rainbow: a separate color per spell." })
     plates:choice("plateFillTexture", "Fill style", lists.fills, { enabledIf = platesOn })
     plates:choice("plateFillColor", "Fill color", lists.colors, { enabledIf = plateSingle })
     plates:slider("plateFillOpacity", "Fill opacity", 0, 100, 5, { suffix = "%", enabledIf = platesOn })

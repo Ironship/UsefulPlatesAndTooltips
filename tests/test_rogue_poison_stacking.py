@@ -102,6 +102,27 @@ def fill(binding):
                 and child.points[1][1] == "TOPLEFT")
 
 
+assert list(fill(target).tint.values()) == [.35, 1, .35, 1]
+colors = {}
+for mode in ("each", "rainbow"):
+    dot.db.dotColors = dot.db.plateDotColors = mode
+    dot.Retail.UpdateRogueAuras()
+    entries = [("Deadly Poison", 8), ("Kingsbane", 8), ("Rupture", 1), ("Garrote", 1), ("Fluch der Pein", 32)]
+    colors[mode] = [tuple(dot.dotColor(rt.table_from({"name": name, "school": school}), mode).values())
+                    for name, school in entries]
+    for host in (game.TargetFrame, game.plateA):
+        assert tuple(fill(game.FindProjection(host)).tint.values())[:3] == colors[mode][0]
+        assert geometry(game.FindProjection(host), .5) == (300, 323)
+assert colors["each"] == [(.35, 1, .35), (.35, 1, .35), (1, .3, .3), (1, .3, .3), (.7, .35, 1)]
+assert len(set(colors["rainbow"])) == 5
+extra = [rt.table_from({"name": f"Additional DoT {i}", "school": 32}) for i in range(24)]
+palette = [tuple(dot.dotColor(entry, "rainbow").values()) for entry in extra]
+assert len(set(palette + colors["rainbow"])) == 29
+assert all(0 <= channel <= 1 for color in palette for channel in color)
+assert [tuple(dot.dotColor(entry, "rainbow").values()) for entry in extra] == palette
+print("ok native poison uses effect-type colors and shares the stable Rainbow palette with ordinary DoTs on both bars")
+
+
 icons = (game.FindIcons(game.TargetFrame), game.FindIcons(game.plateA))
 for prefix in ("", "plate"):
     for key, value in {"fillTexture": "stripes", "dotColors": "school", "fillOpacity": 70,

@@ -277,7 +277,7 @@ for preset in ("Minimal", "Classic", "Debug", "Juicy"):
           (settings.plateFillTexture, settings.plateDotColors, settings.plateFillOpacity),
           (settings.fillTexture, settings.dotColors, settings.fillOpacity))
 check("Juicy preset set the fill", G.UsefulPlatesAndTooltips_DoTInfoDB.fillTexture, "stripes")
-check("Juicy nameplates use a different color per DoT", G.UsefulPlatesAndTooltips_DoTInfoDB.plateDotColors, "each")
+check("Juicy nameplates use effect-type colors", G.UsefulPlatesAndTooltips_DoTInfoDB.plateDotColors, "each")
 check("presets keep the smaller nameplate icon size", G.UsefulPlatesAndTooltips_DoTInfoDB.nameplateIconSize, 18)
 
 

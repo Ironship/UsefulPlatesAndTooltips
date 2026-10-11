@@ -1236,8 +1236,8 @@ local LABEL_POSITIONS = {
 
 local DOT_COLOR_MODES = {
     { id = "single", label = "One color (fill color)" },
-    { id = "school", label = "By spell school" },
-    { id = "each",   label = "Different color per DoT" },
+    { id = "each",   label = "By effect type" },
+    { id = "rainbow", label = "Rainbow" },
 }
 
 -- "By spell school" colors, keyed by school mask (Frostfire = Fire + Frost).
@@ -1252,25 +1252,33 @@ local SCHOOL_COLORS = {
     [64] = { 1, 0.55, 1 },      -- Arcane
 }
 
--- "Different color per DoT": each spell keeps the palette color it got when first seen this session, so
+-- "Rainbow": each spell keeps the palette color it got when first seen this session, so
 -- colors don't shuffle when DoTs are recast or expire.
 local DOT_PALETTE = {
     { 0.95, 0.3, 0.3 }, { 0.3, 0.75, 1 }, { 1, 0.8, 0.2 }, { 0.45, 1, 0.45 },
     { 0.85, 0.4, 1 }, { 1, 0.55, 0.15 }, { 0.3, 1, 0.9 }, { 1, 0.45, 0.75 },
 }
-local paletteIndexByName, nextPaletteIndex = {}, 1
+local paletteColorByName, nextPaletteIndex = {}, 1
 
--- mode: "school" or "each"; defaults to the target marker's setting (nameplates pass their own).
+-- Defaults to the target marker's setting; nameplates and the native poison pass their own.
 local function dotColor(entry, mode)
-    if (mode or db.dotColors) == "school" then
+    if (mode or db.dotColors) ~= "rainbow" then
         return SCHOOL_COLORS[entry.school] or COLOR_BY_ID.white
     end
-    local index = paletteIndexByName[entry.name]
-    if not index then
-        index = (nextPaletteIndex - 1) % #DOT_PALETTE + 1
-        paletteIndexByName[entry.name], nextPaletteIndex = index, nextPaletteIndex + 1
+    local color = paletteColorByName[entry.name]
+    if not color then
+        color = DOT_PALETTE[nextPaletteIndex]
+        if not color then
+            -- Continue around the hue wheel instead of reusing a previous spell's palette color.
+            local hue = (nextPaletteIndex * 0.618033988749895 % 1) * 6
+            local rising = 0.25 + 0.75 * (hue - math.floor(hue))
+            local falling = 1.25 - rising
+            color = ({ { 1, rising, 0.25 }, { falling, 1, 0.25 }, { 0.25, 1, rising },
+                { 0.25, falling, 1 }, { rising, 0.25, 1 }, { 1, 0.25, falling } })[math.floor(hue) + 1]
+        end
+        paletteColorByName[entry.name], nextPaletteIndex = color, nextPaletteIndex + 1
     end
-    return DOT_PALETTE[index]
+    return color
 end
 
 local SMOOTH_RATE = 10 -- how fast the marker glides to a new value (higher = snappier)
@@ -2092,6 +2100,8 @@ end
 
 local function applyDefaults()
     -- Settings from earlier versions.
+    if db.dotColors == "school" then db.dotColors = "each" end
+    if db.plateDotColors == "school" then db.plateDotColors = "each" end
     if db.showMarkers == nil and db.showLine ~= nil then db.showMarkers = db.showLine end
     db.showLine, db.showRemaining = nil, nil
     db.showFullLine, db.lineThickness, db.lineColor = nil, nil, nil
