@@ -1,4 +1,4 @@
--- Retail predicts explicitly cast, single-target DoTs; it never reads protected aura state.
+-- Retail predicts cast DoTs and readable poison applications; protected aura state is never read.
 local _, BIT = ...
 local ns = BIT.Module("DoTInfo")
 local ok, version = pcall(GetBuildInfo)
@@ -15,6 +15,9 @@ R.spells = {
     [703] = {}, [1943] = { finisher = true }, -- Garrote, Rupture
     [188389] = {}, [772] = {}, -- Flame Shock, Rend
 }
+
+-- Aura IDs are deliberately separate: casting a weapon coating does not poison the target.
+R.poisonSpells = { [2818] = { descriptionID = 2823 } }
 
 local function secret(value)
     return type(issecretvalue) == "function" and issecretvalue(value)
@@ -162,8 +165,9 @@ function R.Recipient(sentName)
 end
 
 function R.Parse(spellID, desc, comboPoints, parseLegacy)
-    spellID = R.SpellID(spellID)
+    spellID = R.SpellID(spellID) or (integer(spellID, 1) and R.poisonSpells[spellID] and spellID)
     if not spellID or secret(desc) or type(desc) ~= "string" then return end
+    local config = R.spells[spellID] or R.poisonSpells[spellID]
     local text = desc:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     text = text:gsub("\194\160", " "):gsub("\226\128\175", " ")
     -- Optional talent previews are not the current spell's amount; nested blocks are possible.
@@ -191,7 +195,7 @@ function R.Parse(spellID, desc, comboPoints, parseLegacy)
         return 1
     end
     if locale == "enUS" or locale == "enGB" then
-        if R.spells[spellID].finisher then
+        if config.finisher then
             hasRows = text:find("%d+ points?%s*:") ~= nil
             for count, amount, secs in text:gmatch("(%d+) points?%s*:%s*(%d+%.?%d*)%s*[^%d\n]-over (%d+%.?%d*) sec") do
                 local points = tonumber(count)
@@ -208,7 +212,7 @@ function R.Parse(spellID, desc, comboPoints, parseLegacy)
             end
         end
     elseif locale == "deDE" then
-        if R.spells[spellID].finisher then
+        if config.finisher then
             hasRows = text:find("%d+ Punkte?%s*:") ~= nil
             for count, amount, words, secs in text:gmatch("(%d+) Punkte?%s*:%s*(%d+%.?%d*)%s+([^%d\n]-)(%d+%.?%d*) Sek") do
                 if words:match("über%s*$") or words:match("im Verlauf von%s*$") then
@@ -266,10 +270,11 @@ function R.ApplyRefresh(dot, previous, now)
 end
 
 function R.RefreshDue(dot, now)
+    if dot.poison then return false end -- Automatic poison procs do not have a manual Pandemic cue.
     local remaining = dot.expiresAt - now
     return remaining > 0 and remaining <= dot.duration * 0.3 + 0.001
 end
 
 function R.Remaining(dot, now)
-    return dot.total * math.max(0, math.min(1.3, (dot.expiresAt - now) / dot.duration))
+    return dot.total * math.max(0, math.min(dot.poison and 1 or 1.3, (dot.expiresAt - now) / dot.duration))
 end
