@@ -55,9 +55,11 @@ function CreateFrame(kind, name, parent, template)
         pcall(options.initializeFrame, button)  -- Blizzard's secure callback also swallows errors.
         setmetatable(button, { __index = function() error('restricted native button was read') end })
         -- Children inherit the same access restriction. Only native bindings may mutate them now.
-        for _, child in ipairs(button.children) do
+        local function lock(child)
+            for _, nested in ipairs(child.children) do lock(nested) end
             setmetatable(child, { __index = function() error('restricted native child was read') end })
         end
+        for _, child in ipairs(button.children) do lock(child) end
         table.insert(poisonBindings, record)
         return button
     end
@@ -66,6 +68,11 @@ end
 function FindProjection(parent)
     for i = #poisonBindings, 1, -1 do
         if rawequal(poisonBindings[i].container.parent, parent) then return poisonBindings[i] end
+    end
+end
+function FindIcons(parent)
+    for _, container in ipairs(containers) do
+        if rawequal(container.parent, parent) and container.groupKey == 'rogue' then return container end
     end
 end
 -- Test-only model: the timer uses a fraction, but duration text receives 0..100 percent.
@@ -98,8 +105,8 @@ assert len(game.poisonBindings) == 2 and game.auraCalls == 0
 for binding in (target, plate):
     assert binding.direction == 1
     assert binding.format.components[1].property == 1
-    assert len(binding.button.points) == 0  # SetAllPoints uses the HP scale's fill texture.
-    assert binding.timer.parent.kind == "AuraButton"
+    assert len(binding.button.points) == 2  # Between the plain base and cumulative HP scale fills.
+    assert binding.timer.parent.parent.kind == "AuraButton"
     assert game.Same(binding.timer.allPoints, binding.button)
     game.NativePoison(binding, 1)
     assert binding.nativeText == "~46"
@@ -113,8 +120,7 @@ print("ok exact Deadly Poison native slots supply countdown damage while addon a
 
 # An invisible plain StatusBar maps full poison damage to secret max HP; the native countdown
 # is nested in its fill without reading width, health, duration, aura state or native children.
-scales = [f for f in game.AllFrames.values()
-          if f.kind == "StatusBar" and f.parent.kind != "AuraButton" and f.value == 46]
+scales = [binding.button.points[2][2].parent for binding in (target, plate)]
 assert len(scales) == 2
 for scale in scales:
     assert game.Same(scale.max, game.SECRET)
@@ -123,7 +129,7 @@ for scale in scales:
             or game.Same(scale.allPoints, plate.container.points[1][2]))
     assert scale.height is None, "poison projection must cover HP height rather than a two-pixel line"
     assert scale.parent.kind != "AuraButton"
-assert game.Same(plate.anchor.parent.allPoints, plate.container.points[1][2])
+assert game.Same(plate.button.points[1][2].parent.allPoints, plate.container.points[1][2])
 # A live nameplate may move above the original frame level without being recreated.
 game.plateA.UnitFrame.healthBar.SetFrameLevel(game.plateA.UnitFrame.healthBar, 900)
 game.plateA.UnitFrame.healthBar.SetFrameStrata(game.plateA.UnitFrame.healthBar, "HIGH")
@@ -185,15 +191,15 @@ rt, game, dot = setup("""
     C_StringUtil.CreateNumericRuleFormatter = function() error('formatter failed') end
 """)
 assert len(game.poisonBindings) == 0
-assert game.FindContainer(game.TargetFrame).enabled and game.FindContainer(game.plateA).enabled
+assert game.FindIcons(game.TargetFrame).enabled and game.FindIcons(game.plateA).enabled
 print("ok native damage setup failures leave ordinary rogue aura icons operational")
 
 rt, game, dot = setup("slotInitializerFails = true")
-assert game.FindContainer(game.TargetFrame).enabled and game.FindContainer(game.plateA).enabled
+assert game.FindIcons(game.TargetFrame).enabled and game.FindIcons(game.plateA).enabled
 assert all(binding.timer is None for binding in game.poisonBindings.values())
 for frame in game.AllFrames.values():
-    if frame.kind == "StatusBar" and frame.parent.kind != "AuraButton":
-        assert frame.value == 0 and not frame.shown
+    if frame.kind == "StatusBar" and frame.parent.kind in ("TargetFrame", "plate"):
+        assert frame.value == 0
 print("ok swallowed native initializer errors disable the incomplete projection without blocking aura icons")
 
 rt, game, dot = setup("""

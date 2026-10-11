@@ -122,3 +122,44 @@ dot.refresh()
 game.Tick(0.2)
 assert not any("ERROR" in str(line) for line in dot.db.log.values()), list(dot.db.log.values())
 print("ok DoT off sample, recreated settings, live verdict icon, client aliases and refresh window")
+
+# Forever: a learned tick estimate precedes an older uncalibrated description estimate.
+# Learning a real tick or refreshing an active DoT must not reshuffle the display.
+rt, game, addon, _ = load()
+rt.execute("""
+    GameFontNormalSmall.GetFont = function() return 'Fonts\\\\FRIZQT__.TTF', 12, '' end
+    spellNames[172], spellDesc[172] = 'Corruption', 'Causes 400 Shadow damage over 12 sec.'
+    spellNames[589], spellDesc[589] = 'Pain', 'Causes 200 Shadow damage over 12 sec.'
+    target = { hostile = true }
+    units.target = { guid = 'Mob-A', health = 500, max = 500 }
+    units.nameplate1 = units.target
+    plate = NewPlate()
+""")
+game.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
+game.Fire("PLAYER_LOGIN")
+dot = addon.modules["DoTInfo"]
+dot.db.waitFirstTick = "off"
+dot.db.ticks[589] = 50
+
+
+def cast(spell, guid):
+    game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob-A", guid, spell)
+    game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", guid, spell)
+
+
+def order(unit="target"):
+    return [entry.name for entry in dot.dotBreakdownForUnit(unit)[0].values()]
+
+
+cast(172, "Uncalibrated")
+assert order() == ["Corruption"]
+game.Advance(1)
+cast(589, "Learned")
+assert order() == order("nameplate1") == ["Pain", "Corruption"]
+game.Advance(2)
+game.Fire("UNIT_COMBAT", "target", "WOUND", "", 100, 32)
+assert order() == ["Pain", "Corruption"]
+cast(172, "Refreshed")
+assert order() == ["Pain", "Corruption"]
+assert not any("ERROR" in str(line) for line in dot.db.log.values())
+print("ok Forever prioritizes learned ticks and keeps active segments stable through calibration and refresh")
