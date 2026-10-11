@@ -4,7 +4,7 @@ local ns = BIT.Module("DoTInfo")
 local E = { spells = {} }
 ns.RogueEffects = E
 local retail = ns.Retail ~= nil
-local events, status = nil, {}
+local events, status, lastScan = nil, {}, nil
 
 local function add(ids, config)
     for _, id in ipairs(ids) do E.spells[id] = config end
@@ -192,6 +192,25 @@ local function scan(unit)
     end)
     if not ok then reason = "aura access denied" end
     if reason then report(unit, reason) end
+end
+
+function E.Refresh(unitKey)
+    if retail or not events or ns.off then return end
+    local now = GetTime()
+    if lastScan and now - lastScan < 0.25 then return end
+    lastScan = now
+    local seen = {}
+    local function check(unit)
+        if not hostile(unit) then return end
+        local key = unitKey(unit)
+        if key and not seen[key] then
+            seen[key] = true
+            scan(unit) -- A scan uses the real expiry; it never restarts an existing hidden clock.
+        end
+    end
+    check("target")
+    check("softenemy")
+    for i = 1, 40 do check("nameplate" .. i) end
 end
 
 function E.AfterCast(key, spellID, unitKey)

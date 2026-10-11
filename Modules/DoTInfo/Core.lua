@@ -1999,6 +1999,7 @@ local function refresh()
         return false
     end
     local now = GetTime()
+    if ns.RogueEffects then ns.RogueEffects.Refresh(unitKey) end
     housekeep(now)
     updateLayering(now)
     applyAppearance()
