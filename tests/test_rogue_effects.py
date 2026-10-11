@@ -294,3 +294,80 @@ for retail in (False, True):
     game.Fire("UNIT_AURA", "target", game.SECRET)
     assert isclose(total(dot), before)
 print("ok instant/non-damaging poisons and other owners are excluded; secret tooltips/API failures preserve known clocks")
+
+# Retail's late-proc lesson: Forever must recover readable aura state even without UNIT_AURA.
+def pulse(game, seconds=.3):
+    game.Advance(seconds)
+    game.Tick(seconds)
+
+
+rt, game, dot = setup(False)
+aura = game.effect("target", 2818, 501, 12, game.GetTime() + 12, 1, None)
+assert total(dot) == 0
+pulse(game)
+assert isclose(total(dot), 24 * 11.7 / 12)
+game.Advance(3)
+aura.applications, aura.expirationTime = 5, game.GetTime() + 12
+pulse(game)
+assert isclose(total(dot), 120 * 11.7 / 12)
+game.Advance(1)
+aura.expirationTime = game.GetTime() + 12
+pulse(game)
+assert isclose(total(dot), 120 * 11.7 / 12)
+rt.execute("mobA.auras = {}")
+pulse(game)
+assert total(dot) == 0
+print("ok Forever catches missed late procs, stack changes, five-stack refreshes and dispels without UNIT_AURA")
+
+rt, game, dot = setup(False)
+aura = game.effect("nameplate1", 2818, 501, 12, game.GetTime() + 12, 2, None)
+rt.execute("units.target = mobB")
+game.Fire("PLAYER_TARGET_CHANGED")
+pulse(game)
+assert isclose(total(dot), 48 * 11.7 / 12) and total(dot, "target") == 0
+rt.execute("mobA.auras = {}")
+pulse(game)
+assert total(dot) == 0
+print("ok Forever resynchronizes an off-target poison through its nameplate without moving it to the new target")
+
+rt, game, dot = setup(False)
+cast(game, 703)
+game.Advance(3)
+game.Fire("UNIT_COMBAT", "target", "WOUND", "", 28, 1)
+game.effect("target", 703, 501, 18, 18, 1, None)
+pulse(game)
+assert total(dot) == 140 and dot.db.ticks[703] == 28
+pulse(game)
+assert total(dot) == 140
+print("ok periodic Forever scans preserve learned/AP-adjusted bleed ticks instead of replacing them with base damage")
+
+rt, game, dot = setup(False)
+aura = add(rt, game, 2818, expiration=game.SECRET)
+for _ in range(10): pulse(game)
+assert isclose(total(dot), 18), "rescanning a hidden expiry must not renew the own clock"
+rt.execute("denyAuras = true")
+for _ in range(10): pulse(game)
+assert isclose(total(dot), 12)
+rt.execute("denyAuras = false; mobA.auras = {}")
+game.effect("target", 2818, 502, 12, game.SECRET, 1, None)
+pulse(game)
+assert total(dot) == 0, "a new hidden instance discovered by scanning has no known application time"
+print("ok Forever scans cannot extend hidden clocks or date an unobserved new application; access loss keeps the last known clock")
+
+rt, game, dot = setup(False, """
+    auraScans = 0
+    units.softenemy = units.target
+    local getter = C_UnitAuras.GetUnitAuras
+    function C_UnitAuras.GetUnitAuras(unit, filter) auraScans = auraScans + 1; return getter(unit, filter) end
+""")
+game.auraScans = 0
+pulse(game)
+assert game.auraScans == 2, "target/softenemy/plate aliases must share one scan per mob"
+for _ in range(5): pulse(game, .02)
+assert game.auraScans == 2, "rapid display updates must not re-poll aura state"
+pulse(game, .2)
+assert game.auraScans == 4
+dot.off = True
+for _ in range(25): pulse(game, .02)
+assert game.auraScans == 4
+print("ok Forever polling is limited to four Hz per mob, deduplicates aliases and stops when DoTInfo is off")
