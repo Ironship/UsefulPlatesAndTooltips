@@ -5,7 +5,7 @@ Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo i SpellDamageInfo**,
 ## Instalacja
 
 1. Zbuduj paczkę: `python tools/build_zip.py --retail`.
-2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.54-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
+2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.55-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
 3. Włącz addon w grze. `/upt` otwiera ustawienia; `/reload` stosuje zmianę włączenia modułu. Włącz wyświetlanie wrogich nameplate klawiszem `V`.
 
 ZIP Retail ma własny `UsefulPlatesAndTooltips_Mainline.toc`; nie zawiera manifestu Forever ani pozostałych modułów. Zwykłe `python tools/build_zip.py` nadal buduje dotychczasową paczkę Forever.
@@ -15,6 +15,8 @@ ZIP Retail ma własny `UsefulPlatesAndTooltips_Mainline.toc`; nie zawiera manife
 Pasek szacowanych obrażeń DoTInfo rozpoznaje bezpośrednio rzucane czary: Corruption i Agony (warlock), Shadow Word: Pain i Vampiric Touch (priest), Moonfire, Sunfire, Rake i Rip (druid), Garrote i Rupture (rogue), Flame Shock (shaman) oraz Rend (warrior). Czary muszą występować w wybranej specjalizacji, a ich opis musi dać się odczytać. Parser obejmuje angielskie i niemieckie opisy. Unstable Affliction, Shadow Word: Madness, Barbed Shot, efekty obszarowe, proce, kanały i dodatkowi odbiorcy Sunfire są poza tym modelem liczbowym.
 
 Odnowienie zachowuje przewidywany pozostały czas do 30% bazowego czasu DoT (Pandemic); złoty kolor oznacza wejście w to okno. Gdy odbiorca rzutu jest ukryty, addon zakłada wybrany cel przy braku konkurencyjnego focus/mouseover; pomija niejednoznaczne przypisania. Poprawność tego założenia dla własnych makr trzeba sprawdzić w grze.
+
+Od 0.9.55-retail każdy odczytywalny identyfikator rzutu ma osobny zapis odbiorcy, opisu i combo points z momentu wysłania. Drugi rzut nie nadpisuje pierwszego. Przerwania, błędy, upływ czasu i ekran ładowania usuwają odpowiednie zapisy; późne zakończenie bez zapisu nie jest przypisywane do nowego celu. Przy ukrytym identyfikatorze dwóch oczekujących rzutów tego samego czaru nie da się rozróżnić i szacunek jest pomijany. Parser EN/DE pomija opcjonalne bloki talentów w nawiasach kwadratowych.
 
 Rogue otrzymuje również **ikony rzeczywiście aktywnych krwawień i trucizn**, z natywnym czasem pozostałym i liczbą stosów: Garrote, Rupture, Deadly Poison, Amplifying Poison, Kingsbane, Deathmark, Internal Bleeding i Mutilated Flesh/Doomblade. Amplifying Poison pokazuje stosy, nie osobny DoT. Ikony własnych efektów pojawiają się nad paskiem celu i na wrogich nameplate; używają wspólnych ustawień `showMarkers` oraz `nameplateMode`. Blizzard obsługuje stan aur, timery i stosy. Gdy natywny kontener aur jest niedostępny, ikony pozostają wyłączone bez blokowania pozostałych modułów.
 

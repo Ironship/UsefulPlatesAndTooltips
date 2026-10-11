@@ -346,14 +346,42 @@ local countedPoints = 0
 -- Retain even an unknown SENT recipient: a target appearing later cannot identify that cast's mob.
 -- Readable GUIDs survive target changes; the current-target-only alias cannot.
 local pendingCast -- { key (possibly nil), castGUID, spellID, sentAt, stoppedAt }
+ns._retailPending = {} -- An off-GCD/queued SENT must not replace another cast's snapshot.
 
 local function sameCast(cast, castGUID, spellID)
     if cast.castGUID and castGUID ~= nil and not isSecret(castGUID) then return castGUID == cast.castGUID end
     return not isSecret(spellID) and spellID == cast.spellID
 end
 
+function ns._pendingForCast(castGUID, spellID)
+    if ns.Retail and not isSecret(castGUID) and type(castGUID) == "string" then
+        return ns._retailPending[castGUID]
+    end
+    if ns.Retail then
+        if isSecret(spellID) then return end
+        local found = pendingCast and sameCast(pendingCast, castGUID, spellID) and pendingCast or nil
+        for _, cast in pairs(ns._retailPending) do
+            if cast.spellID == spellID then
+                if found and found ~= cast then return end -- Hidden cast GUID cannot choose between queued copies.
+                found = cast
+            end
+        end
+        return found
+    end
+    if pendingCast and sameCast(pendingCast, castGUID, spellID) then return pendingCast end
+end
+
+function ns._forgetRecipient(key)
+    if pendingCast and pendingCast.key == key then pendingCast.key = nil end
+    for _, cast in pairs(ns._retailPending) do
+        if cast.key == key then cast.key = nil end
+    end
+end
+
 local function castRecipient(castGUID, spellID)
-    if pendingCast and sameCast(pendingCast, castGUID, spellID) then return pendingCast.key end
+    local sent = ns._pendingForCast(castGUID, spellID)
+    if sent then return sent.key end
+    if ns.Retail then return end -- No SENT snapshot can prove a delayed event's recipient.
     return unitKey("target") or unitKey("softenemy")
 end
 
@@ -463,6 +491,7 @@ local function onCastSent(spellID, castGUID, targetName)
     else recipient = unitKey("target") or unitKey("softenemy") end
     pendingCast = { key = recipient, spellID = spellID,
         castGUID = not isSecret(castGUID) and castGUID or nil, sentAt = GetTime() }
+    if ns.Retail and type(pendingCast.castGUID) == "string" then ns._retailPending[pendingCast.castGUID] = pendingCast end
     comboAtSend = nil
     local ok, name, desc
     if ns.Retail then
@@ -476,6 +505,7 @@ local function onCastSent(spellID, castGUID, targetName)
     if not ok or not finisher then return end
     local points, readings = readComboPoints()
     comboAtSend = points
+    if ns.Retail then pendingCast.comboPoints = points end
     trace("COMBO at send: " .. readings .. ", counted=" .. countedPoints)
 end
 
@@ -600,8 +630,11 @@ end
 local function onPlayerCast(spellID, castGUID)
     if isSecret(spellID) or type(spellID) ~= "number" then return end
     local key = castRecipient(castGUID, spellID)
-    local sent = pendingCast and sameCast(pendingCast, castGUID, spellID) and pendingCast or nil
-    if sent then pendingCast = nil end
+    local sent = ns._pendingForCast(castGUID, spellID)
+    if sent then
+        if pendingCast == sent then pendingCast = nil end
+        if ns.Retail and type(sent.castGUID) == "string" then ns._retailPending[sent.castGUID] = nil end
+    end
     local ok, name, desc
     if ns.Retail then ok, name, desc = pcall(ns.Retail.SpellDescription, spellID, spellNameAndDescription) end
     if not ns.Retail then ok, name, desc = pcall(spellNameAndDescription, spellID) end
@@ -621,10 +654,9 @@ local function onPlayerCast(spellID, castGUID)
     local isFinisher = isFinisherDescription(desc) or (ns.Retail and ns.Retail.IsFinisher(spellID))
     local comboPoints, comboSource
     if isFinisher then
-        local sentPoints = comboAtSend
         comboPoints, comboSource = comboPointsForCast()
         if ns.Retail then
-            comboPoints = sent and sentPoints or nil
+            comboPoints = sent and sent.comboPoints or nil
             comboSource = comboPoints and "read" or "unknown"
         end
     end
@@ -699,8 +731,9 @@ local function onCastStart(castGUID, spellID)
     local ok, name, desc
     if ns.Retail then ok, name, desc = pcall(ns.Retail.SpellDescription, spellID, spellNameAndDescription) end
     if not ns.Retail then ok, name, desc = pcall(spellNameAndDescription, spellID) end
-    if ns.Retail and pendingCast and sameCast(pendingCast, castGUID, spellID) and pendingCast.name and pendingCast.desc then
-        ok, name, desc = true, pendingCast.name, pendingCast.desc
+    local sent = ns._pendingForCast(castGUID, spellID)
+    if ns.Retail and sent and sent.name and sent.desc then
+        ok, name, desc = true, sent.name, sent.desc
     end
     if not ok or not name or isSecret(name) or IGNORED_SPELLS[name] or isFinisherDescription(desc)
         or (ns.Retail and ns.Retail.IsFinisher(spellID)) then return end
@@ -730,11 +763,13 @@ end
 
 -- UNIT_SPELLCAST_STOP / FAILED / INTERRUPTED (player). Returns true when the estimate was removed.
 local function onCastEnded(event, castGUID, spellID)
-    if pendingCast and sameCast(pendingCast, castGUID, spellID) then
+    local sent = ns._pendingForCast(castGUID, spellID)
+    if sent then
         if event == "UNIT_SPELLCAST_STOP" then
-            pendingCast.stoppedAt = pendingCast.stoppedAt or GetTime()
+            sent.stoppedAt = sent.stoppedAt or GetTime()
         else
-            pendingCast, comboAtSend = nil, nil
+            if pendingCast == sent then pendingCast, comboAtSend = nil, nil end
+            if ns.Retail and type(sent.castGUID) == "string" then ns._retailPending[sent.castGUID] = nil end
         end
     end
     if not castInProgress or not sameCast(castInProgress, castGUID, spellID) then return end
@@ -978,6 +1013,10 @@ local function onUnitCombat(unit, action, flag, amount, school)
 end
 
 local function housekeep(now)
+    for guid, sent in pairs(ns._retailPending) do
+        if (sent.stoppedAt and now - sent.stoppedAt > CAST_STOP_GRACE)
+            or now - sent.sentAt > CAST_MAX_SECONDS then ns._retailPending[guid] = nil end
+    end
     if pendingCast and ((pendingCast.stoppedAt and now - pendingCast.stoppedAt > CAST_STOP_GRACE)
         or now - pendingCast.sentAt > CAST_MAX_SECONDS) then
         pendingCast, comboAtSend = nil, nil
@@ -2115,14 +2154,15 @@ frame:SetScript("OnEvent", function(self, event, ...)
         elseif event == "NAME_PLATE_UNIT_REMOVED" then old = ns.Retail.RemovePlate(...)
         else
             wipe(dotsByTarget)
-            if pendingCast then pendingCast.key = nil end
+            wipe(ns._retailPending)
+            pendingCast, comboAtSend = nil, nil
             dropCastInProgress("loading screen")
             ns.Retail.Reset()
             ns.Retail.SeedPlates()
         end
         if old then
             dotsByTarget[old] = nil
-            if pendingCast and pendingCast.key == old then pendingCast.key = nil end
+            ns._forgetRecipient(old)
             if castInProgress and castInProgress.key == old then dropCastInProgress("nameplate removed") end
         end
         safeRefresh()
@@ -2132,7 +2172,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
             local old = ns.Retail.TargetChanged()
             if old then
                 dotsByTarget[old] = nil
-                if pendingCast and pendingCast.key == old then pendingCast.key = nil end
+                ns._forgetRecipient(old)
             end
         end
         dotsByTarget.target = nil -- only used when the target's GUID is secret

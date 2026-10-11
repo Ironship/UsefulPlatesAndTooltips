@@ -64,6 +64,88 @@ def total(dot, unit="nameplate1"):
     return dot.dotBreakdownForUnit(unit)[1]
 
 
+for second_spell in (980, 99999):
+    rt, game, dot = fight("spellNames[99999], spellDesc[99999] = 'Other instant', 'Nothing tracked.'")
+    game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob A", "Cast-A", 172)
+    rt.execute("units.target = mobB")
+    game.Fire("PLAYER_TARGET_CHANGED")
+    game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob B", "Cast-B", second_spell)
+    game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-A", 172)
+    assert total(dot) == 1200 and total(dot, "nameplate2") == 0
+    game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-B", second_spell)
+    assert total(dot, "nameplate2") == (600 if second_spell == 980 else 0)
+print("ok overlapping SENT events preserve each cast recipient independently")
+
+for reverse in (False, True):
+    rt, game, dot = fight("""
+        playerClass, comboPoints = 'ROGUE', 7
+        spellNames[1943] = 'Rupture'
+        spellDesc[1943] = 'Finishing move. 6 points: 600 over 24 sec. 7 points: 700 over 28 sec.'
+    """)
+    game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob A", "Rupture-A", 1943)
+    rt.execute("units.target = mobB; comboPoints = 6")
+    game.Fire("PLAYER_TARGET_CHANGED")
+    game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob B", "Rupture-B", 1943)
+    rt.execute("comboPoints = 0; spellDesc[1943] = 'Unreadable after spending points'")
+    for guid in (("Rupture-B", "Rupture-A") if reverse else ("Rupture-A", "Rupture-B")):
+        game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", guid, 1943)
+    assert total(dot) == 700 and total(dot, "nameplate2") == 600
+print("ok queued Ruptures retain separate pre-spend CP/description snapshots in either success order")
+
+rt, game, dot = fight()
+game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob A", "Cast-A", 172)
+rt.execute("units.target = mobB")
+game.Fire("PLAYER_TARGET_CHANGED")
+game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob B", "Cast-B", 172)
+game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", game.SECRET, 172)
+assert total(dot) == total(dot, "nameplate2") == 0
+print("ok a hidden cast GUID cannot pick between two pending casts of the same spell")
+
+rt, game, dot = fight()
+game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob A", "Cast-A", 172)
+rt.execute("units.target = mobB")
+game.Fire("PLAYER_TARGET_CHANGED")
+game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob B", "Cast-B", 980)
+rt.execute("units.nameplate1 = nil")
+game.Fire("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+rt.execute("units.nameplate1 = mobB")
+game.Fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-A", 172)
+assert total(dot, "target") == 0
+game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-B", 980)
+assert total(dot, "target") == 600
+print("ok recycled nameplates invalidate older queued recipients while other snapshots survive")
+
+for ending in ("UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "timeout", "loading"):
+    rt, game, dot = fight()
+    game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob A", "Cast-A", 172)
+    rt.execute("units.target = mobB")
+    game.Fire("PLAYER_TARGET_CHANGED")
+    game.Fire("UNIT_SPELLCAST_SENT", "player", "Mob B", "Cast-B", 980)
+    if ending == "timeout":
+        game.Advance(16)
+        game.Tick(0.1)
+    elif ending == "loading":
+        game.Fire("PLAYER_ENTERING_WORLD")
+    else:
+        game.Fire(ending, "player", "Cast-A", 172)
+    game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-A", 172)
+    assert total(dot) == total(dot, "nameplate2") == 0
+    game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-B", 980)
+    assert total(dot, "nameplate2") == (0 if ending in ("timeout", "loading") else 600)
+print("ok failure, interruption, timeout and loading cannot reassign delayed successes or erase other casts")
+
+for locale, description in (
+    ("enUS", "Causes 100 Bleed damage over 18 sec. [Talent: 900 damage over 4 sec.]"),
+    ("deDE", "Verursacht 100 Blutungsschaden im Verlauf von 18 Sek. [Talent: 900 Schaden über 4 Sek.]"),
+):
+    rt, game, dot = fight("playerClass = 'ROGUE'", without_sdi=True)
+    game.GetLocale = rt.eval("function() return '" + locale + "' end")
+    game.spellNames[703], game.spellDesc[703] = "Garrote", description
+    cast(game, spell=703)
+    assert total(dot) == 100
+print("ok optional EN/DE talent blocks cannot replace the active DoT amount")
+
 rt, game, dot = fight()
 dot.db.waitFirstTick = "always"
 cast(game)
