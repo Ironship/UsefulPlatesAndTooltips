@@ -84,9 +84,7 @@ local function createPoisonDamage(entry)
     local ok, err = pcall(function()
         -- This plain HP scale stays outside restricted aura buttons. Its fill supplies native geometry.
         scale = CreateFrame("StatusBar", nil, entry.parent, "DisableUntrustedLayoutScriptsTemplate")
-        scale:SetPoint("BOTTOMLEFT", entry.bar, "BOTTOMLEFT")
-        scale:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT")
-        scale:SetHeight(2)
+        scale:SetAllPoints(entry.bar)
         scale:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
         scale:SetStatusBarColor(0, 0, 0, 0)
         scale:SetMinMaxValues(0, 1)
@@ -137,7 +135,8 @@ local function updatePoisonDamage(entry, unit, enabled)
     local label = ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
         damage.formatter:SetBreakpoints({ total and label and {
-            threshold = 0, format = "~%.0f", components = { { div = 1 / total, step = 1 } },
+            -- Duration text supplies 0..100 percent, unlike the timer bar's 0..1 fraction.
+            threshold = 0, format = "~%.0f", components = { { div = 100 / total, step = 1 } },
         } or { threshold = 0, format = "" } })
         damage.total, damage.label = total, label
     end
@@ -185,6 +184,12 @@ local function display(entry, unit, enabled, refresh)
     if not entry then return end
     local container = entry.container
     if not usable(container) then return end
+    -- Nameplate addons re-level health bars while active; keep native projections above them.
+    local level, strata = ask(entry.bar.GetFrameLevel, entry.bar), ask(entry.bar.GetFrameStrata, entry.bar)
+    level = type(level) == "number" and level + 5 or 200
+    if level ~= entry.level and pcall(container.SetFrameLevel, container, level) then entry.level = level end
+    if type(strata) == "string" and strata ~= entry.strata
+        and pcall(container.SetFrameStrata, container, strata) then entry.strata = strata end
     local ok, err = pcall(updatePoisonDamage, entry, unit, enabled)
     if not ok and not entry.poisonError then
         entry.poisonError = true

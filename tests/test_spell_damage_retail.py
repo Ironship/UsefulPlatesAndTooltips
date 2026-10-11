@@ -110,6 +110,40 @@ def tip_text(g):
 
 
 class RetailSpellDamageTests(unittest.TestCase):
+    def test_rupture_and_rip_bare_timed_rows_use_current_combo_points(self):
+        cases = (
+            ("de", "Finishing-Move, der regelmäßigen Blutungsschaden verursacht. Hält pro Combopunkt länger an.", "im Verlauf von", "Sek.", "Punkt", "Punkte"),
+            ("en", "Finishing move that deals Bleed damage over time. Lasts longer per combo point.", "over", "sec.", "point", "points"),
+        )
+        amounts = (221, 332, 442, 553, 664)
+        for case, retail in ((case, retail) for case in cases for retail in (True, False)):
+            language, prefix, timing, seconds, singular, plural = case
+            with self.subTest(language=language, retail=retail):
+                setup = "NewAction('ActionButton', 1, 1); actions[1] = { 'spell', 1943 }"
+                if not retail:
+                    setup += "; function GetBuildInfo() return '1.60.1' end; function GetComboPoints() return comboPoints end"
+                rt, g, addon = load(setup)
+                g.GetLocale = rt.eval("function() return '" + ("deDE" if language == "de" else "enUS") + "' end")
+                addon.DecideLangsAtLoad()
+                text = prefix + "\n" + "\n".join(
+                    f"{n} {singular if n == 1 else plural}: {amount} {timing} {4 + n * 4} {seconds}"
+                    for n, amount in enumerate(amounts, 1))
+                g.spellDesc[1943] = text
+                g.Fire("SPELL_TEXT_UPDATE", 1943)
+                for n, amount in enumerate(amounts, 1):
+                    g.comboPoints = n
+                    g.Fire("UNIT_POWER_UPDATE", "player", "COMBO_POINTS")
+                    self.assertEqual(label(addon, g.ActionButton1), str(amount))
+                    self.assertEqual(addon.Compute(1943).dot.duration, 4 + n * 4)
+                g.comboPoints = 3
+                g.Fire("UNIT_POWER_UPDATE", "player", "COMBO_POINTS")
+                g.OpenSpellTooltip(1943)
+                self.assertTrue(any("442" in row for row in tip_text(g)[1:]))
+                # Rip uses the same wording family. No damage context means no inferred DoT.
+                rip = text.replace("221", "8").replace("332", "12")
+                self.assertEqual(addon.Parser.ParseFinisher(rip, language).points[1].total, 8)
+                self.assertIsNone(addon.Parser.ParseFinisher(text.replace(prefix, "Finishing move."), language))
+
     def test_scaled_retail_descriptions_never_add_classic_spell_or_weapon_stats(self):
         rt, g, addon = load("""
           NewAction('ActionButton', 1, 1)
