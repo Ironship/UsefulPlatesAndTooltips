@@ -209,7 +209,7 @@ local function unitKey(unit)
     if ok and not isSecret(guid) then return guid end
     -- A secret action-target GUID can still identify the same mob as a readable nameplate.
     -- Only trust the game's plain identity answer, then keep that plate's real GUID across switches.
-    if unit == "softenemy" and ok and isSecret(guid) and type(UnitIsUnit) == "function" then
+    if ok and isSecret(guid) and type(UnitIsUnit) == "function" then
         for i = 1, 40 do
             local plateUnit = "nameplate" .. i
             local sameOK, same = pcall(UnitIsUnit, plateUnit, unit)
@@ -604,6 +604,7 @@ local function newDot(spellID, tickKey, name, total, school, duration, statedInt
     local interval = statedInterval or KNOWN_TICK_INTERVALS[name] or DEFAULT_TICK_INTERVAL
     local dot = {
         spellID = spellID,
+        familyID = ns.RogueEffects and ns.RogueEffects.Family(spellID),
         tickKey = tickKey,
         -- The size learned on earlier casts, as it stood when this DoT was applied. Same-slot collisions are
         -- judged against it (referenceTickSize): the store may have just been written by the disputed tick.
@@ -626,53 +627,71 @@ local function newDot(spellID, tickKey, name, total, school, duration, statedInt
     return dot
 end
 
-if ns.Retail then
-    ns.Retail.PoisonTrace = trace
+ns.TraceRogueAura = trace
 
-    function ns.Retail.ObservePoison(unit, aura, signal)
-        local key = unitKey(unit)
-        if not key then return end
-        local previous
-        for name, dot in pairs(dotsByTarget[key] or {}) do
-            if dot.poison and dot.spellID == aura.spellID then
-                previous = dot
-                if dot.auraInstanceID ~= aura.auraInstanceID then
-                    dotsByTarget[key][name], previous = nil, nil
-                end
-                break
-            end
-        end
-        local now = GetTime()
-        local expiresAt = aura.expirationTime
-        if not expiresAt then
-            -- A scan cannot date an existing hidden timer; only an identified application/update can.
-            if not signal then return previous ~= nil end
-            expiresAt = now + aura.duration
-        end
-        if expiresAt <= now then return end
-        if previous and previous.auraInstanceID == aura.auraInstanceID
-            and previous.duration == aura.duration and previous.total == aura.total
-            and math.abs(previous.expiresAt - expiresAt) < 0.05 then return true end
-        dotsByTarget[key] = dotsByTarget[key] or {}
-        local dot = newDot(aura.spellID, nil, aura.name, aura.total, aura.school, aura.duration, nil, now)
-        dot.poison, dot.unsure = true, true
-        dot.auraInstanceID, dot.expiresAt = aura.auraInstanceID, expiresAt
-        dotsByTarget[key][aura.name] = dot
-        trace(string.format("POISON %s %s on %s: %.1f dmg, %.1fs remaining (%s)",
-            previous and "REFRESH" or "APPLY", aura.name, unit, aura.total,
-            expiresAt - now, aura.expirationTime and "readable expiration" or "own clock"))
-        return true
+function ns.ParseRogueAura(spellID, desc, config)
+    if isSecret(desc) or type(desc) ~= "string" then return end
+    -- Weapon-coating descriptions are read only after an identified damaging aura, never on coating casts.
+    desc = desc:gsub("[Cc]oats", ""):gsub("Überzieht", "")
+    if ns.Retail then return ns.Retail.Parse(spellID, desc, nil, parseDot, config) end
+    if isFinisherDescription(desc) then return end -- Spent CP cannot be reconstructed from a new aura's rows.
+    return parseDot(desc)
+end
+
+function ns.RogueAuraPrevious(unit, familyID)
+    local key = unitKey(unit)
+    for name, dot in pairs(key and dotsByTarget[key] or {}) do
+        if dot.familyID == familyID or dot.spellID == familyID then return dot, name end
     end
+end
 
-    function ns.Retail.RemovePoisons(unit, seen, removed)
-        local key = unitKey(unit)
-        local dots = key and dotsByTarget[key]
-        for name, dot in pairs(dots or {}) do
-            if dot.poison and ((seen and not seen[dot.spellID])
-                or (removed and removed[dot.auraInstanceID])) then
-                dots[name] = nil
-                trace("POISON REMOVE " .. name .. " on " .. unit)
-            end
+function ns.ObserveRogueAura(unit, aura, signal)
+    local key = unitKey(unit)
+    if not key then return end
+    local previous, previousName = ns.RogueAuraPrevious(unit, aura.familyID)
+    if previous and previous.auraInstanceID and previous.auraInstanceID ~= aura.auraInstanceID then
+        dotsByTarget[key][previousName], previous = nil, nil
+    end
+    local now = GetTime()
+    local expiresAt = aura.expirationTime
+    if not expiresAt then
+        -- A scan cannot date an existing hidden timer; only an identified application/update can.
+        if previous and (not signal or (signal == "updated" and not aura.refreshOnUpdate)) then
+            expiresAt = previous.expiresAt
+        elseif signal then expiresAt = now + aura.clockDuration
+        else return end
+    end
+    if expiresAt <= now then return end
+    if aura.keepTicks and previous then
+        previous.auraObserved, previous.auraInstanceID = true, aura.auraInstanceID
+        previous.expiresAt = expiresAt
+        return true -- Keep Forever's learned/AP-adjusted bleed ticks instead of replacing them with base damage.
+    end
+    if previous and previous.auraInstanceID == aura.auraInstanceID
+        and previous.duration == aura.duration and previous.total == aura.total
+        and math.abs(previous.expiresAt - expiresAt) < 0.05 then return true end
+    dotsByTarget[key] = dotsByTarget[key] or {}
+    if previousName then dotsByTarget[key][previousName] = nil end
+    local dot = newDot(aura.spellID, nil, aura.name, aura.total, aura.school, aura.duration, aura.interval, now)
+    dot.predictionOnly, dot.auraObserved, dot.unsure = true, true, true
+    dot.poison, dot.familyID, dot.noRefreshCue = aura.poison, aura.familyID, not aura.manual
+    dot.stacks = aura.stacks
+    dot.auraInstanceID, dot.expiresAt = aura.auraInstanceID, expiresAt
+    dotsByTarget[key][aura.name] = dot
+    trace(string.format("%s %s %s on %s: %.1f dmg, %.1fs remaining (%s)", aura.poison and "POISON" or "BLEED",
+        previous and "REFRESH" or "APPLY", aura.name, unit, aura.total,
+        expiresAt - now, aura.expirationTime and "readable expiration" or "own clock"))
+    return true
+end
+
+function ns.RemoveRogueAuras(unit, seen, removed)
+    local key = unitKey(unit)
+    local dots = key and dotsByTarget[key]
+    for name, dot in pairs(dots or {}) do
+        if dot.auraObserved and ((seen and not seen[dot.familyID])
+            or (removed and dot.auraInstanceID and removed[dot.auraInstanceID])) then
+            dots[name] = nil
+            trace((dot.poison and "POISON" or "BLEED") .. " REMOVE " .. name .. " on " .. unit)
         end
     end
 end
@@ -1018,7 +1037,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
 
     local best, bestName, bestDistance, bestIndex
     for name, dot in pairs(dots) do
-        if not lastCombatFed[name] and dot.school == school and plausibleTickAmount(dot, amount, isCrit, tickNumberAt(dot, now)) then
+        if not dot.predictionOnly and not lastCombatFed[name] and dot.school == school and plausibleTickAmount(dot, amount, isCrit, tickNumberAt(dot, now)) then
             local distance, index = distanceToExpectedTick(dot, now)
             local window = dot.firstTickAt and TICK_MATCH_WINDOW_ANCHORED or TICK_MATCH_WINDOW
             -- Each tick slot takes one hit: a second hit near an already-matched tick is someone else's.
@@ -1031,7 +1050,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
     if not best then
         -- Not a tick as things stand; it may still correct one (same-slot swap, or a wrong learned size).
         for name, dot in pairs(dots) do
-            if not lastCombatFed[name] and dot.school == school then
+            if not dot.predictionOnly and not lastCombatFed[name] and dot.school == school then
                 local distance, index = distanceToExpectedTick(dot, now)
                 local wasWaiting = isWaiting(dot)
                 if trySwapSameSlot(dot, name, amount, isCrit, now) then return end
@@ -1078,7 +1097,7 @@ local function housekeep(now)
                 dot.nextTickAt = dot.nextTickAt + dot.interval
                 dot.missed = dot.missed + 1
             end
-            if not dot.predictionOnly and dot.ticksSeen == 0 and dot.missed >= math.max(MISSED_TICKS_BEFORE_DROP, dot.totalTicks) then
+            if not dot.predictionOnly and not dot.auraObserved and dot.ticksSeen == 0 and dot.missed >= math.max(MISSED_TICKS_BEFORE_DROP, dot.totalTicks) then
                 dots[name] = nil
                 trace("DROP " .. name .. " never ticked (resisted or immune?)")
             elseif now > dot.expiresAt + TICK_MATCH_WINDOW then
@@ -1098,7 +1117,10 @@ local function housekeep(now)
 end
 
 local function remainingDamage(dot)
-    if dot.predictionOnly then return ns.Retail.Remaining(dot, GetTime()) end
+    if dot.predictionOnly then
+        if ns.Retail then return ns.Retail.Remaining(dot, GetTime()) end
+        return dot.total * math.max(0, math.min(1, (dot.expiresAt - GetTime()) / dot.duration))
+    end
     if dot.nextTickAt > dot.expiresAt + dot.interval / 2 then return 0 end
     local ticksLeft = math.floor((dot.expiresAt - dot.nextTickAt) / dot.interval + 0.5) + 1
     if not dot.shape then return ticksLeft * expectedTick(dot) end
@@ -2161,10 +2183,10 @@ frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
 frame:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")   -- keeps a recent combo point reading as backup
 frame:RegisterEvent("UNIT_COMBAT")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 if ns.Retail then
     frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
     frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 end
 -- Never register COMBAT_LOG_EVENT_UNFILTERED: Forever forbids it and shows a "blocked" popup.
 
@@ -2181,7 +2203,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         ns.ensureDB()
         trace("===== session start =====")
         if ns.Retail and ns.Retail.StartRogueAuras then ns.Retail.StartRogueAuras() end
-        if ns.Retail and ns.Retail.StartRoguePoisons then ns.Retail.StartRoguePoisons() end
+        if ns.RogueEffects then ns.RogueEffects.Start() end
         local added = ns.locale.addClientNames(NAME_TABLES, function(spellID)
             local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
             if name and not isSecret(name) and type(name) == "string" then return name end
@@ -2199,18 +2221,23 @@ frame:SetScript("OnEvent", function(self, event, ...)
     elseif not db then
         return
 
-    elseif ns.Retail and (event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED"
-        or event == "PLAYER_ENTERING_WORLD") then
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        wipe(dotsByTarget)
+        pendingCast, comboAtSend = nil, nil
+        forgetPendingOutcomes()
+        resetComboCount()
+        dropCastInProgress("loading screen")
+        if ns.Retail then
+            wipe(ns._retailPending)
+            ns.Retail.Reset()
+            ns.Retail.SeedPlates()
+        end
+        safeRefresh()
+
+    elseif ns.Retail and (event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED") then
         local old
         if event == "NAME_PLATE_UNIT_ADDED" then old = ns.Retail.AddPlate(...)
         elseif event == "NAME_PLATE_UNIT_REMOVED" then old = ns.Retail.RemovePlate(...)
-        else
-            wipe(dotsByTarget)
-            wipe(ns._retailPending)
-            pendingCast, comboAtSend = nil, nil
-            dropCastInProgress("loading screen")
-            ns.Retail.Reset()
-            ns.Retail.SeedPlates()
         end
         if old then
             dotsByTarget[old] = nil
@@ -2257,6 +2284,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         local _, castGUID, spellID = ...
         onCastSucceeded(castGUID, spellID)
         local appliedTo, waiting = onPlayerCast(spellID, castGUID)
+        if appliedTo and ns.RogueEffects then ns.RogueEffects.AfterCast(appliedTo, spellID, unitKey) end
         safeRefresh()
         -- A DoT waiting for its first tick isn't drawn yet; it flashes when that tick lands instead.
         if appliedTo and not waiting and appliedTo == unitKey("target") then playFlash() end

@@ -275,7 +275,7 @@ def chat(G):
 # ---------------------------------------------------------------------------------------------
 print("-- every module on")
 rt, G, BIT, files = load()
-check("the .toc lists the core and seven modules' files", len(files), 28)  # PlateLayout.lua and WorldMarkers.lua add two (28)
+check("the .toc lists the core and seven modules' files", len(files), 29)
 check("the tabs are in the order the files load", list(BIT.order.values()),
       ["SpellDamageInfo", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HunterRangeFinder"])
 G.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")

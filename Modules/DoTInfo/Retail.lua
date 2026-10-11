@@ -13,6 +13,7 @@ R.spells = {
     [589] = {}, [34914] = {}, -- Shadow Word: Pain, Vampiric Touch
     [8921] = {}, [93402] = {}, [1822] = {}, [1079] = { finisher = true }, -- Moonfire, Sunfire, Rake, Rip
     [703] = {}, [1943] = { finisher = true }, -- Garrote, Rupture
+    [385627] = { pandemic = false }, [360194] = { pandemic = false }, -- Kingsbane, Deathmark
     [188389] = {}, [772] = {}, -- Flame Shock, Rend
 }
 
@@ -164,10 +165,11 @@ function R.Recipient(sentName)
     return recipient
 end
 
-function R.Parse(spellID, desc, comboPoints, parseLegacy)
-    spellID = R.SpellID(spellID) or (integer(spellID, 1) and R.poisonSpells[spellID] and spellID)
+function R.Parse(spellID, desc, comboPoints, parseLegacy, auraConfig)
+    spellID = (auraConfig and integer(spellID, 1) and spellID) or R.SpellID(spellID)
+        or (integer(spellID, 1) and R.poisonSpells[spellID] and spellID)
     if not spellID or secret(desc) or type(desc) ~= "string" then return end
-    local config = R.spells[spellID] or R.poisonSpells[spellID]
+    local config = auraConfig or R.spells[spellID] or R.poisonSpells[spellID]
     local text = desc:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     text = text:gsub("\194\160", " "):gsub("\226\128\175", " ")
     -- Optional talent previews are not the current spell's amount; nested blocks are possible.
@@ -185,6 +187,7 @@ function R.Parse(spellID, desc, comboPoints, parseLegacy)
         while count > 0 do text, count = text:gsub("(%d)%.(%d%d%d)%f[%D]", "%1%2") end
         text = text:gsub("(%d),(%d)", "%1.%2")
     end
+    text = text:gsub("%d+%.?%d*%s*%%", "") -- AP/talent percentages are not flat damage amounts.
     local total, school, duration, interval
     local byPoints, hasRows = {}, false
     local function germanSchool(words)
@@ -259,10 +262,13 @@ end
 function R.Prepare(dot)
     dot.predictionOnly = true
     dot.tickKey, dot.learnedAtApply, dot.shape = nil, nil, nil
+    local config = R.spells[R.SpellID(dot.spellID)]
+    dot.noPandemic = config and config.pandemic == false or nil
 end
 
--- These twelve effects use Pandemic refreshes in the 12.1.0 client data (SimC spell data).
+-- Apply Pandemic only to effects that support it.
 function R.ApplyRefresh(dot, previous, now)
+    if dot.noPandemic then return end
     if previous and previous.predictionOnly then
         local carry = math.min(math.max(0, previous.expiresAt - now), dot.duration * 0.3)
         dot.expiresAt = dot.expiresAt + carry
@@ -270,11 +276,12 @@ function R.ApplyRefresh(dot, previous, now)
 end
 
 function R.RefreshDue(dot, now)
-    if dot.poison then return false end -- Automatic poison procs do not have a manual Pandemic cue.
+    if dot.poison or dot.noPandemic or dot.noRefreshCue then return false end
     local remaining = dot.expiresAt - now
     return remaining > 0 and remaining <= dot.duration * 0.3 + 0.001
 end
 
 function R.Remaining(dot, now)
-    return dot.total * math.max(0, math.min(dot.poison and 1 or 1.3, (dot.expiresAt - now) / dot.duration))
+    return dot.total * math.max(0, math.min((dot.poison or dot.noPandemic) and 1 or 1.3,
+        (dot.expiresAt - now) / dot.duration))
 end
