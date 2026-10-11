@@ -5,6 +5,7 @@ local R = ns.Retail
 if not R then return end
 
 local SIZE, GAP, MAX_PLATES = 18, 2, 40
+local AURA_REFRESH_INTERVAL = 0.25
 local spellIDs = {
     [703] = true, [1943] = true, -- Garrote, Rupture (including Crimson Tempest copies)
     [2818] = true, [383414] = true, -- Deadly Poison, Amplifying Poison stacks
@@ -198,8 +199,13 @@ local function display(entry, unit, enabled, refresh)
     if entry.enabled ~= enabled then
         if not pcall(container.SetEnabled, container, enabled) then return end
         entry.enabled = enabled
-    elseif enabled and refresh then
+    end
+    local now = GetTime()
+    -- Recheck native aura state for late procs and missed incremental updates; keep its real expiry.
+    if enabled and (refresh == true or refresh == unit or (refresh == false
+        and (not entry.refreshedAt or now - entry.refreshedAt >= AURA_REFRESH_INTERVAL))) then
         pcall(container.UpdateAllAuras, container)
+        entry.refreshedAt = now
     end
     -- A protected parent can defer visibility changes until combat ends; disabling still clears auras.
     if entry.shown ~= enabled then
@@ -268,7 +274,7 @@ function R.StartRogueAuras()
     if not events then
         events = CreateFrame("Frame")
         for _, event in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_TARGET_CHANGED", "NAME_PLATE_UNIT_ADDED",
-            "NAME_PLATE_UNIT_REMOVED", "UNIT_FACTION", "PLAYER_REGEN_ENABLED", "ADDON_LOADED" }) do
+            "NAME_PLATE_UNIT_REMOVED", "UNIT_FACTION", "UNIT_AURA", "PLAYER_REGEN_ENABLED", "ADDON_LOADED" }) do
             events:RegisterEvent(event)
         end
         events:SetScript("OnEvent", function(_, event, unit)
@@ -278,6 +284,12 @@ function R.StartRogueAuras()
                     and event ~= "ADDON_LOADED" then return end
                 R.StartRogueAuras()
                 if not started then return end
+            end
+            if event == "UNIT_AURA" then
+                if secret(unit) or type(unit) ~= "string"
+                    or (unit ~= "target" and not activeUnits[unit]) then return end
+                update(unit) -- Request a native refresh for this token without inspecting aura data.
+                return
             end
             if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_REGEN_ENABLED" then wipe(failedHosts) end
             if event == "PLAYER_ENTERING_WORLD" then

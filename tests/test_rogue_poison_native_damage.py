@@ -200,3 +200,73 @@ calls = game.auraCalls
 game.Tick(.3)
 assert game.auraCalls == calls and len(game.poisonBindings) == 2
 print("ok complete Retail addon load renders native poison alongside denied aura logs without inventing Lua proc state")
+
+# Model a client whose incremental native updates stall: only a requested full refresh
+# synchronizes the C-owned projection. All aura state below is test-only, never addon input.
+rt, game, dot = setup()
+rt.execute(r"""
+nativeExpiry = {}
+for _, container in ipairs(containers) do
+    local refresh = container.UpdateAllAuras
+    container.UpdateAllAuras = function(self)
+        refresh(self)
+        for _, record in ipairs(poisonBindings) do
+            if rawequal(record.container, self) then
+                local expiry = nativeExpiry[self.unit]
+                local fraction = expiry and math.max(0, math.min(1, (expiry - GetTime()) / 12))
+                NativePoison(record, fraction and fraction > 0 and fraction or nil)
+            end
+        end
+    end
+end
+function NativeApply(unit) nativeExpiry[unit] = GetTime() + 12 end
+""")
+plate, target = game.FindProjection(game.plateA), game.FindProjection(game.TargetFrame)
+game.Fire("PLAYER_TARGET_CHANGED")
+assert not plate.nativeVisible and not target.nativeVisible  # First hit has no proc.
+game.Advance(1)
+game.NativeApply("nameplate1")
+game.NativeApply("target")
+game.Fire("UNIT_AURA", "nameplate1", game.SECRET)
+assert plate.nativeVisible and plate.nativeText == "~46", "later proc must appear without target/nameplate recreation"
+assert not target.nativeVisible  # An event for one token does not refresh every host.
+game.Fire("UNIT_AURA", "target", game.SECRET)
+assert target.nativeVisible and target.nativeText == "~46"
+assert game.auraCalls == 0
+game.Advance(6)
+dot.Retail.UpdateRogueAuras()
+assert plate.nativeText == "~23" and target.nativeText == "~23"
+before = plate.container.refreshCalls
+for _ in range(30):
+    dot.Retail.UpdateRogueAuras()
+assert plate.container.refreshCalls == before  # No full rescan on every rendering call.
+game.NativeApply("nameplate1")
+game.Fire("UNIT_AURA", "nameplate1", game.SECRET)
+assert plate.nativeText == "~46" and target.nativeText == "~23"
+print("ok later poison applications and renewals refresh the affected native container without reading hidden payloads")
+
+# No readable UNIT_AURA token/event: shared rendering must still resynchronize periodically.
+game.Advance(2)
+game.NativeApply("nameplate1")
+dot.Retail.UpdateRogueAuras()
+assert plate.nativeText == "~46"
+game.Advance(.1)
+dot.Retail.UpdateRogueAuras()
+assert plate.container.refreshCalls == before + 2
+game.Advance(.2)
+dot.Retail.UpdateRogueAuras()
+assert plate.container.refreshCalls == before + 3 and plate.nativeText == "~45"
+game.Fire("UNIT_AURA", game.SECRET, game.SECRET)
+game.Fire("UNIT_AURA", "player", game.SECRET)
+assert plate.container.refreshCalls == before + 3  # Hidden/unrelated tokens are not inspected or fan out.
+game.Advance(12)
+dot.Retail.UpdateRogueAuras()
+assert not plate.nativeVisible and not target.nativeVisible
+game.NativeApply("nameplate1")
+game.Fire("UNIT_AURA", "nameplate1", game.SECRET)
+assert plate.nativeVisible  # Reapplication after expiration does not need a new combat/target.
+game.nativeExpiry["nameplate1"] = None
+game.Fire("UNIT_AURA", "nameplate1", game.SECRET)
+assert not plate.nativeVisible
+assert game.auraCalls == 0 and len(game.poisonBindings) == 2
+print("ok bounded native rescans recover missing incremental events, expiration, removal and reapplication on the same plate")
