@@ -323,6 +323,11 @@ game.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
 game.Fire("PLAYER_ENTERING_WORLD")
 assert game.FindContainer(game.TargetFrame).enabled and game.FindContainer(game.plateA).enabled
 game.Fire("PLAYER_TARGET_CHANGED")
+calls_after_events = game.auraCalls
+assert calls_after_events > 0  # The separate poison prototype probes readable aura access.
+assert any("aura access denied" in text for text in game.UsefulPlatesAndTooltips_DoTInfoDB.log.values())
+addon.modules["DoTInfo"].Retail.UpdateRogueAuras()
 game.Tick(0.3)
-assert game.auraCalls == 0
-print("ok the real Mainline loader starts native rogue displays and its shared refresh leaves hidden aura state untouched")
+assert game.auraCalls == calls_after_events
+assert addon.modules["DoTInfo"].dotBreakdownForUnit("target")[1] == 0
+print("ok native rogue displays survive denied poison API access; shared rendering does not probe hidden auras")

@@ -93,6 +93,7 @@ def build_and_check(retail):
             assert {name.split("/")[1] for name in expected if name.startswith("Modules/")} == RETAIL_MODULES
             files = toc_files(text)
             assert files.index("Modules/DoTInfo/Retail.lua") < files.index("Modules/DoTInfo/RogueAuras.lua") < files.index("Modules/DoTInfo/Core.lua")
+            assert files.index("Modules/DoTInfo/Core.lua") < files.index("Modules/DoTInfo/RoguePoisons.lua")
             default_files = toc_files((ROOT / "UsefulPlatesAndTooltips.toc").read_text(encoding="utf-8"))
             assert [name for name in files if name.startswith("Modules/SpellDamageInfo/")] == [
                 name for name in default_files if name.startswith("Modules/SpellDamageInfo/")]
@@ -101,6 +102,7 @@ def build_and_check(retail):
             assert PREFIX + "UsefulPlatesAndTooltips_Mainline.toc" not in names
             assert PREFIX + "Modules/DoTInfo/Retail.lua" not in names
             assert PREFIX + "Modules/DoTInfo/RogueAuras.lua" not in names
+            assert PREFIX + "Modules/DoTInfo/RoguePoisons.lua" not in names
             assert PREFIX + "RETAIL.md" not in names
     print(f"ok {'Retail' if retail else 'Forever'} package: {len(expected)} source-identical files, "
           f"SHA256 {hashlib.sha256(path.read_bytes()).hexdigest()}")

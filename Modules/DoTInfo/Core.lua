@@ -626,6 +626,57 @@ local function newDot(spellID, tickKey, name, total, school, duration, statedInt
     return dot
 end
 
+if ns.Retail then
+    ns.Retail.PoisonTrace = trace
+
+    function ns.Retail.ObservePoison(unit, aura, signal)
+        local key = unitKey(unit)
+        if not key then return end
+        local previous
+        for name, dot in pairs(dotsByTarget[key] or {}) do
+            if dot.poison and dot.spellID == aura.spellID then
+                previous = dot
+                if dot.auraInstanceID ~= aura.auraInstanceID then
+                    dotsByTarget[key][name], previous = nil, nil
+                end
+                break
+            end
+        end
+        local now = GetTime()
+        local expiresAt = aura.expirationTime
+        if not expiresAt then
+            -- A scan cannot date an existing hidden timer; only an identified application/update can.
+            if not signal then return previous ~= nil end
+            expiresAt = now + aura.duration
+        end
+        if expiresAt <= now then return end
+        if previous and previous.auraInstanceID == aura.auraInstanceID
+            and previous.duration == aura.duration and previous.total == aura.total
+            and math.abs(previous.expiresAt - expiresAt) < 0.05 then return true end
+        dotsByTarget[key] = dotsByTarget[key] or {}
+        local dot = newDot(aura.spellID, nil, aura.name, aura.total, aura.school, aura.duration, nil, now)
+        dot.poison, dot.unsure = true, true
+        dot.auraInstanceID, dot.expiresAt = aura.auraInstanceID, expiresAt
+        dotsByTarget[key][aura.name] = dot
+        trace(string.format("POISON %s %s on %s: %.1f dmg, %.1fs remaining (%s)",
+            previous and "REFRESH" or "APPLY", aura.name, unit, aura.total,
+            expiresAt - now, aura.expirationTime and "readable expiration" or "own clock"))
+        return true
+    end
+
+    function ns.Retail.RemovePoisons(unit, seen, removed)
+        local key = unitKey(unit)
+        local dots = key and dotsByTarget[key]
+        for name, dot in pairs(dots or {}) do
+            if dot.poison and ((seen and not seen[dot.spellID])
+                or (removed and removed[dot.auraInstanceID])) then
+                dots[name] = nil
+                trace("POISON REMOVE " .. name .. " on " .. unit)
+            end
+        end
+    end
+end
+
 -- Returns the target key the DoT was applied to, or nil if the cast wasn't a tracked DoT.
 local function onPlayerCast(spellID, castGUID)
     if isSecret(spellID) or type(spellID) ~= "number" then return end
@@ -2130,6 +2181,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         ns.ensureDB()
         trace("===== session start =====")
         if ns.Retail and ns.Retail.StartRogueAuras then ns.Retail.StartRogueAuras() end
+        if ns.Retail and ns.Retail.StartRoguePoisons then ns.Retail.StartRoguePoisons() end
         local added = ns.locale.addClientNames(NAME_TABLES, function(spellID)
             local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
             if name and not isSecret(name) and type(name) == "string" then return name end
