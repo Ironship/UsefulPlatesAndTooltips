@@ -103,16 +103,16 @@ local function createPoisonDamage(entry)
                     timer:SetAllPoints(button)
                     timer:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
                     timer:SetStatusBarColor(0.2, 1, 0.2, 0.9)
-                    button:SetDurationBar(timer, { direction = direction.RemainingTime })
                     local label = button:CreateFontString(nil, "OVERLAY")
                     label:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
                     label:SetTextColor(0.2, 1, 0.2)
                     label:SetPoint("BOTTOMRIGHT", entry.bar, "TOPRIGHT", -2, 2)
                     button:SetDurationText(label, { textFormat = {
-                        formatString = "%s", components = {
+                        formatString = "{}", components = {
                             { property = property.RemainingPercent, formatter = formatter },
                         },
                     } })
+                    button:SetDurationBar(timer, { direction = direction.RemainingTime })
                 end)
                 -- Native visibility, timers and formatted damage stay inside the restricted button.
             end,
