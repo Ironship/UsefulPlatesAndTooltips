@@ -102,12 +102,32 @@ check("breakdown text", t.text(list3),
       "DoTs: |cffb359ffCorruption 60|r · |cffff8c26Immolate 45|r · |cff59ff59Serpent Sting 15|r")
 
 t.setMode("each")
+t.update(mk({"name": "Tödliches Gift", "school": 8, "damage": 46},
+            {"name": "Fluch der Pein", "school": 32, "damage": 60},
+            {"name": "Blutung", "school": 1, "damage": 300}))
+check("effect type: poison green, curse purple, bleed red",
+      [t.segment(i)[3] for i in (1, 2, 3)],
+      ["0.35,1,0.35,0.5", "0.7,0.35,1,0.5", "1,0.3,0.3,0.5"])
+
+t.setMode("rainbow")
 t.update(list3)
 first = t.segment(1)[3]
 swapped = mk({"name": "Immolate", "school": 4, "damage": 45}, {"name": "Corruption", "school": 32, "damage": 60})
 t.update(swapped)
-check("'each' mode: Corruption keeps its color when order changes", t.segment(2)[3], first)
-check("'each' mode: two DoTs get different colors", t.segment(1)[3] != t.segment(2)[3], True)
+check("Rainbow: Corruption keeps its color when order changes", t.segment(2)[3], first)
+check("Rainbow: two DoTs get different colors", t.segment(1)[3] != t.segment(2)[3], True)
+same_school = mk({"name": "Deadly Poison", "school": 8, "damage": 46},
+                 {"name": "Kingsbane", "school": 8, "damage": 80},
+                 {"name": "Rupture", "school": 1, "damage": 300},
+                 {"name": "Garrote", "school": 1, "damage": 100})
+t.update(same_school)
+colors = [t.segment(i)[3] for i in range(1, 5)]
+check("Rainbow: poisons and bleeds of the same school have separate colors", len(set(colors)), 4)
+t.update(mk(*[dict(name=entry["name"], school=entry["school"], damage=500) for entry in (
+    {"name": "Garrote", "school": 1}, {"name": "Rupture", "school": 1},
+    {"name": "Kingsbane", "school": 8}, {"name": "Deadly Poison", "school": 8})]))
+check("Rainbow: changing damage and order preserves each spell's color",
+      [t.segment(i)[3] for i in range(1, 5)], list(reversed(colors)))
 
 many = mk(*[{"name": f"DoT{i}", "school": 32, "damage": 10} for i in range(10)])
 cum = t.update(many)

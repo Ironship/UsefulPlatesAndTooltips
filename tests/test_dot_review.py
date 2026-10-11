@@ -163,3 +163,24 @@ cast(172, "Refreshed")
 assert order() == ["Pain", "Corruption"]
 assert not any("ERROR" in str(line) for line in dot.db.log.values())
 print("ok Forever prioritizes learned ticks and keeps active segments stable through calibration and refresh")
+
+# Both real options menus expose Rainbow; old school settings still select the semantic mode.
+rt, game, addon, _ = load("""
+    UsefulPlatesAndTooltips_DoTInfoDB = { version = 5, dotColors = 'school', plateDotColors = 'school',
+        ticks = { [172] = 123 } }
+""")
+game.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
+dot = addon.modules["DoTInfo"]
+assert dot.db.dotColors == dot.db.plateDotColors == "each"
+panel = game.CreateFrame("Frame", None, game.UIParent)
+addon.tabs["DoTInfo"].build(panel)
+rows = labels(rt, game, panel, "DoT colors")
+assert len(rows) == 2
+for row, key in zip(rows, ("dotColors", "plateDotColors")):
+    button = next(child for child in row.parent.children.values() if child.kind == "Button")
+    click(button)
+    click(labels(rt, game, game.UIParent, "Rainbow")[-1].parent)
+    assert dot.db[key] == "rainbow"
+    dot.ensureDB()
+    assert dot.db[key] == "rainbow" and dot.db.ticks[172] == 123
+print("ok Marker and Nameplates menus select Rainbow, retain learned ticks and preserve the explicit selection")
