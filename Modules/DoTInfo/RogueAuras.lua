@@ -71,7 +71,24 @@ local function poisonAmount()
     if type(total) == "number" and total > 0 and total < math.huge then return total end
 end
 
-local function createPoisonDamage(entry)
+local function poisonAppearance(entry)
+    local config, parts = {}, {}
+    local onPlate = entry.parent ~= TargetFrame
+    for _, key in ipairs({ "fillTexture", "fillColor", "fillOpacity", "dotColors", "outlineStyle",
+        "dashLength", "outlineThickness", "outlineColor", "outlineOpacity", "segmentDividers",
+        "pulseOutline", "showGlow", "glowSize", "showShine", "shineInterval", "scrollStripes", "labelSize", "labelColor" }) do
+        local setting = onPlate and key ~= "segmentDividers" and key ~= "labelSize" and key ~= "labelColor"
+            and ("plate" .. key:sub(1, 1):upper() .. key:sub(2)) or key
+        config[key] = ns.db[setting]
+        if config[key] == nil and ns.DEFAULTS then config[key] = ns.DEFAULTS[setting] end
+        parts[#parts + 1] = tostring(config[key])
+    end
+    config.onPlate = onPlate
+    config.name = ask(C_Spell and C_Spell.GetSpellName, 2818) or "Deadly Poison"
+    return config, table.concat(parts, "|")
+end
+
+local function createPoisonDamage(entry, config, signature)
     local property = Enum and Enum.DurationTextBindingProperty
     local direction = Enum and Enum.StatusBarTimerDirection
     if type(entry.container.AddAuraSlot) ~= "function" or not property or not direction
@@ -80,30 +97,46 @@ local function createPoisonDamage(entry)
         if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE POISON duration formatting unavailable") end
         return
     end
-    local scale, formatter, initialized, initializerError
+    local scale, base, container, formatter, initialized, initializerError
     local ok, err = pcall(function()
         -- This plain HP scale stays outside restricted aura buttons. Its fill supplies native geometry.
-        scale = CreateFrame("StatusBar", nil, entry.parent, "DisableUntrustedLayoutScriptsTemplate")
-        scale:SetAllPoints(entry.bar)
-        scale:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
-        scale:SetStatusBarColor(0, 0, 0, 0)
-        scale:SetMinMaxValues(0, 1)
-        scale:SetValue(0)
+        for _, key in ipairs({ "poisonScale", "poisonBase" }) do
+            if not entry[key] then
+                local bar = CreateFrame("StatusBar", nil, entry.parent, "DisableUntrustedLayoutScriptsTemplate")
+                bar:SetAllPoints(entry.bar)
+                bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+                bar:SetStatusBarColor(0, 0, 0, 0)
+                bar:SetMinMaxValues(0, 1)
+                bar:SetValue(0)
+                entry[key] = bar
+            end
+        end
+        scale, base = entry.poisonScale, entry.poisonBase
+        container = CreateFrame("AuraContainer", nil, entry.parent, "CustomAuraContainerTemplate")
+        container:SetSize(1, 1)
+        container:SetPoint("BOTTOMLEFT", entry.bar, "TOPLEFT", 0, 4)
         formatter = C_StringUtil.CreateNumericRuleFormatter()
         formatter:SetBreakpoints({ { threshold = 0, format = "" } })
-        entry.container:AddAuraSlot("deadlyDamage", "HARMFUL|PLAYER", {
+        container:AddAuraSlot("deadlyDamage", "HARMFUL|PLAYER", {
             candidateFilters = { includeSpellIDs = { [2818] = true } },
             initializeFrame = function(button)
                 -- The native factory swallows callback errors, so retain setup failure explicitly.
                 initialized, initializerError = pcall(function()
-                    button:SetAllPoints(scale:GetStatusBarTexture())
-                    local timer = CreateFrame("StatusBar", nil, button, "DisableUntrustedLayoutScriptsTemplate")
+                    button:SetPoint("TOPLEFT", base:GetStatusBarTexture(), "TOPRIGHT")
+                    button:SetPoint("BOTTOMRIGHT", scale:GetStatusBarTexture(), "BOTTOMRIGHT")
+                    local clip = CreateFrame("Frame", nil, button, "DisableUntrustedLayoutScriptsTemplate")
+                    local padding = (config.glowSize or 0) + (config.outlineThickness or 1)
+                    clip:SetPoint("TOPLEFT", entry.bar, "TOPLEFT", 0, padding)
+                    clip:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, -padding)
+                    clip:SetClipsChildren(true)
+                    local timer = CreateFrame("StatusBar", nil, clip, "DisableUntrustedLayoutScriptsTemplate")
                     timer:SetAllPoints(button)
                     timer:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
                     timer:SetStatusBarColor(0.2, 1, 0.2, 0.9)
+                    if ns.stylePoisonSegment then ns.stylePoisonSegment(timer, entry.bar, config) end
                     local label = button:CreateFontString(nil, "OVERLAY")
-                    label:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
-                    label:SetTextColor(0.2, 1, 0.2)
+                    label:SetFont("Fonts\\FRIZQT__.TTF", config.labelSize or 11, "OUTLINE")
+                    if ns.colorOf then label:SetTextColor(ns.colorOf(config.labelColor)) else label:SetTextColor(0.2, 1, 0.2) end
                     label:SetPoint("BOTTOMRIGHT", entry.bar, "TOPRIGHT", -2, 2)
                     button:SetDurationText(label, { textFormat = {
                         formatString = "{}", components = {
@@ -119,19 +152,49 @@ local function createPoisonDamage(entry)
     end)
     if not ok then
         if scale then pcall(scale.Hide, scale) end
+        if container then pcall(container.SetEnabled, container, false); pcall(container.Hide, container) end
         if ns.TraceRogueAura then
             ns.TraceRogueAura("NATIVE POISON setup failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
         end
         return
     end
     if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE POISON damage display ready") end
-    return { scale = scale, formatter = formatter }
+    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature }
+end
+
+local function updatePoisonOffset(entry, unit, enabled)
+    local damage = entry and entry.poisonDamage
+    if not damage then return end
+    local offset = enabled and ns.nativePoisonBase and ns.nativePoisonBase(unit, entry.parent, entry.bar) or 0
+    if offset ~= damage.offset or damage.total ~= damage.offsetTotal then
+        damage.base:SetValue(offset)
+        damage.scale:SetValue(damage.width and (damage.total or 0) or offset + (damage.total or 0))
+        damage.offset, damage.offsetTotal = offset, damage.total
+    end
 end
 
 local function updatePoisonDamage(entry, unit, enabled)
+    local config, signature = poisonAppearance(entry)
+    if enabled and signature ~= entry.poisonSignature and not (ask(InCombatLockdown) == true
+        and ask(entry.parent.IsProtected, entry.parent) == true) then
+        -- Restricted descendants cannot be restyled; replace only the poison slot, not the aura icons.
+        local old = entry.poisonDamage
+        local replacement = createPoisonDamage(entry, config, signature)
+        if replacement then
+            if old then pcall(old.container.SetEnabled, old.container, false); pcall(old.container.Hide, old.container) end
+            entry.poisonDamage = replacement
+        end
+        entry.poisonSignature = signature
+    end
     local damage = entry.poisonDamage
     if not damage then return end
     local total = enabled and poisonAmount() or nil
+    if enabled and ns.dotBreakdownForUnit then
+        local entries = ns.dotBreakdownForUnit(unit)
+        for _, effect in ipairs(entries) do
+            if effect.familyID == 2818 then total = nil; break end -- Already drawn by the plain DoT segments.
+        end
+    end
     local label = ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
         damage.formatter:SetBreakpoints({ total and label and {
@@ -140,9 +203,31 @@ local function updatePoisonDamage(entry, unit, enabled)
         } or { threshold = 0, format = "" } })
         damage.total, damage.label = total, label
     end
-    if enabled then damage.scale:SetMinMaxValues(0, UnitHealthMax(unit)) end
-    damage.scale:SetValue(total or 0)
-    -- shortcut: full damage above max HP clips the width; use the native number until a wider scale is available.
+    if enabled then
+        local maximum = UnitHealthMax(unit)
+        damage.scale:SetMinMaxValues(0, maximum)
+        damage.base:SetMinMaxValues(0, maximum)
+        local width = ask(entry.bar.GetWidth, entry.bar)
+        local barScale = ask(entry.bar.GetEffectiveScale, entry.bar)
+        local ownScale = ask(damage.scale.GetEffectiveScale, damage.scale)
+        if type(width) == "number" and width > 0 and width < math.huge
+            and type(barScale) == "number" and barScale > 0 and barScale < math.huge
+            and type(ownScale) == "number" and ownScale > 0 and ownScale < math.huge then width = width * barScale / ownScale
+        else width = nil end
+        if width and (width ~= width or width >= math.huge) then width = nil end
+        if width ~= damage.width then
+            damage.scale:ClearAllPoints()
+            if width then
+                -- Translate a full HP-sized scale; clip the resulting countdown only at the HP bar's edge.
+                damage.scale:SetPoint("TOPLEFT", damage.base:GetStatusBarTexture(), "TOPRIGHT")
+                damage.scale:SetPoint("BOTTOMLEFT", damage.base:GetStatusBarTexture(), "BOTTOMRIGHT")
+                damage.scale:SetWidth(width)
+            else damage.scale:SetAllPoints(entry.bar) end
+            damage.width, damage.offset = width, nil
+        end
+    end
+    updatePoisonOffset(entry, unit, enabled)
+    -- shortcut: hidden full-bar geometry or poison above max HP clips early; replace when native uncapped sizing is available.
 end
 
 local function create(parent, bar)
@@ -176,20 +261,44 @@ local function create(parent, bar)
         return
     end
     local entry = { container = container, parent = parent, bar = bar }
-    entry.poisonDamage = createPoisonDamage(entry)
     return entry
 end
 
-local function display(entry, unit, enabled, refresh)
-    if not entry then return end
-    local container = entry.container
+local function displayContainer(entry, state, unit, enabled, refresh)
+    local container = state.container
     if not usable(container) then return end
     -- Nameplate addons re-level health bars while active; keep native projections above them.
     local level, strata = ask(entry.bar.GetFrameLevel, entry.bar), ask(entry.bar.GetFrameStrata, entry.bar)
     level = type(level) == "number" and level + 5 or 200
-    if level ~= entry.level and pcall(container.SetFrameLevel, container, level) then entry.level = level end
-    if type(strata) == "string" and strata ~= entry.strata
-        and pcall(container.SetFrameStrata, container, strata) then entry.strata = strata end
+    if level ~= state.level and pcall(container.SetFrameLevel, container, level) then state.level = level end
+    if type(strata) == "string" and strata ~= state.strata
+        and pcall(container.SetFrameStrata, container, strata) then state.strata = strata end
+    if enabled and state.unit ~= unit then
+        if not pcall(container.SetUnit, container, unit) then return end
+        state.unit = unit
+    end
+    if state.enabled ~= enabled then
+        if not pcall(container.SetEnabled, container, enabled) then return end
+        state.enabled = enabled
+    end
+    local now = GetTime()
+    -- Recheck native aura state for late procs and missed incremental updates; keep its real expiry.
+    if enabled and (refresh == true or refresh == unit or (refresh == false
+        and (not state.refreshedAt or now - state.refreshedAt >= AURA_REFRESH_INTERVAL))) then
+        pcall(container.UpdateAllAuras, container)
+        state.refreshedAt = now
+    end
+    -- A protected parent can defer visibility changes until combat ends; disabling still clears auras.
+    if state.shown ~= enabled then
+        if ask(InCombatLockdown) == true and (ask(container.IsProtected, container) == true
+            or ask(entry.parent.IsProtected, entry.parent) == true) then return end
+        local method = enabled and container.Show or container.Hide
+        if pcall(method, container) then state.shown = enabled end
+    end
+end
+
+local function display(entry, unit, enabled, refresh)
+    if not entry then return end
     local ok, err = pcall(updatePoisonDamage, entry, unit, enabled)
     if not ok and not entry.poisonError then
         entry.poisonError = true
@@ -197,28 +306,8 @@ local function display(entry, unit, enabled, refresh)
             ns.TraceRogueAura("NATIVE POISON update failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
         end
     end
-    if enabled and entry.unit ~= unit then
-        if not pcall(container.SetUnit, container, unit) then return end
-        entry.unit = unit
-    end
-    if entry.enabled ~= enabled then
-        if not pcall(container.SetEnabled, container, enabled) then return end
-        entry.enabled = enabled
-    end
-    local now = GetTime()
-    -- Recheck native aura state for late procs and missed incremental updates; keep its real expiry.
-    if enabled and (refresh == true or refresh == unit or (refresh == false
-        and (not entry.refreshedAt or now - entry.refreshedAt >= AURA_REFRESH_INTERVAL))) then
-        pcall(container.UpdateAllAuras, container)
-        entry.refreshedAt = now
-    end
-    -- A protected parent can defer visibility changes until combat ends; disabling still clears auras.
-    if entry.shown ~= enabled then
-        if ask(InCombatLockdown) == true and (ask(container.IsProtected, container) == true
-            or ask(entry.parent.IsProtected, entry.parent) == true) then return end
-        local method = enabled and container.Show or container.Hide
-        if pcall(method, container) then entry.shown = enabled end
-    end
+    displayContainer(entry, entry, unit, enabled, refresh)
+    if entry.poisonDamage then displayContainer(entry, entry.poisonDamage, unit, enabled, refresh) end
 end
 
 local function hostile(unit)
@@ -261,6 +350,12 @@ end
 
 function R.UpdateRogueAuras()
     update(false)
+end
+
+-- Follow plain marker animation/ticks immediately, without resampling any native aura state.
+function R.UpdatePoisonOffset(parent)
+    local entry = parent == TargetFrame and targetEntry or byPlate[parent]
+    if entry then updatePoisonOffset(entry, entry.unit, entry.enabled) end
 end
 
 local function seedPlates()

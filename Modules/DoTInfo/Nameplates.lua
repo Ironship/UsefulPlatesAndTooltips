@@ -131,7 +131,7 @@ local function fitMarker(w)
 end
 
 local function createWidgets(plate, healthBar)
-    local w = { healthBar = healthBar }
+    local w = { healthBar = healthBar, plate = plate }
 
     -- Marker: filled from the bar's left edge to the remaining DoT damage, on the mob's (secret) health scale.
     w.marker = invisibleBar(plate)
@@ -289,6 +289,8 @@ local function applyStyle(w, db)
 end
 
 local function hideWidgets(w)
+    w.displayDamage = 0
+    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
     w.marker:Hide()
     w.iconWindow:Hide()
 end
@@ -336,6 +338,8 @@ local function drawPlate(w, entries, total, maxHealth, health, db)
         return false
     end
     w.marker:SetShown(db.showMarkers)
+    w.displayDamage = db.showMarkers and total or 0
+    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
     -- UI-3: the kill icon is part of the marker set: with showMarkers off it
     -- must hide too, not linger alone on the plate.
     w.iconWindow:SetShown(db.showMarkers and db.nameplateMode == "markerIcon")
@@ -387,6 +391,11 @@ local function updatePlate(unit, plate, db)
         return
     end
     drawPlate(widgetsFor(plate, healthBar), entries, total, UnitHealthMax(unit), UnitHealth(unit), db)
+end
+
+function ns.nameplateDamageBase(plate, bar)
+    local w = widgetsByPlate[plate]
+    return w and w.healthBar == bar and w.displayDamage or 0
 end
 
 -- The options window's mock nameplate: { plate, healthBar } plus its preview state ({ health, dots } in % of

@@ -674,6 +674,8 @@ function ns.ObserveRogueAura(unit, aura, signal)
     if previousName then dotsByTarget[key][previousName] = nil end
     local dot = newDot(aura.spellID, nil, aura.name, aura.total, aura.school, aura.duration, aura.interval, now)
     dot.predictionOnly, dot.auraObserved, dot.unsure = true, true, true
+    dot.estimatedClock = not aura.expirationTime
+    dot.segmentOrder = previous and previous.segmentOrder
     dot.poison, dot.familyID, dot.noRefreshCue = aura.poison, aura.familyID, not aura.manual
     dot.stacks = aura.stacks
     dot.auraInstanceID, dot.expiresAt = aura.auraInstanceID, expiresAt
@@ -759,6 +761,7 @@ local function onPlayerCast(spellID, castGUID)
     local previous = dotsByTarget[key][name]
     local dot = newDot(spellID, tickKey, name, total, school, duration, statedInterval, now)
     if ns.Retail then ns.Retail.ApplyRefresh(dot, previous, now) end
+    dot.segmentOrder = previous and previous.segmentOrder
     dotsByTarget[key][name] = dot
     lastDotCast = { key = key, name = name, dot = dot, previous = previous, at = now }
     local learned = not ns.Retail and tickKey and db.ticks[tickKey]
@@ -1131,8 +1134,9 @@ local function remainingDamage(dot)
     return total
 end
 
--- Remaining damage per DoT on a mob (by unitKey), oldest application first. DoTs still waiting for their first
--- tick are left out. A DoT being cast on the mob replaces the one of the same name it would refresh.
+-- Known ticks first, description estimates next, own clocks last. Freeze each visible effect's position
+-- through damage/clock refinements and refreshes; a corrected amount must not reshuffle its neighbours.
+-- DoTs still waiting for their first tick are left out. A cast replaces the DoT it would refresh.
 local function dotBreakdown(key)
     local function refreshDueFor(name, dot)
         if ns.Retail then return db and db.refreshCue and ns.Retail.RefreshDue(dot, GetTime()) end
@@ -1152,15 +1156,27 @@ local function dotBreakdown(key)
     if not dots and not cast then return list end
     for name, dot in pairs(dots or {}) do
         if not isWaiting(dot) and not (cast and name == cast.name) then
+            if not dot.segmentOrder then
+                dot.segmentOrder = { rank = dot.estimatedClock and 2
+                    or ((dot.predictionOnly or (dot.unsure and dot.normalTicks == 0)) and 1 or 0),
+                    appliedAt = dot.appliedAt }
+            end
             table.insert(list, { name = name, school = dot.school, appliedAt = dot.appliedAt,
-                damage = remainingDamage(dot), refreshDue = refreshDueFor(name, dot) })
+                damage = remainingDamage(dot), familyID = dot.familyID, segmentOrder = dot.segmentOrder,
+                refreshDue = refreshDueFor(name, dot) })
         end
     end
     if cast and not isWaiting(cast.dot) then
         table.insert(list, { name = cast.name, school = cast.dot.school, appliedAt = cast.dot.appliedAt,
-            damage = remainingDamage(cast.dot), provisional = true, refreshDue = refreshDueFor(cast.name, cast.dot) })
+            segmentOrder = { rank = 3, appliedAt = cast.dot.appliedAt },
+            damage = remainingDamage(cast.dot), familyID = cast.dot.familyID, provisional = true, refreshDue = refreshDueFor(cast.name, cast.dot) })
     end
-    table.sort(list, function(a, b) return a.appliedAt < b.appliedAt end)
+    table.sort(list, function(a, b)
+        local first, second = a.segmentOrder, b.segmentOrder
+        if first.rank ~= second.rank then return first.rank < second.rank end
+        if first.appliedAt ~= second.appliedAt then return first.appliedAt < second.appliedAt end
+        return a.name < b.name
+    end)
     return list
 end
 
@@ -1913,6 +1929,7 @@ end
 
 local function hideMarkers()
     remainingBar:Hide()
+    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(TargetFrame) end
     fillLayer.refreshMark:Hide()
     markerScale = nil -- grow in again next time it appears
 end
@@ -2066,6 +2083,7 @@ local function safeRefresh()
         trace("ERROR in display update: " .. tostring(err))
         print("Display error (logged): " .. tostring(err))
     end
+    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(TargetFrame) end
 end
 
 ---------------------------------------------------------------------------
@@ -2110,6 +2128,115 @@ ns.dotColor = dotColor
 ns.colorOf = colorOf
 ns.findById = findById
 ns.textureDir = TEXTURE_DIR
+
+-- Plain display amounts only; native poison uses them as its starting point on the HP scale.
+function ns.nativePoisonBase(unit, parent, bar)
+    if unit == "target" then
+        return not previewHost and healthBar == bar and remainingBar:IsShown() and markerShownValue or 0
+    end
+    return ns.nameplateDamageBase and ns.nameplateDamageBase(parent, bar) or 0
+end
+
+-- Configure before the native aura factory restricts this segment and its descendants.
+function ns.stylePoisonSegment(timer, health, config)
+    local style = findById(FILL_STYLES, config.fillTexture)
+    local perDot = config.dotColors ~= "single"
+    local color = perDot and dotColor({ name = config.name, school = 8 }, config.dotColors) or nil
+    local r, g, b, a = colorOf(config.fillColor, config.fillOpacity)
+    if color then r, g, b = color[1], color[2], color[3] end
+    local poisonSpan = timer:GetStatusBarTexture()
+    timer:SetStatusBarColor(0, 0, 0, 0)
+    local texture = timer:CreateTexture(nil, "ARTWORK")
+    texture:SetPoint("TOPLEFT", poisonSpan, "TOPLEFT")
+    texture:SetPoint("BOTTOMRIGHT", poisonSpan, "BOTTOMRIGHT")
+    texture:SetTexture((style.path and not style.gradient) and style.path or WHITE,
+        style.tiled and "REPEAT" or nil, style.tiled and "REPEAT" or nil)
+    texture:SetHorizTile(style.tiled or false)
+    texture:SetVertTile(style.tiled or false)
+    texture:SetVertexColor(r, g, b, a)
+    if style.gradient and not perDot and not config.onPlate and CreateColor then
+        texture:SetVertexColor(1, 1, 1, 1)
+        texture:SetGradient("HORIZONTAL", CreateColor(r, g, b, 0), CreateColor(r, g, b, a))
+    end
+    texture:SetShown(perDot or (style.path ~= nil and (not config.onPlate or not style.gradient)))
+    if perDot and config.segmentDividers then
+        local divider = timer:CreateTexture(nil, "OVERLAY")
+        divider:SetColorTexture(0, 0, 0, 0.85)
+        divider:SetWidth(1)
+        divider:SetPoint("TOP", poisonSpan, "TOPLEFT")
+        divider:SetPoint("BOTTOM", poisonSpan, "BOTTOMLEFT")
+    end
+    local outline = CreateFrame("Frame", nil, timer, "DisableUntrustedLayoutScriptsTemplate")
+    outline:SetAllPoints(timer)
+    local or_, og, ob, oa = colorOf(config.outlineColor, config.outlineOpacity)
+    for _, points in ipairs({ { true, "TOPLEFT", "TOPRIGHT" }, { true, "BOTTOMLEFT", "BOTTOMRIGHT" },
+        { false, "TOPLEFT", "BOTTOMLEFT" }, { false, "TOPRIGHT", "BOTTOMRIGHT" } }) do
+        local edge = outline:CreateTexture(nil, "OVERLAY")
+        edge:SetPoint(points[2], poisonSpan, points[2])
+        edge:SetPoint(points[3], poisonSpan, points[3])
+        if config.outlineStyle == "dashed" then
+            edge:SetTexture(TEXTURE_DIR .. (points[1] and "DashH" or "DashV") .. config.dashLength, "REPEAT", "REPEAT")
+            edge:SetHorizTile(points[1])
+            edge:SetVertTile(not points[1])
+        else edge:SetTexture(WHITE) end
+        if points[1] then edge:SetHeight(config.outlineThickness) else edge:SetWidth(config.outlineThickness) end
+        edge:SetVertexColor(or_, og, ob, oa)
+        edge:SetShown(config.outlineStyle ~= "none")
+    end
+    if config.pulseOutline then
+        local pulse = outline:CreateAnimationGroup()
+        pulse:SetLooping("BOUNCE")
+        local alpha = pulse:CreateAnimation("Alpha")
+        alpha:SetFromAlpha(1); alpha:SetToAlpha(0.3); alpha:SetDuration(0.9); alpha:SetSmoothing("IN_OUT")
+        pulse:Play()
+    end
+    if config.showGlow and config.outlineStyle ~= "none" and CreateColor then
+        local inner, outer = CreateColor(or_, og, ob, oa * 0.7), CreateColor(or_, og, ob, 0)
+        for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+            local glow = outline:CreateTexture(nil, "BORDER")
+            glow:SetTexture(WHITE); glow:SetBlendMode("ADD")
+            if side == "top" or side == "bottom" then
+                local own, relative = side == "top" and "BOTTOM" or "TOP", side == "top" and "TOP" or "BOTTOM"
+                glow:SetPoint(own .. "LEFT", poisonSpan, relative .. "LEFT")
+                glow:SetPoint(own .. "RIGHT", poisonSpan, relative .. "RIGHT")
+                glow:SetHeight(config.glowSize)
+                glow:SetGradient("VERTICAL", side == "top" and inner or outer, side == "top" and outer or inner)
+            else
+                local own, relative = side == "left" and "RIGHT" or "LEFT", side == "left" and "LEFT" or "RIGHT"
+                glow:SetPoint("TOP" .. own, poisonSpan, "TOP" .. relative)
+                glow:SetPoint("BOTTOM" .. own, poisonSpan, "BOTTOM" .. relative)
+                glow:SetWidth(config.glowSize)
+                glow:SetGradient("HORIZONTAL", side == "left" and outer or inner, side == "left" and inner or outer)
+            end
+        end
+    end
+    if config.showShine or (style.id == "stripes" and config.scrollStripes and not perDot) then
+        local clip = CreateFrame("Frame", nil, timer, "DisableUntrustedLayoutScriptsTemplate")
+        clip:SetPoint("TOPLEFT", poisonSpan, "TOPLEFT"); clip:SetPoint("BOTTOMRIGHT", poisonSpan, "BOTTOMRIGHT")
+        clip:SetClipsChildren(true)
+        local ok, width = pcall(health.GetWidth, health)
+        if not ok or isSecret(width) or type(width) ~= "number" or not (width > 0 and width < math.huge) then width = 150 end
+        if style.id == "stripes" and config.scrollStripes and not perDot then
+            texture:Hide()
+            local stripes = clip:CreateTexture(nil, "ARTWORK")
+            stripes:SetTexture(style.path, "REPEAT", "REPEAT"); stripes:SetHorizTile(true); stripes:SetVertTile(true)
+            stripes:SetPoint("TOPLEFT", timer, "TOPLEFT", -16, 0); stripes:SetPoint("BOTTOMRIGHT", timer, "BOTTOMRIGHT")
+            stripes:SetVertexColor(r, g, b, a)
+            local scroll = stripes:CreateAnimationGroup(); scroll:SetLooping("REPEAT")
+            local move = scroll:CreateAnimation("Translation"); move:SetOffset(8, 0); move:SetDuration(0.6)
+            scroll:Play()
+        end
+        if config.showShine then
+            local shine = clip:CreateTexture(nil, "OVERLAY")
+            shine:SetTexture(TEXTURE_DIR .. "Shine"); shine:SetBlendMode("ADD"); shine:SetWidth(36)
+            shine:SetPoint("TOPRIGHT", timer, "TOPLEFT"); shine:SetPoint("BOTTOMRIGHT", timer, "BOTTOMLEFT")
+            local sweep = shine:CreateAnimationGroup(); sweep:SetLooping("REPEAT")
+            local move = sweep:CreateAnimation("Translation"); move:SetOffset(width + 36, 0)
+            move:SetDuration(0.9); move:SetSmoothing("IN_OUT"); move:SetStartDelay(math.max(0, config.shineInterval - 0.9))
+            sweep:Play()
+        end
+    end
+end
 
 -- The DoTs on the mob behind `unit` (e.g. "nameplate3"): per-DoT breakdown and total remaining damage.
 function ns.dotBreakdownForUnit(unit)
@@ -2301,6 +2428,7 @@ end)
 local sinceUpdate = 0
 frame:SetScript("OnUpdate", function(self, elapsed)
     if db then animateMarker(elapsed) end
+    if db and ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(TargetFrame) end
     sinceUpdate = sinceUpdate + elapsed
     if sinceUpdate < UPDATE_INTERVAL or not db then return end
     sinceUpdate = 0
