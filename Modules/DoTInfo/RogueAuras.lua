@@ -64,6 +64,87 @@ local function initialize(button)
     button:SetApplicationCount(count)
 end
 
+local function poisonAmount()
+    local desc = ask(C_Spell and C_Spell.GetSpellDescription, 2823)
+    local total = desc and R.Parse(2818, desc)
+    if type(total) == "number" and total > 0 and total < math.huge then return total end
+end
+
+local function createPoisonDamage(entry)
+    local property = Enum and Enum.DurationTextBindingProperty
+    local direction = Enum and Enum.StatusBarTimerDirection
+    if type(entry.container.AddAuraSlot) ~= "function" or not property or not direction
+        or type(property.RemainingPercent) ~= "number" or type(direction.RemainingTime) ~= "number"
+        or not C_StringUtil or type(C_StringUtil.CreateNumericRuleFormatter) ~= "function" then
+        if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE POISON duration formatting unavailable") end
+        return
+    end
+    local scale, formatter, initialized, initializerError
+    local ok, err = pcall(function()
+        -- This plain HP scale stays outside restricted aura buttons. Its fill supplies native geometry.
+        scale = CreateFrame("StatusBar", nil, entry.parent, "DisableUntrustedLayoutScriptsTemplate")
+        scale:SetPoint("BOTTOMLEFT", entry.bar, "BOTTOMLEFT")
+        scale:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT")
+        scale:SetHeight(2)
+        scale:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+        scale:SetStatusBarColor(0, 0, 0, 0)
+        scale:SetMinMaxValues(0, 1)
+        scale:SetValue(0)
+        formatter = C_StringUtil.CreateNumericRuleFormatter()
+        formatter:SetBreakpoints({ { threshold = 0, format = "" } })
+        entry.container:AddAuraSlot("deadlyDamage", "HARMFUL|PLAYER", {
+            candidateFilters = { includeSpellIDs = { [2818] = true } },
+            initializeFrame = function(button)
+                -- The native factory swallows callback errors, so retain setup failure explicitly.
+                initialized, initializerError = pcall(function()
+                    button:SetAllPoints(scale:GetStatusBarTexture())
+                    local timer = CreateFrame("StatusBar", nil, button, "DisableUntrustedLayoutScriptsTemplate")
+                    timer:SetAllPoints(button)
+                    timer:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+                    timer:SetStatusBarColor(0.2, 1, 0.2, 0.9)
+                    button:SetDurationBar(timer, { direction = direction.RemainingTime })
+                    local label = button:CreateFontString(nil, "OVERLAY")
+                    label:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+                    label:SetTextColor(0.2, 1, 0.2)
+                    label:SetPoint("BOTTOMRIGHT", entry.bar, "TOPRIGHT", -2, 2)
+                    button:SetDurationText(label, { textFormat = {
+                        formatString = "%s", components = {
+                            { property = property.RemainingPercent, formatter = formatter },
+                        },
+                    } })
+                end)
+                -- Native visibility, timers and formatted damage stay inside the restricted button.
+            end,
+        })
+        assert(initialized, initializerError or "native initializer did not run")
+    end)
+    if not ok then
+        if scale then pcall(scale.Hide, scale) end
+        if ns.TraceRogueAura then
+            ns.TraceRogueAura("NATIVE POISON setup failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
+        end
+        return
+    end
+    if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE POISON damage display ready") end
+    return { scale = scale, formatter = formatter }
+end
+
+local function updatePoisonDamage(entry, unit, enabled)
+    local damage = entry.poisonDamage
+    if not damage then return end
+    local total = enabled and poisonAmount() or nil
+    local label = ns.db and ns.db.showLabel == true
+    if total ~= damage.total or label ~= damage.label then
+        damage.formatter:SetBreakpoints({ total and label and {
+            threshold = 0, format = "~%.0f", components = { { div = 1 / total, step = 1 } },
+        } or { threshold = 0, format = "" } })
+        damage.total, damage.label = total, label
+    end
+    if enabled then damage.scale:SetMinMaxValues(0, UnitHealthMax(unit)) end
+    damage.scale:SetValue(total or 0)
+    -- shortcut: full damage above max HP clips the width; use the native number until a wider scale is available.
+end
+
 local function create(parent, bar)
     if failedHosts[parent] == bar then return end
     if ask(InCombatLockdown) == true and ask(parent.IsProtected, parent) == true then return end
@@ -94,13 +175,22 @@ local function create(parent, bar)
         end
         return
     end
-    return { container = container, parent = parent, bar = bar }
+    local entry = { container = container, parent = parent, bar = bar }
+    entry.poisonDamage = createPoisonDamage(entry)
+    return entry
 end
 
 local function display(entry, unit, enabled, refresh)
     if not entry then return end
     local container = entry.container
     if not usable(container) then return end
+    local ok, err = pcall(updatePoisonDamage, entry, unit, enabled)
+    if not ok and not entry.poisonError then
+        entry.poisonError = true
+        if ns.TraceRogueAura then
+            ns.TraceRogueAura("NATIVE POISON update failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
+        end
+    end
     if enabled and entry.unit ~= unit then
         if not pcall(container.SetUnit, container, unit) then return end
         entry.unit = unit
