@@ -26,6 +26,7 @@ end }
 local factory = CreateFrame
 function CreateFrame(kind, name, parent, template)
     local frame = factory(kind, name, parent, template)
+    frame.SetAllPoints = function(self, anchor) self.allPoints = anchor end
     if kind == 'StatusBar' then
         frame.SetMinMaxValues = function(self, min, max) self.min, self.max = min, max end
         frame.SetValue = function(self, value) self.value = value end
@@ -38,6 +39,7 @@ function CreateFrame(kind, name, parent, template)
         assert(count == 1, 'other rogue auras cannot feed the Deadly Poison projection')
         local button = FakeMock('AuraButton', self)
         local record = { container = self, button = button, nativeVisible = false }
+        button.SetAllPoints = function(_, anchor) record.anchor = anchor end
         button.SetDurationBar = function(_, bar, opts) record.timer, record.direction = bar, opts.direction end
         button.SetDurationText = function(_, text, opts)
             if slotInitializerFails then error('duration binding failed') end
@@ -66,7 +68,8 @@ function FindProjection(parent)
         if rawequal(poisonBindings[i].container.parent, parent) then return poisonBindings[i] end
     end
 end
--- Test-only model of the C engine; addon Lua never receives this fraction or visibility.
+-- Test-only model: the timer uses a fraction, but duration text receives 0..100 percent.
+-- Addon Lua never receives either value or native visibility.
 function NativePoison(record, fraction)
     record.nativeVisible = fraction ~= nil and record.container.enabled == true
     if not record.nativeVisible then record.nativeText = nil; return end
@@ -74,7 +77,7 @@ function NativePoison(record, fraction)
     local component = record.format.components[1]
     local rule = component.formatter.rules[1]
     if rule.format == '' then record.nativeText = ''; return end
-    local result = fraction / rule.components[1].div
+    local result = fraction * 100 / rule.components[1].div
     result = math.floor(result / rule.components[1].step + 0.5) * rule.components[1].step
     record.nativeText = record.format.formatString:gsub('{}', function() return string.format(rule.format, result) end)
 end
@@ -97,6 +100,7 @@ for binding in (target, plate):
     assert binding.format.components[1].property == 1
     assert len(binding.button.points) == 0  # SetAllPoints uses the HP scale's fill texture.
     assert binding.timer.parent.kind == "AuraButton"
+    assert game.Same(binding.timer.allPoints, binding.button)
     game.NativePoison(binding, 1)
     assert binding.nativeText == "~46"
     game.NativePoison(binding, .5)
@@ -114,13 +118,31 @@ scales = [f for f in game.AllFrames.values()
 assert len(scales) == 2
 for scale in scales:
     assert game.Same(scale.max, game.SECRET)
-    assert scale.height == 2 and scale.template == "DisableUntrustedLayoutScriptsTemplate"
+    assert scale.template == "DisableUntrustedLayoutScriptsTemplate"
+    assert (game.Same(scale.allPoints, target.container.points[1][2])
+            or game.Same(scale.allPoints, plate.container.points[1][2]))
+    assert scale.height is None, "poison projection must cover HP height rather than a two-pixel line"
     assert scale.parent.kind != "AuraButton"
+assert game.Same(plate.anchor.parent.allPoints, plate.container.points[1][2])
+# A live nameplate may move above the original frame level without being recreated.
+game.plateA.UnitFrame.healthBar.SetFrameLevel(game.plateA.UnitFrame.healthBar, 900)
+game.plateA.UnitFrame.healthBar.SetFrameStrata(game.plateA.UnitFrame.healthBar, "HIGH")
+dot.Retail.UpdateRogueAuras()
+assert plate.container.level == 905 and plate.container.strata == "HIGH"
 writes = sum(f.writes for f in game.formatters.values())
 for _ in range(30):
     dot.Retail.UpdateRogueAuras()
 assert game.auraCalls == 0 and sum(f.writes for f in game.formatters.values()) == writes
 print("ok hidden HP is passed only to native scales; repeated rendering never probes restricted frames or resets timers")
+
+# Reproduce the live 6600-for-66 error independently of the formatter configuration.
+game.spellDesc[2823] = "Poison deals 66 Nature damage over 12 sec."
+dot.Retail.UpdateRogueAuras()
+game.NativePoison(plate, 1)
+assert plate.nativeText == "~66"
+game.NativePoison(plate, .5)
+assert plate.nativeText == "~33"
+print("ok native 100-percent duration text does not inflate 66 periodic damage to 6600")
 
 game.spellDesc[2823] = "Poison deals 92 Nature damage over 12 sec."
 dot.Retail.UpdateRogueAuras()

@@ -1373,6 +1373,7 @@ function Parser.ParseFinisher(text, lang)
   t, lang = prepare(text, lang)
   t = " " .. t .. " "
   local marker = (lang == "de") and "punkte?" or "points?"
+  local damageText = find(t, lang == "de" and "schaden" or "damage", 1, true)
   local marks, init = {}, 1
   while true do
     local s, e, n = find(t, "[^0-9]([1-9]%d*) " .. marker .. " *:", init)
@@ -1393,9 +1394,13 @@ function Parser.ParseFinisher(text, lang)
       -- "25 Schaden über 8 Sekunden", Forever's "44 Schaden über 12 Sek."
       total, dur = match(seg, "^ *(" .. NUM .. ") schaden " .. UE .. "ber (" .. NUM .. ") sek")
       if not total then total, dur = match(seg, "^ *(" .. NUM .. ") schaden im verlauf von (" .. NUM .. ") sek") end
+      if not total and damageText then
+        total, dur = match(seg, "^ *(" .. NUM .. ") im verlauf von (" .. NUM .. ") sek")
+      end
     else
       if lo and not find(seg, "damage", 1, true) then lo = nil end
       total, dur = match(seg, "^ *(" .. NUM .. ") damage over (" .. NUM .. ") sec")
+      if not total and damageText then total, dur = match(seg, "^ *(" .. NUM .. ") over (" .. NUM .. ") sec") end
     end
     -- Retail can list a single finished amount instead of a min/max range.
     if not lo and not total then
