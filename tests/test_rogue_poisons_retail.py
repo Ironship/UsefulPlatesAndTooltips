@@ -113,7 +113,7 @@ rt, game, dot = setup()
 game.poison("target", 101, game.SECRET)
 game.Fire("UNIT_AURA", "target", rt.table_from({"isFullUpdate": True}))
 assert total(dot) == 0
-assert "waiting for a readable poison application" in messages(game)
+assert "waiting for a readable effect application" in messages(game)
 print("ok scanning an already-active hidden timer cannot invent its application time")
 
 rt, game, dot = setup()

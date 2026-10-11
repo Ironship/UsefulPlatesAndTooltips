@@ -243,9 +243,9 @@ step("load shared nameplate layout", lambda: H.load("Core/PlateLayout.lua",
     open(os.path.join(ROOT, "Core", "PlateLayout.lua"), encoding="utf-8").read(), ns))
 toc = open(os.path.join(ROOT, "UsefulPlatesAndTooltips.toc"), encoding="utf-8").read().splitlines()
 files = [line.strip().replace("\\", os.sep) for line in toc if line.strip().startswith("Modules\\DoTInfo\\")]
-expected = [os.path.join("Modules", "DoTInfo", n) for n in ("Locale.lua", "Core.lua", "Options.lua", "Nameplates.lua")]
+expected = [os.path.join("Modules", "DoTInfo", n) for n in ("Locale.lua", "Core.lua", "RogueEffects.lua", "Options.lua", "Nameplates.lua")]
 if files != expected:
-    raise SystemExit(f"the DoTInfo files the .toc lists are not the canonical four: {files}")
+    raise SystemExit(f"the DoTInfo files the .toc lists are not in runtime order: {files}")
 for name in files:
     step(f"load {name}", lambda name=name: H.load(name, open(os.path.join(ROOT, name), encoding="utf-8").read(), ns))
 

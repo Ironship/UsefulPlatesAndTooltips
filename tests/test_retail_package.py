@@ -66,6 +66,7 @@ def build_and_check(retail):
     subprocess.run(command, check=True, cwd=ROOT)
     toc_name = "UsefulPlatesAndTooltips_Mainline.toc" if retail else "UsefulPlatesAndTooltips.toc"
     text = (ROOT / toc_name).read_text(encoding="utf-8")
+    files = toc_files(text)
     version = re.search(r"^## Version:\s*(\S+)", text, re.M).group(1)
     expected = {toc_name, "LICENSE", *toc_files(text)}
     modules = [ROOT / "Modules" / name for name in RETAIL_MODULES] if retail else [ROOT / "Modules"]
@@ -91,9 +92,8 @@ def build_and_check(retail):
             assert re.fullmatch(r"\d+\.\d+\.\d+-retail", version)
             assert PREFIX + "UsefulPlatesAndTooltips.toc" not in names
             assert {name.split("/")[1] for name in expected if name.startswith("Modules/")} == RETAIL_MODULES
-            files = toc_files(text)
             assert files.index("Modules/DoTInfo/Retail.lua") < files.index("Modules/DoTInfo/RogueAuras.lua") < files.index("Modules/DoTInfo/Core.lua")
-            assert files.index("Modules/DoTInfo/Core.lua") < files.index("Modules/DoTInfo/RoguePoisons.lua")
+            assert files.index("Modules/DoTInfo/Core.lua") < files.index("Modules/DoTInfo/RogueEffects.lua")
             default_files = toc_files((ROOT / "UsefulPlatesAndTooltips.toc").read_text(encoding="utf-8"))
             assert [name for name in files if name.startswith("Modules/SpellDamageInfo/")] == [
                 name for name in default_files if name.startswith("Modules/SpellDamageInfo/")]
@@ -102,7 +102,8 @@ def build_and_check(retail):
             assert PREFIX + "UsefulPlatesAndTooltips_Mainline.toc" not in names
             assert PREFIX + "Modules/DoTInfo/Retail.lua" not in names
             assert PREFIX + "Modules/DoTInfo/RogueAuras.lua" not in names
-            assert PREFIX + "Modules/DoTInfo/RoguePoisons.lua" not in names
+            assert PREFIX + "Modules/DoTInfo/RogueEffects.lua" in names
+            assert files.index("Modules/DoTInfo/Core.lua") < files.index("Modules/DoTInfo/RogueEffects.lua")
             assert PREFIX + "RETAIL.md" not in names
     print(f"ok {'Retail' if retail else 'Forever'} package: {len(expected)} source-identical files, "
           f"SHA256 {hashlib.sha256(path.read_bytes()).hexdigest()}")
