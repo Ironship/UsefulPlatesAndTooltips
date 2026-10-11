@@ -166,6 +166,12 @@ function R.Parse(spellID, desc, comboPoints, parseLegacy)
     if not spellID or secret(desc) or type(desc) ~= "string" then return end
     local text = desc:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
     text = text:gsub("\194\160", " "):gsub("\226\128\175", " ")
+    -- Optional talent previews are not the current spell's amount; nested blocks are possible.
+    local previous
+    repeat
+        previous = text
+        text = text:gsub("%b[]", " ")
+    until text == previous
     local locale = ask(GetLocale) or "enUS"
     local original = text
     local count = 1
