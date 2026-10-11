@@ -16,7 +16,7 @@ Enum.DurationTextBindingProperty = { RemainingPercent = 1 }
 Enum.StatusBarTimerDirection = { RemainingTime = 1 }
 spellDesc[2823] = 'Coats your weapons for 1 hour. Each strike has a 30% chance to poison the enemy for 46 Nature damage over 12 sec. Subsequent applications instantly deal 6 Nature damage.'
 function UnitHealthMax() return SECRET end
-formatters, poisonBindings = {}, {}
+formatters, poisonBindings, formatErrors = {}, {}, {}
 C_StringUtil = { CreateNumericRuleFormatter = function()
     local f = { writes = 0 }
     function f:SetBreakpoints(rules) self.rules = rules; self.writes = self.writes + 1 end
@@ -41,10 +41,16 @@ function CreateFrame(kind, name, parent, template)
         button.SetDurationBar = function(_, bar, opts) record.timer, record.direction = bar, opts.direction end
         button.SetDurationText = function(_, text, opts)
             if slotInitializerFails then error('duration binding failed') end
+            local _, placeholders = opts.textFormat.formatString:gsub('{}', '')
+            if placeholders ~= #opts.textFormat.components then
+                local message = 'DurationTextBinding:SetTextFormat(): expected ' .. placeholders
+                    .. ' format components for ' .. #opts.textFormat.components .. ' placeholders'
+                table.insert(formatErrors, message)
+                error(message)
+            end
             record.text, record.format = text, opts.textFormat
         end
         pcall(options.initializeFrame, button)  -- Blizzard's secure callback also swallows errors.
-        if not slotInitializerFails then assert(record.timer and record.text and record.format) end
         setmetatable(button, { __index = function() error('restricted native button was read') end })
         -- Children inherit the same access restriction. Only native bindings may mutate them now.
         for _, child in ipairs(button.children) do
@@ -70,7 +76,7 @@ function NativePoison(record, fraction)
     if rule.format == '' then record.nativeText = ''; return end
     local result = fraction / rule.components[1].div
     result = math.floor(result / rule.components[1].step + 0.5) * rule.components[1].step
-    record.nativeText = string.format(record.format.formatString, string.format(rule.format, result))
+    record.nativeText = record.format.formatString:gsub('{}', function() return string.format(rule.format, result) end)
 end
 """
 
@@ -83,6 +89,7 @@ def setup(extra=""):
 
 
 rt, game, dot = setup()
+assert not len(game.formatErrors), game.formatErrors[1]
 target, plate = game.FindProjection(game.TargetFrame), game.FindProjection(game.plateA)
 assert len(game.poisonBindings) == 2 and game.auraCalls == 0
 for binding in (target, plate):
@@ -161,6 +168,7 @@ print("ok native damage setup failures leave ordinary rogue aura icons operation
 
 rt, game, dot = setup("slotInitializerFails = true")
 assert game.FindContainer(game.TargetFrame).enabled and game.FindContainer(game.plateA).enabled
+assert all(binding.timer is None for binding in game.poisonBindings.values())
 for frame in game.AllFrames.values():
     if frame.kind == "StatusBar" and frame.parent.kind != "AuraButton":
         assert frame.value == 0 and not frame.shown
