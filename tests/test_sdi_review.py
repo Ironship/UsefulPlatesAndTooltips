@@ -33,6 +33,17 @@ local items = {
   { "Restores 1.290 health over 15 Sek.", "de", 1290, 15 },
   { "Restores 70 bis 90 health.", "de", 80 },
   { "Heals 66 damage over 6 Sek.", "de", 66, 6 },
+  -- The German client's own item wordings: "Punkt(e)" between the amount and its unit, and
+  -- the bandage's word order (duration before the amount) - Wolverband, healing potions, food.
+  { "Benutzen: Heilt 7 Sek. lang 161 Punkt(e) Schaden.", "de", 161, 7 },
+  { "Benutzen: Stellt 140 bis 180 Punkt(e) Gesundheit wieder her.", "de", 160 },
+  { "Benutzen: Stellt 70 bis 90 Punkt(e) Gesundheit wieder her.", "de", 80 },
+  { "Benutzen: Stellt im Verlauf von 21 Sek. 234 Punkt(e) Gesundheit wieder her. Ihr müsst beim Essen sitzen bleiben. Wenn ihr mindestens 10 Sek. mit Essen verbringt, werdet ihr satt und erhaltet 15 Min. lang 3 Stärke. Außerdem wird die durch Siege erhaltene Erfahrung um 5% erhöht. (1 Sek. Abklingzeit)", "de", 234, 21 },
+  { "Benutzen: Heilt 7 Sek. lang 140 bis 180 Punkte Schaden.", "de", 160, 7 },
+  { "Benutzen: Heilt 2 Sek. lang 611 Schadenspunkt(e).", "de", 611, 2 },
+  { "Heilt 66 Schaden über 6 Sek.", "de", 66, 6 },
+  { "Heilt 120 Gesundheit über 8 Sek.", "de", 120, 8 },
+  { "Heilt 500 Schaden über 1 Min.", "de", 500, 60 },
 }
 for _, item in ipairs(items) do
   local v = assert(P.ParseItemHeal(item[1], item[2]), item[1])
@@ -48,6 +59,8 @@ assert(P.ParseItemHeal("Restores 100 mana over 10 sec.", "en") == nil)
 local mana = assert(P.ParseItemHeal("Restores 140 to 175 mana.", "de"))
 local manaValue, manaKind = SDI.Estimate.ButtonValue(mana, "direct")
 assert(manaValue == 157.5 and manaKind == "mana", "instant mana is hidden in direct mode")
+local manaDE = assert(P.ParseItemHeal("Benutzen: Stellt 140 bis 175 Punkt(e) Mana wieder her.", "de"))
+assert(manaDE.mana.min == 140 and manaDE.mana.max == 175, "German mana potion with Punkt(e)")
 -- Malformed arithmetic used to retry the unchanged bracket forever. Bound this regression.
 debug.sethook(function() error("formula parser did not terminate") end, "", 100000)
 local ok, parsed = pcall(P.Parse, "Causes [1/0] Fire damage.", "en")
@@ -55,6 +68,30 @@ debug.sethook()
 assert(ok and parsed == nil)
 local view = assert(SDI.ComputeItem(100))
 assert(view.hot.total == 1290 and view.hot.duration == 15)
+-- The item's own German "Use:" line: "Punkt(e)" between the amount and its unit, and a
+-- trailing cooldown clause ("(2 Min. Abklingzeit)") that is not a duration its amount ticks
+-- over -- instant healing must survive both.
+C_Item.GetItemSpell = function() return nil end
+C_TooltipInfo = { GetHyperlink = function()
+  return { lines = {
+    { leftText = "Schwacher Heiltrank" },
+    { leftText = "Benutzen: Stellt 70 bis 90 Punkt(e) Gesundheit wieder her. (2 Min. Abklingzeit)" },
+    { leftText = "Benötigt Stufe 3" },
+  } }
+end }
+local potion = assert(SDI.ComputeItem(5001))
+assert(potion.heal.min == 70 and potion.heal.max == 90,
+  "German use line with Punkt(e) and an Abklingzeit clause")
+C_TooltipInfo.GetHyperlink = function()
+  return { lines = {
+    { leftText = "Wolverband" },
+    { leftText = "Benutzen: Heilt 7 Sek. lang 161 Punkt(e) Schaden. (1 Min. Abklingzeit)" },
+    { leftText = "Benötigt Erste Hilfe (50)" },
+  } }
+end
+local bandage = assert(SDI.ComputeItem(5002))
+assert(bandage.hot.total == 161 and bandage.hot.duration == 7,
+  "German bandage use line with Punkt(e) and an Abklingzeit clause")
 local tap = P.Read("Converts 58 Health into 58 Mana for you.", "de")
 assert(tap.show == "special" and tap.special.healthCost == 58 and tap.special.manaGain == 58)
 local funnel = P.Read("Gives 12 health to the caster's pet every second for 10 sec.", "en")

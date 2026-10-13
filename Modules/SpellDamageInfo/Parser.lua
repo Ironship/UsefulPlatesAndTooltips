@@ -647,13 +647,37 @@ function Parser.ParseHealthPercent(text, lang)
   return nil
 end
 
+-- Classic German prints a points word between the amount and its unit: "Stellt 70 bis 90
+-- Punkt(e) Gesundheit wieder her.", "Heilt 7 Sek. lang 161 Punkt(e) Schaden." A points word
+-- that names its unit keeps it ("Schadenspunkt(e)" -> "Schaden", "Manapunkt(e)" -> "Mana",
+-- "Gesundheitspunkt(e)" -> "Gesundheit"), a bare points word goes, and any other word ending
+-- in "Punkt" ("Wutpunkt") is left alone. Spaces collapse, so every wording below reads
+-- exactly as its English original ("Restores 70 to 90 health").
+local POINTS_FOLDS = {
+  [""] = "", schaden = "schaden", schadens = "schaden",
+  gesundheit = "gesundheit", gesundheits = "gesundheit",
+  leben = "leben", lebens = "leben", mana = "mana", manas = "mana",
+}
+local function foldPoints(stem, after)
+  local unit = POINTS_FOLDS[stem]
+  if unit == nil then return nil end -- "Wutpunkt" and friends keep their word
+  return unit .. (after or "")
+end
+local function stripPoints(t)
+  t = gsub(t, "([a-z]-)punkt%(e?n?%)", foldPoints) -- "Punkt(e)", "Punkt(en)"
+  t = gsub(t, "([a-z]-)punkt[e]?n?([^a-z])", foldPoints) -- "Punkte", "Punkten", "Punkt"
+  t = gsub(t, "([a-z]-)punkt[e]?n?$", foldPoints)
+  return (gsub(t, " +", " "))
+end
+
 -- A consumable's healing or mana out of its use text ("Use: Restores 70 to 90
--- health." / "Benutzen: Stellt 70 bis 90 Gesundheit wieder her."):
+-- health." / "Benutzen: Stellt 70 bis 90 Punkt(e) Gesundheit wieder her."):
 -- { heal = { min, max } } for an instant amount ("Restores"/"Stellt" health as
 -- well as "Heals"/"Heilt" health or damage outside over time),
 -- { healPercent = n } for instant healing expressed as a percentage of maximum HP,
 -- { hot = { total, duration } } for a stated total over time: a bandage
--- ("Heals 66 damage over 6 sec." / "Heilt 66 Schaden über 6 Sek.") or food
+-- ("Heals 66 damage over 6 sec." / "Heilt 7 Sek. lang 66 Punkt(e) Schaden.",
+-- also "Heilt 66 Schaden über 6 Sek.") or food
 -- ("Restores 243 health over 21 sec." / "Stellt 243 Gesundheit über 21 Sek.
 -- wieder her."), the stated total averaged over a range exactly like a
 -- potion's (70-90 -> 80),
@@ -672,6 +696,7 @@ function Parser.ParseItemHeal(text, lang)
   if lang == "de" and textLang == "en" then text = englishNumbers(text) end
   local t
   t, lang = prepare(text, textLang)
+  if lang == "de" then t = stripPoints(t) end
   local lo, hi
   local mlo, mhi
   local dur, minutes = nil, false
@@ -684,18 +709,22 @@ function Parser.ParseItemHeal(text, lang)
     if not mlo then mlo = match(t, "stellt (" .. NUM .. ") mana wieder her") end
     if not mlo then mlo, mhi = match(t, "stellt sofort (" .. NUM .. ") bis (" .. NUM .. ") mana wieder her") end
     if not mlo then mlo = match(t, "stellt sofort (" .. NUM .. ") mana wieder her") end
-    -- Over time (amount first): "stellt 243 Gesundheit \195\188ber 21 Sek. wieder her"
+    -- Over time (amount first): "stellt 243 Gesundheit \195\188ber 21 Sek. wieder her",
+    -- "heilt 66 Schaden \195\188ber 6 Sek.", each also over minutes ("2 Min.").
     do
-      local a, b, d = match(t, "stellt (" .. NUM .. ") bis (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") sek")
-      if not a then a, d = match(t, "stellt (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") sek") end
-      if not a then a, b, d = match(t, "stellt (" .. NUM .. ") bis (" .. NUM .. ") leben \195\188ber (" .. NUM .. ") sek") end
-      if not a then a, d = match(t, "stellt (" .. NUM .. ") leben \195\188ber (" .. NUM .. ") sek") end
-      if not a then a, b, d = match(t, "heilt (" .. NUM .. ") bis (" .. NUM .. ") schaden \195\188ber (" .. NUM .. ") sek") end
-      if not a then a, d = match(t, "heilt (" .. NUM .. ") schaden \195\188ber (" .. NUM .. ") sek") end
-      if not a then
-        a, b, d = match(t, "stellt (" .. NUM .. ") bis (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") min")
-        if not a then a, d = match(t, "stellt (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") min") end
-        if a then minutes = true end
+      local a, b, d
+      for _, unit in ipairs({ "sek", "min" }) do
+        if not a then a, b, d = match(t, "stellt (" .. NUM .. ") bis (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, d = match(t, "stellt (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, b, d = match(t, "stellt (" .. NUM .. ") bis (" .. NUM .. ") leben \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, d = match(t, "stellt (" .. NUM .. ") leben \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, b, d = match(t, "heilt (" .. NUM .. ") bis (" .. NUM .. ") schaden \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, d = match(t, "heilt (" .. NUM .. ") schaden \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, b, d = match(t, "heilt (" .. NUM .. ") bis (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, d = match(t, "heilt (" .. NUM .. ") gesundheit \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, b, d = match(t, "heilt (" .. NUM .. ") bis (" .. NUM .. ") leben \195\188ber (" .. NUM .. ") " .. unit) end
+        if not a then a, d = match(t, "heilt (" .. NUM .. ") leben \195\188ber (" .. NUM .. ") " .. unit) end
+        if a then if unit == "min" then minutes = true end break end
       end
       if a then lo, hi, dur = a, (b or a), d end
     end
@@ -710,6 +739,22 @@ function Parser.ParseItemHeal(text, lang)
       if not a then d, a, b = match(t, "im verlauf von (" .. NUM .. ") sek%. (" .. NUM .. ") bis (" .. NUM .. ") leben") end
       if not a then d, a = match(t, "im verlauf von (" .. NUM .. ") sek%. (" .. NUM .. ").- leben") end
       if a then lo, hi, dur = a, (b or a), d end
+    end
+    -- Over time (duration first, the bandage's own word order): "Heilt 7 Sek. lang 161
+    -- Punkt(e) Schaden." ("Heals 161 damage over 7 sec.") or "Heilt 7 Sek. lang 161 bis 200
+    -- Gesundheit."; the word before "lang" gives the seconds ("1 Min. lang" is a minute).
+    if not dur then
+      local d, unit, a, b
+      for _, unitWord in ipairs({ "schaden", "gesundheit", "leben" }) do
+        if not a then
+          d, unit, a, b = match(t, "heilt (" .. NUM .. ") ([a-z]+)%.? lang (" .. NUM .. ") bis (" .. NUM .. ") " .. unitWord)
+          if not a then d, unit, a = match(t, "heilt (" .. NUM .. ") ([a-z]+)%.? lang (" .. NUM .. ") " .. unitWord) end
+        end
+      end
+      if a then
+        local u = unitSeconds(unit)
+        if u then lo, hi, dur = a, (b or a), tonumber(d) * u end
+      end
     end
     -- Instant: "stellt 70 bis 90 Gesundheit wieder her" (Gesundheit or Leben).
     if not dur then

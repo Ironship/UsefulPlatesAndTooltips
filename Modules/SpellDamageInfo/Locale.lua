@@ -291,9 +291,15 @@ Locales.de = {
 local interfaceLang = nil
 ns.InterfaceLang = function() return interfaceLang end
 
--- Description language: what the parser reads. Decided at login from textLocale CVar if it is
--- "deDE", else from GetLocale(), and cannot be changed (the player would only see spell descriptions
--- in one language anyway). Core.lua passes it to Parser.Parse and Parser.ParseReduction.
+-- Description language: what the parser reads. Decided at login from textLocale CVar if the
+-- parser knows it, else from GetLocale(), and cannot be changed (the player would only see spell
+-- descriptions in one language anyway). Core.lua passes it to Parser.Parse and Parser.ParseReduction.
+-- PARSER_LANGS maps a client locale to the wording set the parser reads ("en", "de"); a locale
+-- missing from it falls back to the English wordings and stays without numbers rather than guess.
+-- A new language joins here together with its wordings in Parser.lua and its "Use:" label in
+-- Core.lua's USE_PREFIXES.
+local PARSER_LANGS = { deDE = "de", enUS = "en", enGB = "en" }
+ns.PARSER_LANGS = PARSER_LANGS
 local descriptionLang = nil
 ns.DescriptionLang = function() return descriptionLang end
 
@@ -306,25 +312,27 @@ ns.L = L
 
 -- Returns the locale string ("deDE", "enUS", etc.) for the description language.
 local function getDescriptionLocale()
-  local locale = nil
-  if type(C_CVar) == "table" and type(C_CVar.GetCVar) == "function" then
-    local ok, result = pcall(C_CVar.GetCVar, "textLocale")
-    if ok and result == "deDE" then locale = "deDE" end
+  -- textLocale is what the client prints descriptions in, when that differs from GetLocale()
+  for _, read in ipairs({
+    function() return type(C_CVar) == "table" and C_CVar.GetCVar or nil end,
+    function() return GetCVar end,
+  }) do
+    local get = read()
+    if type(get) == "function" then
+      local ok, result = pcall(get, "textLocale")
+      if ok and type(result) == "string" and PARSER_LANGS[result] then return result end
+    end
   end
-  if not locale and type(GetCVar) == "function" then
-    local ok, result = pcall(GetCVar, "textLocale")
-    if ok and result == "deDE" then locale = "deDE" end
+  if type(GetLocale) == "function" then
+    local ok, locale = pcall(GetLocale)
+    if ok and type(locale) == "string" then return locale end
   end
-  if not locale and type(GetLocale) == "function" then
-    locale = GetLocale()
-  end
-  return locale or "enUS"
+  return "enUS"
 end
 
 -- Decide the description language at addon load, and set up ns.L with the interface strings.
 function ns.DecideLangsAtLoad()
-  local descLocale = getDescriptionLocale()
-  descriptionLang = (descLocale == "deDE") and "de" or "en"
+  descriptionLang = PARSER_LANGS[getDescriptionLocale()] or "en"
 end
 
 -- Set the interface language and refresh ns.L. "auto" -> follow GetLocale().
