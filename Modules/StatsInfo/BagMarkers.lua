@@ -385,8 +385,28 @@ end
 --                                                                     in the class's SPECS order
 --     { verdict = "down" }                                            -- every path strictly worse
 --     { verdict = "none" }                                            -- computed neutral (equal ...)
+-- The per-link answer memo, next to the per-slot one below (refreshCounter's note): a
+-- Baganator corner-widget callback asks for the same link again on every button refresh,
+-- and the full comparison behind an "ok" answer is this module's heaviest per-item work.
+-- Within one revision an "ok" verdict is computed once per link (bag fulls of one potion
+-- share it too); "wait"/"dead" are never remembered (data may still arrive, combat secrets
+-- clear) and are re-asked, failing cheaply before the weights. Every bumpRevision clears
+-- it, exactly the events that can give an unchanged link a new answer. Capped: a session
+-- sweeping a whole bank clears it when full and re-learns the visible few.
+local verdictMemo, verdictMemoCount = {}, 0
+local function rememberVerdict(link, verdict)
+  if verdictMemoCount >= 1024 then
+    for k in pairs(verdictMemo) do verdictMemo[k] = nil end
+    verdictMemoCount = 0
+  end
+  verdictMemo[link] = verdict
+  verdictMemoCount = verdictMemoCount + 1
+end
+
 function M.BagVerdictState(link)
   if type(link) ~= "string" or isSecret(link) then return "dead" end
+  local hit = verdictMemo[link]
+  if hit then return "ok", hit end
   local r = itemReadiness(link)
   if r ~= "ok" then return r end
   if levelGate(link) ~= "ok" then return "dead" end -- above the player's level: never a badge
@@ -425,12 +445,17 @@ function M.BagVerdictState(link)
       sawUseless = true
     end
   end
+  local answer
   if sawUp then
-    if #upSpecs > 0 then return "ok", { verdict = "up", beneficiaries = upSpecs } end
-    return "ok", { verdict = "up" } -- fallback gain only: no beneficiary spec
+    if #upSpecs > 0 then answer = { verdict = "up", beneficiaries = upSpecs }
+    else answer = { verdict = "up" } end -- fallback gain only: no beneficiary spec
+  elseif sawDown and not sawUseless then
+    answer = { verdict = "down" }
+  else
+    answer = { verdict = "none" }
   end
-  if sawDown and not sawUseless then return "ok", { verdict = "down" } end
-  return "ok", { verdict = "none" }
+  rememberVerdict(link, answer)
+  return "ok", answer
 end
 
 -- The R1-compatible single answer: nil unless the item can be classified right now.
@@ -1012,9 +1037,16 @@ end
 -- settings change, a gear swap or a level-up, i.e. anything that can give an UNCHANGED
 -- (slot, link) pair a NEW verdict. Only a computed "ok" verdict is remembered; a "wait" or
 -- "dead" answer is never pinned to a slot (data may still arrive, combat secrets clear) and
--- is re-asked on the next pass, where it fails cheaply before the weights.
+-- is re-asked on the next pass, where it fails cheaply before the weights. The per-link
+-- verdictMemo above is cleared here as well: it must not outlive the same invalidations.
 local refreshCounter = 0
-local function bumpRevision() refreshCounter = refreshCounter + 1 end
+local function bumpRevision()
+  refreshCounter = refreshCounter + 1
+  if verdictMemoCount > 0 then
+    for k in pairs(verdictMemo) do verdictMemo[k] = nil end
+    verdictMemoCount = 0
+  end
+end
 
 -- One button: the hyperlink and the stack count, then the verdict, then the marker.
 local function evaluate(button, bag, slot)

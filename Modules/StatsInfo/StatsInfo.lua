@@ -1889,11 +1889,36 @@ local function tooltipLinesHover(link, gameCompares)
 end
 local hoverTooltipLines = memoized(tooltipLinesHover)
 
--- What add() last put on a tooltip (weak-keyed: pooled tooltips die with their frame): the
--- client can fire the hook twice for the same tooltip without clearing it (a comparison
--- refresh), which would add the whole block a second time and compute it a second time.
--- The record is reused per tooltip (filled in place), so a hover storm allocates none.
+-- What add() last put on a tooltip (weak-keyed: pooled tooltips die with their frame). The
+-- client fires the item callback for the same tooltip more than once: a comparison refresh,
+-- or its own re-processing of a tooltip our AddLine touched, which can come in a later frame
+-- while the tooltip still holds the block. A fire for a tooltip that has not been cleared
+-- since we added must not rebuild and append the whole block again (the tooltip would keep
+-- growing, rebuilt row by row on every fire: the game stutters). cleared counts each
+-- tooltip's native clears, so rec.gen tells "still holds our block" from "rebuilt since";
+-- the row count catches a clear the event missed. The record is reused per tooltip (filled
+-- in place), so a hover storm allocates none. cleared/watched live on this table so the
+-- chunk's local count does not grow (Lua 5.1 allows 200 active locals per chunk).
 local addedTo = setmetatable({}, { __mode = "k" })
+addedTo.cleared = setmetatable({}, { __mode = "k" }) -- [tooltip] = native clears so far
+addedTo.watched = setmetatable({}, { __mode = "k" }) -- [tooltip] = true once hooked
+
+-- Count a tooltip's native clears (OnTooltipCleared fires from ClearLines and SetItem
+-- rebuilds) once per tooltip object; GameTooltip and ItemRefTooltip are the only ones
+-- add() writes on, so the hook count stays tiny.
+addedTo.watchClears = function(tooltip)
+  if addedTo.watched[tooltip] or type(tooltip.HookScript) ~= "function" then return end
+  addedTo.watched[tooltip] = true
+  pcall(tooltip.HookScript, tooltip, "OnTooltipCleared", function(t)
+    addedTo.cleared[t] = (addedTo.cleared[t] or 0) + 1
+  end)
+end
+
+-- The block rows, copied onto the tooltip. Named, so the hot path allocates no closure and
+-- a throwing client cannot strand the re-entry flag below.
+addedTo.copyRows = function(tooltip, out)
+  for _, line in ipairs(out) do tooltip:AddLine(line[1], line[2], line[3], line[4]) end
+end
 
 -- The only tooltips this module writes on: the game's own hover tooltip and the one a
 -- clicked link opens. Everything else the post-call fires for is left alone -- above all
@@ -1911,8 +1936,8 @@ local hooked -- hookTooltips registers once: PLAYER_LOGIN runs it once, and a se
              -- registration would only make add() run twice per tooltip (the guard above
              -- would swallow the duplicate lines, but not the double bookkeeping).
 local inAdd -- a build in flight owns the scratch arenas: never start a second one inside
-            -- it (a client callback from AddLine re-entering here would corrupt the rows
-            -- being copied out)
+            -- it. It spans the row copy too: a client callback from AddLine re-entering
+            -- here would otherwise corrupt the rows being copied out and loop.
 
 local function hookTooltips()
   if hooked then return end
@@ -1921,33 +1946,44 @@ local function hookTooltips()
     if inAdd or not trackedTooltip(tooltip) then return end
     local _, link = ask(tooltip.GetItem, tooltip)
     if type(link) ~= "string" or isSecret(link) then return end
-    -- One build per tooltip and link within a frame: skipped when the tooltip still holds
-    -- the lines just added (NumLines has not gone back down), taken again after a clear --
-    -- a tooltip rebuilt in the same frame is a new build and gets its lines again. Without
-    -- GetTime or NumLines (a minimal client) nothing is skipped: the old behavior.
+    -- A fire for a tooltip that still holds the block we added (same link and density, no
+    -- native clear since, rows still counted) is skipped: rebuilding would append the whole
+    -- block again and build it again. A tooltip cleared since -- or one we never filled --
+    -- falls through to a fresh add. The same-frame check covers clients that report no row
+    -- count. Without GetTime either (a minimal client) addedTo.cleared still tells a re-fire
+    -- from a rebuild, because OnTooltipCleared needs no GetTime.
+    addedTo.watchClears(tooltip)
     local t = ask(GetTime)
     local density = tooltipWantsFull() and "full" or "compact"
     local rec = addedTo[tooltip]
-    if type(t) == "number" and rec and rec.link == link and rec.t == t and rec.density == density then
+    if rec and rec.link == link and rec.density == density then
       local n = ask(tooltip.NumLines, tooltip)
-      if n == nil or (rec.lines and n >= rec.lines) then return end
+      local rowsHeld = n == nil or (rec.lines and n >= rec.lines)
+      if rowsHeld and (rec.gen == (addedTo.cleared[tooltip] or 0)
+          or (type(t) == "number" and rec.t == t)) then
+        return
+      end
     end
     -- the game compares by itself when the setting says so, or while Shift is held
     local gameCompares = TooltipUtil and ask(TooltipUtil.ShouldDoItemComparison, tooltip) == true
-    -- A throwing client anywhere in the comparison must not cost the tooltip.
+    -- A throwing client anywhere in the comparison must not cost the tooltip. The flag spans
+    -- the copy: a client callback from AddLine re-entering here (Forever re-processes a
+    -- tooltip our own AddLine touched) must not start a second build over the rows being
+    -- copied out -- the block is already built, and the fire is answered by these rows.
     inAdd = true
     local ok, out = pcall(hoverTooltipLines, link, gameCompares)
-    inAdd = false
-    if not ok or type(out) ~= "table" then return end
-    for _, line in ipairs(out) do tooltip:AddLine(line[1], line[2], line[3], line[4]) end
-    if type(t) == "number" then
+    if ok and type(out) == "table" then
+      pcall(addedTo.copyRows, tooltip, out)
       if not rec then
         rec = {}
         addedTo[tooltip] = rec
       end
-      rec.link, rec.t, rec.density = link, t, density
+      rec.link, rec.density = link, density
+      rec.t = type(t) == "number" and t or nil
+      rec.gen = addedTo.cleared[tooltip] or 0
       rec.lines = ask(tooltip.NumLines, tooltip)
     end
+    inAdd = false
   end
   if type(TooltipDataProcessor) == "table" and type(TooltipDataProcessor.AddTooltipPostCall) == "function"
     and Enum and Enum.TooltipDataType then

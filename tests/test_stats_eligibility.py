@@ -137,6 +137,61 @@ for detail, shift in (("compact", False), ("full", False), ("compact", True)):
     assert len(text) == 1 and "Cannot use this item" in text[0], text
 si.settings.detail, G.shiftDown = "compact", False
 
+# A fire for the same tooltip without a native clear must not rebuild and append the block
+# again: the client re-fires the item callback from its own re-processing of a tooltip our
+# AddLine touched (Forever), or for a comparison refresh. Without the guard the block grows
+# on every fire and the game stutters while the item is hovered.
+si.settings.detail, G.shiftDown = "full", False
+G.GameTooltip.link = G.belt
+G.GameTooltip.added = rt.table()
+G.Advance(0.01)
+G.GameTooltip.scripts.OnTooltipSetItem(G.GameTooltip)
+first = len(G.GameTooltip.added)
+assert first > 1, "the full block for a legal belt"
+for i in range(5):
+    G.Advance(0.05)
+    G.GameTooltip.scripts.OnTooltipSetItem(G.GameTooltip)
+assert len(G.GameTooltip.added) == first, "refires without a clear must not append again"
+
+# A client that re-enters the post-call from its own AddLine must not recurse or pack the
+# rows twice: the block is built and copied once.
+rt.execute("""
+local hook = GameTooltip.scripts.OnTooltipSetItem
+local baseAddLine = GameTooltip.AddLine
+local depth = 0
+GameTooltip.AddLine = function(self, text)
+  baseAddLine(self, text)
+  depth = depth + 1
+  assert(depth < 40, "AddLine re-entry recursion")
+  hook(self)
+  depth = depth - 1
+end
+GameTooltip.added = {}
+GameTooltip.link = belt
+GameTooltip.scripts.OnTooltipCleared(GameTooltip)
+hook(GameTooltip)
+GameTooltip.AddLine = baseAddLine
+addedAfterReentry = #GameTooltip.added
+""")
+assert G.addedAfterReentry == first, "a re-entrant AddLine callback must add the block once"
+
+# A native clear (ClearLines fires OnTooltipCleared) lets the same link's block come back.
+G.GameTooltip.added = rt.table()
+G.GameTooltip.scripts.OnTooltipCleared(G.GameTooltip)
+G.Advance(0.05)
+G.GameTooltip.scripts.OnTooltipSetItem(G.GameTooltip)
+assert len(G.GameTooltip.added) == first, "after a clear the block comes back"
+
+# A different link after a native clear gets its own block.
+G.GameTooltip.link = G.dagger
+G.GameTooltip.added = rt.table()
+G.GameTooltip.scripts.OnTooltipCleared(G.GameTooltip)
+G.Advance(0.05)
+G.GameTooltip.scripts.OnTooltipSetItem(G.GameTooltip)
+text = list(G.GameTooltip.added.values())
+assert text and any("Against" in t or "Better" in t for t in text), text
+si.settings.detail, G.shiftDown = "compact", False
+
 # No reliable native answer means unknown, never an optimistic comparison or a false refusal.
 for native_answer in (None, "error", "unexpected non-boolean"):
     G.nativeAllowed[91003] = native_answer
@@ -229,5 +284,29 @@ EligibilityStats.UpdateQuestRewards()
 staff_reward = si._questOverlays[1]
 assert staff_reward is None or staff_reward.mode is None, "quest recommends the forbidden staff"
 assert si._questOverlays[2].mode == "upgrade", "quest lost the legal dagger upgrade"
+
+# BagVerdictState answers are memoized per link within a revision: Baganator's corner-widget
+# callback asks for the same link on every button refresh (observed ~20-40 full comparisons
+# per second while bags are open). A revision bump -- a gear swap, a level up, a data arrival
+# -- clears the memo and the next ask recomputes.
+rt.execute("""
+reviewCompareCalls = 0
+local origCompare = EligibilityStats.Compare
+EligibilityStats.Compare = function(link)
+  reviewCompareCalls = reviewCompareCalls + 1
+  return origCompare(link)
+end
+""")
+si.RefreshBags()  # a fresh revision: the memo starts empty
+state, dagger_verdict = si.BagVerdictState(G.dagger)
+assert state == "ok", state
+first = G.reviewCompareCalls
+assert first > 0
+state2, again = si.BagVerdictState(G.dagger)
+assert state2 == "ok" and G.reviewCompareCalls == first, \
+    "a repeated ask within a revision must not recompute the verdict"
+G.Fire("PLAYER_EQUIPMENT_CHANGED", "player")
+si.BagVerdictState(G.dagger)
+assert G.reviewCompareCalls > first, "a gear change must recompute the verdict"
 
 print("ok Stats eligibility: rogue staff, weapon/armor restrictions, allowed dagger/belt, every tooltip density, native hover, unknown/secret answers, legacy fallback, fresh capability and bag/loot/quest markers")
