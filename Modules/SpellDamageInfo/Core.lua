@@ -675,7 +675,27 @@ end
 -- tooltip answered is kept (the use line of an item does not change); a tooltip that is
 -- still on its way, or one holding a hidden line, is scanned again like the enchant scan.
 local itemTextMemo = {} -- [itemID] = the use line, or "" when a built tooltip has none
-local USE_PREFIXES = { "Use:", "use:", "Benutzen:", "benutzen:" }
+-- The "Use:" label of every client language whose wordings the parser may one day read:
+-- "Use:" (en), "Benutzen:" (de), "Utiliser :" (fr), "Usar:" (es/pt), "Usa:" (it),
+-- "Использование:" (ru). A line starting with one is the item's own use text; an item whose
+-- language is not read yet stays without a number instead of guessing.
+local USE_PREFIXES = {
+  "Use:", "use:", "Benutzen:", "benutzen:", "Utiliser :", "Utiliser:", "utiliser :", "utiliser:",
+  "Usar:", "usar:", "Usa:", "usa:",
+  "\208\152\209\129\208\191\208\190\208\187\209\140\208\183\208\190\208\178\208\176\208\189\208\184\208\181:",
+  "\208\184\209\129\208\191\208\190\208\187\209\140\208\183\208\190\208\178\208\176\208\189\208\184\208\181:",
+}
+-- A trailing cooldown clause is the item's cooldown, not a duration its amount ticks over:
+-- "(2 Min Cooldown)" (en), "(2 Min. Abklingzeit)" (de). ParseItemHeal would read the wording
+-- as over-time for it. Stripped in every language whose wordings the parser reads.
+local COOLDOWN_WORDS = { "Cooldown", "cooldown", "Abklingzeit", "abklingzeit" }
+
+local function stripCooldownClause(t)
+  for _, word in ipairs(COOLDOWN_WORDS) do
+    t = t:gsub("%s*%([^(]*" .. word .. "[^)]*%)%s*$", "")
+  end
+  return t
+end
 
 local function itemUseText(itemID)
   if isSecret(itemID) or type(itemID) ~= "number" then return nil end
@@ -694,10 +714,10 @@ local function itemUseText(itemID)
       if isSecret(text) then
         cacheable = false
       elseif type(text) == "string" then
-        -- a trailing "(2 Min Cooldown)" is the item's cooldown, not a duration its
-        -- amount ticks over; ParseItemHeal would read the wording as over-time for it
+        -- a trailing cooldown clause is the item's cooldown, not a duration its amount
+        -- ticks over; ParseItemHeal would read the wording as over-time for it
         local t = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^%s+", "")
-        t = t:gsub("%s*%([^(]*[Cc]ooldown[^)]*%)%s*$", "")
+        t = stripCooldownClause(t)
         for _, prefix in ipairs(USE_PREFIXES) do
           if t:sub(1, #prefix) == prefix then
             out[#out + 1] = t
