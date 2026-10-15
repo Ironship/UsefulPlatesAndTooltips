@@ -73,7 +73,7 @@ end
 
 local function poisonAppearance(entry)
     local config, parts = {}, {}
-    local onPlate = entry.parent ~= TargetFrame
+    local onPlate = entry.onPlate
     for _, key in ipairs({ "fillTexture", "fillColor", "fillOpacity", "dotColors", "outlineStyle",
         "dashLength", "outlineThickness", "outlineColor", "outlineOpacity", "segmentDividers",
         "pulseOutline", "showGlow", "glowSize", "showShine", "shineInterval", "scrollStripes", "labelSize", "labelColor" }) do
@@ -230,7 +230,7 @@ local function updatePoisonDamage(entry, unit, enabled)
     -- shortcut: hidden full-bar geometry or poison above max HP clips early; replace when native uncapped sizing is available.
 end
 
-local function create(parent, bar)
+local function create(parent, bar, onPlate)
     if failedHosts[parent] == bar then return end
     if ask(InCombatLockdown) == true and ask(parent.IsProtected, parent) == true then return end
     local container
@@ -260,7 +260,7 @@ local function create(parent, bar)
         end
         return
     end
-    local entry = { container = container, parent = parent, bar = bar }
+    local entry = { container = container, parent = parent, bar = bar, onPlate = onPlate }
     return entry
 end
 
@@ -317,13 +317,15 @@ end
 local function update(refresh)
     if not started or not ns.db then return end
     local markers = ns.db.showMarkers ~= false
-    local targetBar = healthBar(TargetFrame, false)
-    if targetEntry and (targetEntry.parent ~= TargetFrame or targetEntry.bar ~= targetBar) then
+    local targetHost, targetBar
+    if BIT.Plate and BIT.Plate.UnitFrame then targetHost, targetBar = BIT.Plate.UnitFrame("target")
+    else targetHost, targetBar = TargetFrame, healthBar(TargetFrame, false) end
+    if targetEntry and (targetEntry.parent ~= targetHost or targetEntry.bar ~= targetBar) then
         display(targetEntry, nil, false)
         targetEntry = nil
     end
-    if markers and targetBar and hostile("target") then
-        targetEntry = targetEntry or create(TargetFrame, targetBar)
+    if markers and targetHost and targetBar and hostile("target") then
+        targetEntry = targetEntry or create(targetHost, targetBar, false)
         display(targetEntry, "target", true, refresh)
     else
         display(targetEntry, nil, false)
@@ -336,7 +338,7 @@ local function update(refresh)
             local entry = byPlate[plate]
             if entry and entry.bar ~= bar then display(entry, nil, false); entry = nil end
             local enabled = markers and ns.db.nameplateMode ~= "off" and hostile(unit)
-            if enabled and not entry then entry = create(plate, bar); byPlate[plate] = entry end
+            if enabled and not entry then entry = create(plate, bar, true); byPlate[plate] = entry end
             if entry then
                 current[entry] = true
                 display(entry, unit, enabled, refresh)
@@ -354,7 +356,7 @@ end
 
 -- Follow plain marker animation/ticks immediately, without resampling any native aura state.
 function R.UpdatePoisonOffset(parent)
-    local entry = parent == TargetFrame and targetEntry or byPlate[parent]
+    local entry = targetEntry and (parent == TargetFrame or parent == targetEntry.parent) and targetEntry or byPlate[parent]
     if entry then updatePoisonOffset(entry, entry.unit, entry.enabled) end
 end
 

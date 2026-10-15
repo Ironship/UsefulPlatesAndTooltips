@@ -190,8 +190,7 @@ end
 
 local function healthBarOf(plate)
   if type(BIT.Plate) == "table" and type(BIT.Plate.HealthBar) == "function" then
-    local bar = BIT.Plate.HealthBar(plate)
-    return type(bar) == "table" and bar or plate
+    return BIT.Plate.HealthBar(plate)
   end
   local unitFrame = type(plate.UnitFrame) == "table" and plate.UnitFrame or nil
   local container = unitFrame and type(unitFrame.HealthBarsContainer) == "table"
@@ -341,12 +340,14 @@ function Addon.RefreshDots()
   local n, count = state()
   local plate = n and targetPlate()
   if not plate then return hide() end
+  local healthBar = healthBarOf(plate)
+  if not healthBar then return hide() end
   row:SetParent(plate)
   row:ClearAllPoints()
   local dotOffset = tonumber(Addon.db.dotOffset) or -60
   if dotOffset ~= dotOffset then dotOffset = -60 end
   if dotOffset < -80 then dotOffset = -80 elseif dotOffset > 30 then dotOffset = 30 end
-  row:SetPoint("TOP", healthBarOf(plate), "BOTTOM", 0, -dotOffset)
+  row:SetPoint("TOP", healthBar, "BOTTOM", 0, -dotOffset)
   if row.shownFor ~= n or row.sizeFor ~= Addon.db.dotSize then
     layout(n)
     row.shownFor, row.sizeFor = n, Addon.db.dotSize

@@ -1320,7 +1320,7 @@ local function colorOf(id, opacityPercent)
     return rgb[1], rgb[2], rgb[3], (opacityPercent or 100) / 100
 end
 
-local healthBar -- nil if the target frame's health bar wasn't found (markers unavailable)
+local healthBar, targetHost -- nil if the target frame's health bar wasn't found (markers unavailable)
 -- While the options window is open, the display is attached to its mock target frame (previewHost:
 -- { healthBar, portrait, layerFrame }) and fed its plain numbers (previewState: { health, dots }) instead.
 local previewHost, previewState
@@ -1858,6 +1858,7 @@ local function playFlash()
 end
 
 local function findTargetPortrait()
+    if BIT.Plate and BIT.Plate.UnitFrame then return select(3, BIT.Plate.UnitFrame("target")) end
     local tf = TargetFrame
     return (tf and tf.TargetFrameContainer and tf.TargetFrameContainer.Portrait)
         or TargetFramePortrait
@@ -1865,6 +1866,7 @@ local function findTargetPortrait()
 end
 
 local function findTargetHealthBar()
+    if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("target")) end
     local tf = TargetFrame
     local main = tf and tf.TargetFrameContent and tf.TargetFrameContent.TargetFrameContentMain
     return (main and main.HealthBarsContainer and main.HealthBarsContainer.HealthBar)
@@ -1883,10 +1885,13 @@ local function attach()
     local portrait, bar
     if previewHost then
         portrait, bar = previewHost.portrait, previewHost.healthBar
+        targetHost = previewHost.layerFrame
     else
         portrait, bar = findTargetPortrait(), findTargetHealthBar()
+        if BIT.Plate and BIT.Plate.UnitFrame then targetHost = BIT.Plate.UnitFrame("target")
+        else targetHost = TargetFrame end
     end
-    skullAnchor = portrait or TargetFrame or UIParent
+    skullAnchor = portrait or targetHost or UIParent
     plainSkullFrame:ClearAllPoints()
     plainSkullFrame:SetPoint("BOTTOM", skullWindow, "TOP", 0, 4)
 
@@ -1910,10 +1915,12 @@ local LAYER_CHECK_INTERVAL = 1
 local function targetFrameTopLayer()
     local topStrata, topLevel = "BACKGROUND", 0
     local function visit(frame, depth)
+        local ok, forbidden = pcall(function() return frame.IsForbidden and frame:IsForbidden() end)
+        if not ok or isSecret(forbidden) or forbidden then return end
         -- Some of Blizzard's frames report a secret strata/level in Forever; those can't be compared, so skip
         -- them (their children are still visited).
-        local strata, level = frame:GetFrameStrata(), frame:GetFrameLevel()
-        if not isSecret(strata) and not isSecret(level) then
+        local readOK, strata, level = pcall(function() return frame:GetFrameStrata(), frame:GetFrameLevel() end)
+        if readOK and not isSecret(strata) and not isSecret(level) and type(strata) == "string" and type(level) == "number" then
             local rank, topRank = STRATA_RANK[strata] or 0, STRATA_RANK[topStrata] or 0
             if rank > topRank then
                 topStrata, topLevel = strata, level
@@ -1922,10 +1929,13 @@ local function targetFrameTopLayer()
             end
         end
         if depth < 6 then
-            for _, child in ipairs({ frame:GetChildren() }) do visit(child, depth + 1) end
+            local children = { pcall(frame.GetChildren, frame) }
+            if children[1] then
+                for i = 2, #children do visit(children[i], depth + 1) end
+            end
         end
     end
-    visit(TargetFrame or healthBar or UIParent, 0)
+    visit(targetHost or healthBar or UIParent, 0)
     return topStrata, topLevel
 end
 
@@ -2024,6 +2034,10 @@ local function refresh()
         return false
     end
     local now = GetTime()
+    if not previewHost and BIT.Plate and BIT.Plate.UnitFrame then
+        local host, bar, portrait = BIT.Plate.UnitFrame("target")
+        if host ~= targetHost or bar ~= healthBar or (portrait or host or UIParent) ~= skullAnchor then attach() end
+    end
     if ns.RogueEffects then ns.RogueEffects.Refresh(unitKey) end
     housekeep(now)
     updateLayering(now)
@@ -2062,7 +2076,7 @@ local function refresh()
         return
     end
 
-    if not UnitExists("target") or targetIsDead() then return hideAll() end
+    if not UnitExists("target") or targetIsDead() or (not targetHost and not healthBar) then return hideAll() end
     local damage, count, breakdown = targetRemainingDamage()
     if damage ~= lastTracedDamage then
         lastTracedDamage = damage

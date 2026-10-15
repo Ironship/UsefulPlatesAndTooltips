@@ -374,10 +374,8 @@ local function hunterTargetPlate()
 end
 
 local function hunterHealthBarOf(plate)
-    local unitFrame = type(plate.UnitFrame) == "table" and plate.UnitFrame or nil
-    local bar = unitFrame and (unitFrame.healthBar or (type(unitFrame.HealthBarsContainer) == "table"
-        and unitFrame.HealthBarsContainer.healthBar)) or nil
-    return type(bar) == "table" and bar or plate
+    local bar = BIT.Plate.HealthBar(plate)
+    return type(bar) == "table" and bar or nil
 end
 
 -- Last anchor seat: SetParent/SetPoint only move on change, never every poll.
@@ -404,11 +402,13 @@ local function reanchorHunterHud()
     end
     local offset = finiteNum(tonumber(settings.plateOffset), DEFAULTS.plateOffset)
     if offset < -80 then offset = -80 elseif offset > 30 then offset = 30 end
-    if reanchorKey ~= plate or reanchorOffset ~= offset then
+    local bar = hunterHealthBarOf(plate)
+    if not bar then screenFallback(); return end
+    if reanchorKey ~= bar or reanchorOffset ~= offset then
         if hud:GetParent() ~= plate then hud:SetParent(plate) end
         hud:ClearAllPoints()
-        hud:SetPoint("TOP", hunterHealthBarOf(plate), "BOTTOM", 0, -offset)
-        reanchorKey, reanchorOffset = plate, offset
+        hud:SetPoint("TOP", bar, "BOTTOM", 0, -offset)
+        reanchorKey, reanchorOffset = bar, offset
     end
 end
 

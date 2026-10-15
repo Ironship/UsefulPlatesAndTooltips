@@ -861,6 +861,7 @@ local BAR_PREFIXES = {
 }
 
 local buttons = {} -- list of Blizzard action buttons
+local euiButtons = {} -- EUI's action slot lives in a secure attribute; never read its .action field.
 local labels = {}  -- [button] = our FontString for the main number
 local sideLabels = {} -- [button] = our smaller FontString for a reduction next to a damage number
 
@@ -879,13 +880,21 @@ local function collectButtons()
 
   local seen = {}
   for _, b in ipairs(buttons) do seen[b] = true end
+  local function add(b)
+    if type(b) == "table" and not seen[b] and type(b.CreateFontString) == "function" then
+      seen[b] = true
+      buttons[#buttons + 1] = b
+    end
+  end
   for _, prefix in ipairs(prefixes) do
     for i = 1, 12 do
-      local b = _G[prefix .. i]
-      if type(b) == "table" and not seen[b] and type(b.CreateFontString) == "function" then
-        seen[b] = true
-        buttons[#buttons + 1] = b
-      end
+      add(_G[prefix .. i])
+    end
+  end
+  if type(EllesmereUI) == "table" or type(EABButton1) == "table" then
+    for i = 1, 180 do
+      local b = _G["EABButton" .. i]
+      if type(b) == "table" then euiButtons[b] = true; add(b) end
     end
   end
 end
@@ -1447,9 +1456,16 @@ end
 
 local function updateButton(button, pet)
   local view, reduction
+  local slot
+  if not pet then
+    if euiButtons[button] then
+      local ok, value = pcall(button.GetAttribute, button, "action")
+      if ok and not isSecret(value) and type(value) == "number" and value > 0 then slot = value end
+    else slot = button.action end
+  end
   if db.button ~= "off" then
     local spellID
-    if pet then spellID = petSpellOnSlot(petSlots[button]) else spellID = spellOnSlot(button.action) end
+    if pet then spellID = petSpellOnSlot(petSlots[button]) else spellID = spellOnSlot(slot) end
     if spellID then
       view = ns.Compute(spellID, pet)
       if db.reduction then reduction = ns.Reduction(spellID) end
@@ -1459,7 +1475,7 @@ local function updateButton(button, pet)
       -- its raw healing, bandage total or mana, through the same button text
       -- as spells (Format.Short; healing green, mana blue). No reduction
       -- and no miss tracking: those read spell wordings only.
-      local itemID = itemOnSlot(button.action)
+      local itemID = itemOnSlot(slot)
       if itemID then view = ns.ComputeItem(itemID) end
     end
   end
@@ -1470,7 +1486,7 @@ local function updateButton(button, pet)
     return
   end
   local side = sideText and getSideLabel(button) or sideLabels[button]
-  drawNumber(button, getLabel(button), side, mainText, mainColor, sideText, not pet and hasCount(button.action), sideColor, layout)
+  drawNumber(button, getLabel(button), side, mainText, mainColor, sideText, not pet and hasCount(slot), sideColor, layout)
 end
 
 local function updateAllButtons()
@@ -1484,6 +1500,8 @@ local function requestUpdate()
   pending = true
   local function run()
     pending = false
+    -- EUI can create additional bars after login or defer them until combat ends.
+    if type(EllesmereUI) == "table" or type(EABButton1) == "table" then collectButtons() end
     readBonus()
     readWeapon()
     parseBudget, parseDeferred = PARSE_BUDGET, false
