@@ -35,6 +35,19 @@ local function plain(value, kind)
     return not secret(value) and type(value) == kind
 end
 
+local function boolean(fn, unit)
+    if type(fn) ~= "function" then return end
+    local ok, value = pcall(fn, unit)
+    if ok and plain(value, "boolean") then return value end
+end
+
+-- Leaving our combat does not reset a PvP opponent or an NPC still fighting somebody else.
+local function idleNPC(unit)
+    return boolean(UnitAffectingCombat, "player") == false
+        and boolean(UnitExists, unit) == true and boolean(UnitIsVisible, unit) == true
+        and boolean(UnitIsPlayer, unit) == false and boolean(UnitAffectingCombat, unit) == false
+end
+
 local function positive(value)
     return plain(value, "number") and value > 0 and value < math.huge
 end
@@ -193,7 +206,7 @@ local function scan(unit)
         local seen, unavailable = {}, nil
         for _, aura in ipairs(auras) do unavailable = observe(unit, aura, true, false, seen) or unavailable end
         -- An incomplete/hidden scan cannot prove that an already-tracked effect was removed.
-        if not unavailable then ns.RemoveRogueAuras(unit, seen) end
+        if not unavailable then ns.RemoveRogueAuras(unit, seen, nil, idleNPC(unit)) end
         return unavailable
     end)
     if not ok then reason = "aura access denied" end
@@ -201,13 +214,15 @@ local function scan(unit)
 end
 
 function E.Refresh(unitKey)
-    if retail or not events or ns.off then return end
+    if not events or ns.off then return end
+    if retail and boolean(UnitAffectingCombat, "player") ~= false then return end
     local now = GetTime()
     if lastScan and now - lastScan < 0.25 then return end
     lastScan = now
     local seen = {}
     local function check(unit)
         if not hostile(unit) then return end
+        if retail and not idleNPC(unit) then return end
         local key = unitKey(unit)
         if key and not seen[key] then
             seen[key] = true
@@ -260,15 +275,18 @@ local function update(unit, updateInfo)
     if reason then scan(unit) end
 end
 
-function E.Start()
+function E.Start(unitKey)
     if events or ns.off or not ns.db then return end
     local ok, _, class = pcall(UnitClass, "player")
     if not ok or secret(class) or class ~= "ROGUE" then return end
     events = CreateFrame("Frame")
     for _, event in ipairs({ "UNIT_AURA", "PLAYER_TARGET_CHANGED", "PLAYER_ENTERING_WORLD",
-        "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED" }) do events:RegisterEvent(event) end
+        "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_REGEN_ENABLED" }) do events:RegisterEvent(event) end
     events:SetScript("OnEvent", function(_, event, unit, updateInfo)
-        if event == "UNIT_AURA" then update(unit, updateInfo)
+        if event == "PLAYER_REGEN_ENABLED" then
+            lastScan = nil
+            E.Refresh(unitKey) -- Nameplates can outlive the target lost on Vanish.
+        elseif event == "UNIT_AURA" then update(unit, updateInfo)
         elseif event == "NAME_PLATE_UNIT_REMOVED" then
             if plain(unit, "string") then status[unit] = nil end
         elseif event == "NAME_PLATE_UNIT_ADDED" then
