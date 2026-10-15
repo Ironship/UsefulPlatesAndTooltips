@@ -5,7 +5,7 @@ Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo i SpellDamageInfo**,
 ## Instalacja
 
 1. Zbuduj paczkę: `python tools/build_zip.py --retail`.
-2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.82-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
+2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.83-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
 3. Włącz addon w grze. `/upt` otwiera ustawienia; `/reload` stosuje zmianę włączenia modułu. Włącz wyświetlanie wrogich nameplate klawiszem `V`.
 
 ZIP Retail ma własny `UsefulPlatesAndTooltips_Mainline.toc`; nie zawiera manifestu Forever ani pozostałych modułów. Zwykłe `python tools/build_zip.py` nadal buduje dotychczasową paczkę Forever.
@@ -54,7 +54,7 @@ ShieldsInfo pokazuje pozostały absorb na dostępnych ramkach gracza, celu, grup
 
 SpellDamageInfo dodaje liczby obrażeń/leczenia do natywnych pasków akcji Blizzarda i linie do tooltipów na podstawie dostępnego opisu czaru. Nakładki na przyciski Bartender4 i ElvUI nie są obsługiwane; linie tooltipów mogą nadal działać. Retail korzysta z kwot z opisu bez dodatkowego doliczania SP/AP według starych wzorów, a finishery uwzględniają bieżący limit combo points zwracany przez API. To szacunki bez gwarancji rzeczywistego trafienia, crita, odporności celu czy pełnego wpływu talentów. Opis lub akcja oznaczona jako tajna może uniemożliwić wyświetlenie liczby. Dokładność dla każdej klasy i specjalizacji wymaga sprawdzenia w grze.
 
-Model odnowień i identyfikatory czarów sprawdzono względem [danych SimulationCraft dla Midnight](https://github.com/simulationcraft/simc/blob/midnight/engine/dbc/generated/sc_spell_data.inc). Ekran ładowania czyści przewidywane obrażenia DoT; odczytywalny tooltip aktywnej aury rogue i jej czas mogą je odtworzyć. Ukryta aura nie daje takiej możliwości. Natywne ikony rogue pokazują bieżące efekty niezależnie od tego szacunku.
+Model odnowień i identyfikatory czarów sprawdzono względem [danych SimulationCraft dla Midnight](https://github.com/simulationcraft/simc/blob/midnight/engine/dbc/generated/sc_spell_data.inc). Ekran ładowania czyści przewidywane obrażenia DoT; odczytywalny tooltip aktywnej aury rogue i jej czas mogą je odtworzyć. Ukryta aura nie daje takiej możliwości. Po wyjściu gracza z walki prognozy rogue są czyszczone także przy zablokowanym odczycie aur, jeśli widoczny NPC również zakończył walkę. Efekty odczytane w częściowym skanie pozostają; gracze i NPC nadal walczące zachowują prognozy. Natywne ikony rogue pokazują bieżące efekty niezależnie od tego szacunku.
 
 Healthstone, Crimson Vial (Blutrote Phiole) i Recuperate (Gesundung) pokazują na action barze liczbę HP odpowiadającą procentowi leczenia z opisu (EN/DE). Dla Crimson Vial jest to całe leczenie przez 4 sekundy, a dla Recuperate przez 10 sekund, a nie pojedynczy tick. Liczba aktualizuje się po zmianie maksymalnego zdrowia. Gdy gra ukrywa maksymalne HP, przycisk pokazuje procent, np. `20% HP`, zamiast nieaktualnej liczby.
 
