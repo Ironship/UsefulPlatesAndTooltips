@@ -707,14 +707,18 @@ function ns.ObserveRogueAura(unit, aura, signal)
     return true
 end
 
-function ns.RemoveRogueAuras(unit, seen, removed)
+function ns.RemoveRogueAuras(unit, seen, removed, clearUnconfirmed)
     local key = unitKey(unit)
     local dots = key and dotsByTarget[key]
+    local now = GetTime()
     for name, dot in pairs(dots or {}) do
-        if dot.auraObserved and ((seen and not seen[dot.familyID])
+        -- A fresh cast can reach SUCCEEDED before its aura appears; give that application time to arrive.
+        local unconfirmed = clearUnconfirmed and dot.familyID and now - dot.appliedAt > TICK_MATCH_WINDOW
+        if (dot.auraObserved or unconfirmed) and ((seen and not seen[dot.familyID])
             or (removed and dot.auraInstanceID and removed[dot.auraInstanceID])) then
             dots[name] = nil
-            trace((dot.poison and "POISON" or "BLEED") .. " REMOVE " .. name .. " on " .. unit)
+            trace((dot.poison and "POISON" or "BLEED") .. " REMOVE " .. name .. " on " .. unit
+                .. (unconfirmed and " (idle NPC; aura absent)" or ""))
         end
     end
 end
@@ -2362,7 +2366,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         ns.ensureDB()
         trace("===== session start =====")
         if ns.Retail and ns.Retail.StartRogueAuras then ns.Retail.StartRogueAuras() end
-        if ns.RogueEffects then ns.RogueEffects.Start() end
+        if ns.RogueEffects then ns.RogueEffects.Start(unitKey) end
         local added = ns.locale.addClientNames(NAME_TABLES, function(spellID)
             local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
             if name and not isSecret(name) and type(name) == "string" then return name end
