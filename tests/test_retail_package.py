@@ -69,7 +69,7 @@ def build_and_check(retail):
     files = toc_files(text)
     version = re.search(r"^## Version:\s*(\S+)", text, re.M).group(1)
     expected = {toc_name, "LICENSE", *toc_files(text)}
-    modules = [ROOT / "Modules" / name for name in RETAIL_MODULES] if retail else [ROOT / "Modules"]
+    modules = ([ROOT / "Modules" / name for name in RETAIL_MODULES] if retail else [ROOT / "Modules"]) + [ROOT / "Core"]
     for directory in modules:
         for pattern in ("*.tga", "LICENSE*.txt"):
             expected.update(path.relative_to(ROOT).as_posix() for path in directory.rglob(pattern))

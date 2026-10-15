@@ -45,11 +45,170 @@ local tabRows = 1
 local UI = BIT.UI or {} -- Appearance.lua (loaded before this file) may have added members
 BIT.UI = UI
 
-function UI.Backdrop(frame, shade, alpha)
-  if type(frame.SetBackdrop) ~= "function" then return end
-  frame:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-  frame:SetBackdropColor(shade, shade, shade, alpha or 1)
-  frame:SetBackdropBorderColor(0.28, 0.28, 0.3, 1)
+-- NeedRoll's Native skin: Blizzard's frame/buttons, black surfaces, gold headings and white text.
+local TEX_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Core\\Textures\\"
+UI.MEDIA = {
+  rounded = TEX_DIR .. "Rounded",
+  border1 = TEX_DIR .. "RoundedBorder1",
+  border2 = TEX_DIR .. "RoundedBorder2",
+}
+UI.COLOR = {
+  panel = { 0, 0, 0, 1 },
+  panelIn = { 0.02, 0.02, 0.02, 1 },
+  edge = { 0.35, 0.35, 0.35, 1 },
+  edgeOn = { 1, 0.82, 0, 0.8 },
+  text = { 1, 1, 1, 1 },
+  muted = { 0.63, 0.63, 0.63, 1 },
+  heading = { 1, 0.82, 0, 1 },
+  button = { 0.20, 0.05, 0.03, 1 },
+  buttonHover = { 0.30, 0.08, 0.04, 1 },
+  buttonHoverGlow = { 0.38, 0.12, 0.05, 1 },
+  buttonDown = { 0.12, 0.03, 0.02, 1 },
+  buttonOff = { 0.10, 0.10, 0.10, 1 },
+  track = { 0.08, 0.08, 0.08, 1 },
+  divider = { 1, 0.82, 0, 0.18 },
+  danger = { 1, 0.125, 0.125, 1 },
+}
+
+local function sliced(parent, file, color, layer)
+  local tex = parent:CreateTexture(nil, layer)
+  tex:SetTexture(file)
+  if type(tex.SetTextureSliceMargins) == "function" and type(tex.SetTextureSliceMode) == "function"
+      and type(Enum) == "table" and Enum.UITextureSliceMode then
+    pcall(tex.SetTextureSliceMargins, tex, 5, 5, 5, 5)
+    pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
+  end
+  tex:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
+  tex:SetAllPoints()
+  return tex
+end
+
+-- A rounded fill and (optionally) a rounded 1px or 2px outline drawn on the frame itself.
+-- Returns both textures; frame.skinBg / frame.skinBorder address them for later tinting.
+function UI.RoundedOn(frame, fill, border, thick)
+  if type(frame) ~= "table" then return end
+  frame.skinBg = sliced(frame, UI.MEDIA.rounded, fill, "BACKGROUND")
+  if border then
+    frame.skinBorder = sliced(frame, thick and UI.MEDIA.border2 or UI.MEDIA.border1, border, "BORDER")
+  end
+  return frame.skinBg, frame.skinBorder
+end
+
+-- Black inset panels, matching the game's tooltip/settings furniture.
+function UI.Backdrop(frame, shade, alpha, thick)
+  if type(frame) ~= "table" then return end
+  if type(frame.SetBackdrop) == "function" then
+    frame:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+      edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16,
+      edgeSize = thick and 16 or 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+    frame:SetBackdropColor(0, 0, 0, alpha or 1)
+    frame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+  end
+end
+
+-- Keep UIPanelButtonTemplate's native art and its own hover/pressed/disabled states.
+function UI.SkinButton(button, opts)
+  if type(button) ~= "table" then return button end
+  button:SetNormalFontObject("GameFontNormal")
+  button:SetHighlightFontObject("GameFontHighlight")
+  button:SetDisabledFontObject("GameFontDisable")
+  return button
+end
+
+-- The track and thumb of a slider in the theme. The track is the rounded art stretched (a few
+-- pixels tall, so its corners shrink with it; no slicing needed at this size).
+function UI.SkinSlider(slider, thickness, vertical)
+  if type(slider) ~= "table" then return slider end
+  local track = slider.skinTrack
+  if type(track) ~= "table" then
+    track = slider:CreateTexture(nil, "BACKGROUND")
+    track:SetTexture(UI.MEDIA.rounded)
+    slider.skinTrack = track
+  end
+  local size = thickness or 6
+  track:ClearAllPoints()
+  if vertical then
+    track:SetPoint("TOP", 0, 0)
+    track:SetPoint("BOTTOM", 0, 0)
+    track:SetWidth(size)
+  else
+    track:SetPoint("LEFT", 0, 0)
+    track:SetPoint("RIGHT", 0, 0)
+    track:SetHeight(size)
+  end
+  local c = UI.COLOR.track
+  track:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+  local thumb = type(slider.GetThumbTexture) == "function" and slider:GetThumbTexture() or nil
+  if type(thumb) == "table" and type(thumb.SetVertexColor) == "function" then
+    pcall(thumb.SetVertexColor, thumb, 1, 1, 1, 1)
+  end
+  return slider
+end
+
+-- The same checkbox art as the game's own options.
+function UI.SkinCheck(box)
+  if type(box) ~= "table" then return box end
+  box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
+  box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
+  box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
+  box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+  return box
+end
+
+-- A rounded hover wash for custom menu rows and choice buttons.
+function UI.RoundHighlight(frame, color)
+  if type(frame) ~= "table" then return end
+  local c = color or { 1, 1, 1, 0.10 }
+  local tex = frame:CreateTexture(nil, "HIGHLIGHT")
+  tex:SetTexture(UI.MEDIA.rounded)
+  if type(tex.SetTextureSliceMargins) == "function" and type(Enum) == "table" and Enum.UITextureSliceMode then
+    pcall(tex.SetTextureSliceMargins, tex, 5, 5, 5, 5)
+    pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
+  end
+  tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+  tex:SetAllPoints()
+  return tex
+end
+
+-- A rounded 1px outline on an existing frame (the palette swatches).
+function UI.RoundBorder(frame, color, layer)
+  if type(frame) ~= "table" then return end
+  local c = color or UI.COLOR.edge
+  local tex = frame:CreateTexture(nil, layer or "OVERLAY")
+  tex:SetTexture(UI.MEDIA.border1)
+  if type(tex.SetTextureSliceMargins) == "function" and type(Enum) == "table" and Enum.UITextureSliceMode then
+    pcall(tex.SetTextureSliceMargins, tex, 5, 5, 5, 5)
+    pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
+  end
+  tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+  tex:SetAllPoints()
+  return tex
+end
+
+-- Blizzard's top-tab art; custom labels share the native gold/white states.
+function UI.SkinTabButton(button, label, onClick)
+  if type(button) ~= "table" or type(label) ~= "table" then return button end
+  if type(onClick) == "function" then button:SetScript("OnClick", onClick) end
+  local function paint(selected, hover)
+    local C = UI.COLOR
+    if selected and type(PanelTemplates_SelectTab) == "function" then PanelTemplates_SelectTab(button)
+    elseif not selected and type(PanelTemplates_DeselectTab) == "function" then PanelTemplates_DeselectTab(button) end
+    if type(label.SetTextColor) == "function" then
+      local color = (selected or hover) and C.text or C.heading
+      label:SetTextColor(color[1], color[2], color[3])
+    end
+  end
+  button.tabPaint = paint
+  button:HookScript("OnEnter", function() paint(button.tabOn, true) end)
+  button:HookScript("OnLeave", function() paint(button.tabOn, false) end)
+  paint(false, false)
+  return button
+end
+
+function UI.TabSelected(button, selected)
+  if type(button) ~= "table" or type(button.tabPaint) ~= "function" then return end
+  button.tabOn = selected and true or false
+  pcall(button.tabPaint, button.tabOn, false)
 end
 
 function UI.Button(parent, text, width, onClick)
@@ -57,7 +216,7 @@ function UI.Button(parent, text, width, onClick)
   button:SetSize(width, 22)
   button:SetText(text)
   button:SetScript("OnClick", onClick)
-  return button
+  return UI.SkinButton(button)
 end
 
 -- A check box with its label to the right. get() and set(value) read and write the setting.
@@ -68,14 +227,15 @@ function UI.Check(parent, labelText, get, set, tooltip)
   box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
   box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
   box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+  UI.SkinCheck(box)
   box.label = box:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   box.label:SetPoint("LEFT", box, "RIGHT", 4, 0)
   box.label:SetText(labelText)
   if tooltip then
     box:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 1, 1)
-      GameTooltip:AddLine(tooltip, nil, nil, nil, true)
+      GameTooltip:SetText(labelText, 1, 0.82, 0)
+      GameTooltip:AddLine(tooltip, 1, 1, 1, true)
       GameTooltip:Show()
     end)
     box:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -102,11 +262,7 @@ function UI.Slider(parent, labelText, min, max, step, get, set, format, tooltip)
   bar:SetValueStep(step)
   if bar.SetObeyStepOnDrag then bar:SetObeyStepOnDrag(true) end
   bar:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-  local track = bar:CreateTexture(nil, "BACKGROUND")
-  track:SetColorTexture(0.2, 0.2, 0.22, 1)
-  track:SetPoint("LEFT")
-  track:SetPoint("RIGHT")
-  track:SetHeight(6)
+  UI.SkinSlider(bar, 6)
   holder.value = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   holder.value:SetPoint("LEFT", bar, "RIGHT", 8, 0)
   local function show(v) holder.value:SetText(UI.SliderLabel(format, v)) end
@@ -143,8 +299,8 @@ function UI.Slider(parent, labelText, min, max, step, get, set, format, tooltip)
   if tooltip then
     local function enter(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 1, 1)
-      GameTooltip:AddLine(tooltip, nil, nil, nil, true)
+      GameTooltip:SetText(labelText, 1, 0.82, 0)
+      GameTooltip:AddLine(tooltip, 1, 1, 1, true)
       GameTooltip:Show()
     end
     local function leave() GameTooltip:Hide() end
@@ -209,7 +365,7 @@ local function tabTextColor(name, on)
     return 1, 1, 1
   end
   if irrelevant then return 0.42, 0.42, 0.38 end
-  return 0.75, 0.75, 0.75
+  return UI.COLOR.heading[1], UI.COLOR.heading[2], UI.COLOR.heading[3]
 end
 
 -- A vertical slider on the scroll frame's right. The thumb at the top is the start of the
@@ -242,10 +398,7 @@ local function attachScroll(page, topOffset)
   if type(bar.SetThumbTexture) == "function" then
     bar:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Vertical")
   end
-  local track = bar:CreateTexture(nil, "BACKGROUND")
-  track:SetColorTexture(0.28, 0.28, 0.32, 1)
-  track:SetPoint("TOPLEFT", 4, 0)
-  track:SetPoint("BOTTOMRIGHT", -4, 0)
+  UI.SkinSlider(bar, 6, true)
 
   local function scrollOffset()
     if type(scroll.GetVerticalScroll) ~= "function" then return 0 end
@@ -344,11 +497,12 @@ local function buildTogether(page)
   local title = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", 8, -8)
   title:SetText("Together")
+  title:SetTextColor(UI.COLOR.heading[1], UI.COLOR.heading[2], UI.COLOR.heading[3])
   local blurb = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   blurb:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
   blurb:SetPoint("RIGHT", content, "RIGHT", -8, 0)
   blurb:SetJustifyH("LEFT")
-  blurb:SetText("Every enabled mark on one nameplate. Offsets use the live seat: the top of a row is -offset under the health bar.")
+  blurb:SetText("Preview your enabled indicators together. Open a tab above to adjust their appearance and position.")
 
   -- The scene and the mock nameplate come from the shared preview kit (built from the
   -- client's own atlases), so the lanes read on the game's own furniture.
@@ -385,9 +539,12 @@ local function buildTogether(page)
     end
     return row
   end
-  local dots = textureRow(5, "Interface\\CharacterFrame\\TempPortraitAlphaMask", {1, 0.8, 0.2})
+  -- The dots and the rail wear the same glossy orb art as the Points circles, so the lanes
+  -- read alike in the preview (the shard diamonds keep their icon).
+  local ORB_ART = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\ComboOrb"
+  local dots = textureRow(5, ORB_ART, {1, 0.8, 0.2})
   local shards = textureRow(2, "Interface\\TargetingFrame\\UI-RaidTargetingIcon_3", {1, 1, 1})
-  local rail = textureRow(6, "Interface\\CharacterFrame\\TempPortraitAlphaMask", {0.9, 0.75, 0.3})
+  local rail = textureRow(6, ORB_ART, {0.9, 0.75, 0.3})
   page.rows = { dots = dots, shards = shards, hunter = rail }
   local function layoutRow(row, size)
     row:SetSize(#row.marks * (size + 3) - 3, size)
@@ -612,7 +769,7 @@ selectTab = function(name)
   for _, button in ipairs(tabButtons) do
     local on = button.name == name
     local r, g, b = tabTextColor(button.name, on)
-    button.bg:SetColorTexture(on and 0.2 or 0.1, on and 0.3 or 0.1, on and 0.45 or 0.12, 1)
+    UI.TabSelected(button, on)
     button.text:SetTextColor(r, g, b)
   end
   current = name
@@ -622,10 +779,8 @@ selectTab = function(name)
 end
 
 local function addTabButton(name, label, tipTitle, tipBody, extraTip)
-  local button = CreateFrame("Button", nil, window)
+  local button = CreateFrame("Button", nil, window, "PanelTopTabButtonTemplate")
   button.name = name
-  button.bg = button:CreateTexture(nil, "BACKGROUND")
-  button.bg:SetAllPoints()
   button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   button.text:SetPoint("CENTER")
   button.text:SetText(label)
@@ -634,12 +789,13 @@ local function addTabButton(name, label, tipTitle, tipBody, extraTip)
   button:SetScript("OnClick", function() selectTab(name) end)
   button:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText(tipTitle or label, 1, 1, 1)
-    if tipBody and tipBody ~= "" then GameTooltip:AddLine(tipBody, nil, nil, nil, true) end
+    GameTooltip:SetText(tipTitle or label, 1, 0.82, 0)
+    if tipBody and tipBody ~= "" then GameTooltip:AddLine(tipBody, 1, 1, 1, true) end
     if extraTip then GameTooltip:AddLine(extraTip, 0.8, 0.8, 0.6, true) end
     GameTooltip:Show()
   end)
   button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  UI.SkinTabButton(button, button.text)
   tabButtons[#tabButtons + 1] = button
   return button
 end
@@ -663,7 +819,9 @@ end
 
 local function createWindow()
   local w, h = tabSize()
-  window = CreateFrame("Frame", "UsefulPlatesAndTooltipsSettings", UIParent, "BackdropTemplate")
+  window = CreateFrame("Frame", "UsefulPlatesAndTooltipsSettings", UIParent, "ButtonFrameTemplate")
+  if type(ButtonFrameTemplate_HidePortrait) == "function" then ButtonFrameTemplate_HidePortrait(window) end
+  if type(window.Inset) == "table" then window.Inset:Hide() end
   window:Hide()
   window:SetSize(w + 2 * MARGIN, HEADER_HEIGHT + TAB_HEIGHT + SWITCH_HEIGHT + h + MARGIN)
   window:SetFrameStrata("DIALOG")
@@ -678,14 +836,15 @@ local function createWindow()
     rememberWindowPoint()
   end)
   applyWindowPoint()
-  UI.Backdrop(window, 0.06, 0.97)
   if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "UsefulPlatesAndTooltipsSettings") end
 
-  local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 16, -14)
-  title:SetText("Useful Plates and Tooltips")
-  local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
+  window:SetTitle("Useful Plates and Tooltips")
+  local close = window.CloseButton
+  if type(close) ~= "table" then
+    close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -6, -6)
+  end
+  close:SetScript("OnClick", function() window:Hide() end)
 
   addTabButton(TOGETHER, "Together", "Together",
     "Every enabled mark on one nameplate, and a warning when their lanes overlap.")

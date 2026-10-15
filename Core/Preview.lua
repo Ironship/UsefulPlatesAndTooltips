@@ -171,9 +171,11 @@ function P.PlayerFrame(parent, opts)
   local mock = CreateFrame("Frame", nil, parent)
   mock:SetSize(232, 100)
 
+  -- The player frame is the target frame mirrored: the portrait sits on the LEFT (its atlas
+  -- art is drawn for that), the name band and the health bar on the right half.
   local portrait = mock:CreateTexture(nil, "BACKGROUND", nil, 1)
   portrait:SetSize(58, 58)
-  portrait:SetPoint("TOPRIGHT", mock, "TOPRIGHT", -26, -19)
+  portrait:SetPoint("TOPLEFT", mock, "TOPLEFT", 26, -19)
   portrait:SetTexture(opts.portrait or "Interface\\Icons\\Achievement_Reputation_MurlocOracle")
   portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   local mask = mock:CreateMaskTexture()
@@ -187,26 +189,26 @@ function P.PlayerFrame(parent, opts)
   local hasFrameArt = P.setAtlas(frameArt, "UI-HUD-UnitFrame-Player-PortraitOn")
   if not hasFrameArt then
     frameArt:ClearAllPoints()
-    frameArt:SetPoint("TOPLEFT", mock, "TOPLEFT", 18, -22)
+    frameArt:SetPoint("TOPRIGHT", mock, "TOPRIGHT", -18, -22)
     frameArt:SetSize(134, 42)
     frameArt:SetColorTexture(0, 0, 0, 0.55)
   end
 
   local nameBand = mock:CreateTexture(nil, "BORDER")
   nameBand:SetSize(135, 18)
-  nameBand:SetPoint("TOPLEFT", mock, "TOPLEFT", 22, -25)
+  nameBand:SetPoint("TOPLEFT", mock, "TOPLEFT", 75, -25)
   if not P.setAtlas(nameBand, "UI-HUD-UnitFrame-Player-PortraitOn-Type") then
     nameBand:Hide()
   end
   local nameText = mock:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  nameText:SetSize(135, 12)
-  nameText:SetPoint("TOPLEFT", mock, "TOPLEFT", 22, -26)
+  nameText:SetSize(117, 12)
+  nameText:SetPoint("TOPLEFT", mock, "TOPLEFT", 77, -26)
   nameText:SetJustifyH("LEFT")
   nameText:SetText(name)
 
   local healthBar = CreateFrame("StatusBar", nil, mock)
   healthBar:SetSize(126, 20)
-  healthBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 22, -39)
+  healthBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 84, -39)
   healthBar:SetMinMaxValues(0, 100)
   healthBar:SetValue(health)
   healthBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")

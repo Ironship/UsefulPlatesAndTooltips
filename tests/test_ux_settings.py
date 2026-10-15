@@ -180,3 +180,27 @@ G.Fire("PLAYER_REGEN_ENABLED")
 assert len(G.reviewPaints) > before
 print("ok UX: Advanced scroll, texture rows, class/settings lanes, complete compact/full preview, world-marker invalidation, "
       "Spells caption columns and Drain Life icon, Shields frame buttons, Juicy aura art, Together shield caption")
+
+# Native template selection and button helpers must preserve navigation, tooltips and clicks.
+BIT.OpenSettings("__together")
+window = G.UsefulPlatesAndTooltipsSettings
+assert window.template == "ButtonFrameTemplate" and window.portraitHidden and not window.Inset.shown
+tabs = [child for child in window.children.values() if child.template == "PanelTopTabButtonTemplate"]
+assert len(tabs) == 8 and sum(bool(tab.nativeSelected) for tab in tabs) == 1
+spells = next(tab for tab in tabs if tab.name == "SpellDamageInfo")
+spells.scripts.OnEnter(spells)
+assert G.GameTooltip.shown and not spells.nativeSelected
+spells.scripts.OnClick(spells)
+assert spells.nativeSelected and BIT._pages["SpellDamageInfo"].shown
+assert sum(bool(tab.nativeSelected) for tab in tabs) == 1
+window.CloseButton.scripts.OnClick(window.CloseButton)
+assert not window.shown
+BIT.OpenSettings("__together")
+assert window.shown
+rt.execute("nativeClicks = 0")
+action = BIT.UI.Button(window, "Try", 80, rt.eval("function() nativeClicks = nativeClicks + 1 end"))
+BIT.UI.SkinButton(action)
+assert action.normalTexture == "native-button-art" and action.normalFont == "GameFontNormal"
+action.scripts.OnClick(action)
+assert G.nativeClicks == 1
+print("ok Native settings: one selected tab, tooltips, close/reopen and button callbacks retain Blizzard templates/art")

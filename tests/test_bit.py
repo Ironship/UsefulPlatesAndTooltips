@@ -64,9 +64,16 @@ end
 function methods.GetParent(self) return self.parent end
 function methods.SetPoint(self, ...) table.insert(self.points, { ... }) end
 function methods.ClearAllPoints(self) self.points = {} end
-function methods.SetText(self, t) self.text = t end
+function methods.SetText(self, t) self.text = t; if self.fontString then self.fontString.text = t end end
+function methods.GetFontString(self) return self.fontString end
+function methods.SetNormalFontObject(self, font) self.normalFont = font end
+function methods.SetTitle(self, text)
+    local title = rawget(self, 'TitleContainer')
+    if title then title.TitleText:SetText(text) end
+end
 function methods.GetText(self) return self.text end
 function methods.SetTexture(self, t) self.texture = t end
+function methods.SetNormalTexture(self, texture) self.normalTexture = texture end
 function methods.GetTexture(self) return self.texture end
 function methods.SetChecked(self, v) self.checked = v and true or false end
 function methods.GetChecked(self) return self.checked end
@@ -93,8 +100,26 @@ function CreateFrame(kind, name, parent, template)
     f.name, f.template = name, template
     -- templates that give a check button its label
     if type(template) == "string" and template:find("CheckButton") then f.Text = mock("text", f) end
+    if template == 'UIPanelButtonTemplate' or template == 'PanelTopTabButtonTemplate' then
+        f.fontString = mock('CreateFontString', f)
+        f.normalTexture = 'native-button-art'
+    elseif template == 'ButtonFrameTemplate' then
+        f.Inset = mock('Inset', f)
+        f.CloseButton = mock('Button', f)
+        f.TitleContainer = mock('Frame', f)
+        f.TitleContainer.TitleText = mock('CreateFontString', f.TitleContainer)
+    end
     if name then _G[name] = f end
     return f
+end
+function ButtonFrameTemplate_HidePortrait(frame) frame.portraitHidden = true end
+function PanelTemplates_SelectTab(button)
+    assert(button.template == 'PanelTopTabButtonTemplate', 'native tab art requires its template')
+    button.nativeSelected = true
+end
+function PanelTemplates_DeselectTab(button)
+    assert(button.template == 'PanelTopTabButtonTemplate', 'native tab art requires its template')
+    button.nativeSelected = false
 end
 UIParent = mock("UIParent")
 GameTooltip = mock("GameTooltip")
@@ -406,27 +431,27 @@ G.inRange["Heldenhafter Stoß"] = True  # what the client told a warrior 30 yard
 G.inRange["Verwunden"], G.inRange["Kniesehne"], G.inRange["Sturmangriff"] = False, False, True
 G.usable[100] = False  # in combat
 G.Fire("PLAYER_TARGET_CHANGED")
-check("  in Charge's range but in combat: the red X", icon.texture.texture, "Interface\RaidFrame\ReadyCheck-NotReady")
+check("  in Charge's range but in combat: the red X", icon.texture.texture, r"Interface\RaidFrame\ReadyCheck-NotReady")
 G.usable[100] = True
 G.Tick(0.2)
-check("  in Charge's range and it can be used: the checkmark", icon.texture.texture, "Interface\RaidFrame\ReadyCheck-Ready")
+check("  in Charge's range and it can be used: the checkmark", icon.texture.texture, r"Interface\RaidFrame\ReadyCheck-Ready")
 G.combat = True  # the game still calling it usable: in combat Charge does not count
 G.Tick(0.2)
-check("  in combat, even if the game calls Charge usable: the red X", icon.texture.texture, "Interface\RaidFrame\ReadyCheck-NotReady")
+check("  in combat, even if the game calls Charge usable: the red X", icon.texture.texture, r"Interface\RaidFrame\ReadyCheck-NotReady")
 G.combat = False
 G.C_Spell.GetSpellCooldown = rt.eval("function(id) if id == 100 then return { startTime = 50, duration = 15 } end end")
 G.Tick(0.2)
-check("  Charge cooling down: the red X", icon.texture.texture, "Interface\RaidFrame\ReadyCheck-NotReady")
+check("  Charge cooling down: the red X", icon.texture.texture, r"Interface\RaidFrame\ReadyCheck-NotReady")
 G.C_Spell.GetSpellCooldown = rt.eval("function(id) return { startTime = 50, duration = 1.5 } end")
 G.Tick(0.2)
-check("  only the global cooldown: Charge counts", icon.texture.texture, "Interface\RaidFrame\ReadyCheck-Ready")
+check("  only the global cooldown: Charge counts", icon.texture.texture, r"Interface\RaidFrame\ReadyCheck-Ready")
 G.C_Spell.GetSpellCooldown = None
 G.inRange["Sturmangriff"] = False
 G.Tick(0.2)
-check("  beyond Charge, Heroic Strike saying yes: the red X", icon.texture.texture, "Interface\RaidFrame\ReadyCheck-NotReady")
+check("  beyond Charge, Heroic Strike saying yes: the red X", icon.texture.texture, r"Interface\RaidFrame\ReadyCheck-NotReady")
 G.inRange["Verwunden"] = True
 G.Tick(0.2)
-check("  in melee range of Rend: the checkmark", icon.texture.texture, "Interface\RaidFrame\ReadyCheck-Ready")
+check("  in melee range of Rend: the checkmark", icon.texture.texture, r"Interface\RaidFrame\ReadyCheck-Ready")
 before = len(chat(G))
 G.SlashCmdList["USEFULPLATESANDTOOLTIPS"]("rangecheck")
 lines = chat(G)[before:]

@@ -1028,7 +1028,6 @@ local ROW_HEIGHT = 26
 local SETTINGS_LAYOUT = { label = 170, control = 200 }
 local PREVIEW_LAYOUT = { label = 86, control = 146 }
 local DISABLED_ALPHA = 0.35
-local WHITE = "Interface\\Buttons\\WHITE8X8"
 
 -- The TRY IT switch: every band the rail can show, nearest first (the order the dots light).
 local BAND_ORDER = { "Y10", "Y15", "Y20", "Y25", "Y30", "Y35", "MAX", "MELEE", "DEAD" }
@@ -1063,22 +1062,90 @@ local function refreshControls()
     for _, r in ipairs(rows) do if r.Refresh then r:Refresh() end end
 end
 
+-- The painted box of the sample's visible content, in the sample's own frame: the rail for the
+-- rail shapes, the bar for "bar", and for the close bands the icon with its label -- or, icons
+-- off, the label alone (seated under the hidden rail where renderScene anchors it). The frame
+-- has no slack on the rail shapes: the close bands reserve a fixed 120 for a label that is
+-- usually narrower, and the frame keeps a box for icons that may be switched off.
+local function previewContentSize(style)
+    if not sample then return nil, nil, 0 end
+    local close = previewBand == "MELEE" or previewBand == "DEAD"
+    local iconSize = math.max(16, 24 * ((style and style.scale) or 1))
+    local width, height, top = nil, nil, 0
+    if close then
+        local labelW = 0
+        if type(sample.zone) == "table" then
+            local ok, w = pcall(sample.zone.GetStringWidth, sample.zone)
+            if ok and type(w) == "number" then labelW = w end
+        end
+        local iconShown = (previewBand == "MELEE" and (settings == nil or settings.showMeleeIcon ~= false))
+            or (previewBand == "DEAD" and (settings == nil or settings.showDeadzoneIcon ~= false))
+        if iconShown then
+            width, height, top = iconSize + 6 + labelW, iconSize, 0
+        else
+            local railH = 0
+            if type(sample.rail) == "table" then
+                local ok, h = pcall(sample.rail.GetHeight, sample.rail)
+                if ok and type(h) == "number" then railH = h end
+            end
+            width = labelW
+            height = (style and style.fontSize) or 12
+            top = railH + 4
+        end
+    elseif style and style.shape == "bar" then
+        width = type(sample.bar) == "table" and select(2, pcall(sample.bar.GetWidth, sample.bar)) or nil
+    elseif type(sample.rail) == "table" then
+        width = select(2, pcall(sample.rail.GetWidth, sample.rail))
+    end
+    return width, height, top
+end
+
 -- Seat the preview rail on the mock health bar with the saved plate offset: the same "-offset"
 -- sign the live anchor uses, so a negative value (above) lifts the rail off the bar.
 local function seatPreviewRail()
     if not sample or not previewBar then return end
     local offset = finiteNum(tonumber(settings and settings.plateOffset), DEFAULTS.plateOffset)
     if offset < -80 then offset = -80 elseif offset > 30 then offset = 30 end
+    -- Seat the PAINTED content's centre over the bar: the paint is anchored at the sample's
+    -- left edge, and the frame is wider than the paint on the close bands (the label's fixed
+    -- 120), so the frame and the paint do not share a centre there.
+    local style
+    if type(BIT.Style) == "table" and type(BIT.Style.Resolve) == "function" then
+        local okStyle, resolved = pcall(BIT.Style.Resolve, M.moduleName, hunterLegacy)
+        if okStyle and type(resolved) == "table" then style = resolved end
+    end
+    local contentW, contentH, contentTop = previewContentSize(style)
+    local frameW = select(2, pcall(sample.GetWidth, sample))
+    local shift = (type(frameW) == "number" and type(contentW) == "number") and (frameW - contentW) / 2 or 0
     sample:ClearAllPoints()
-    sample:SetPoint("TOP", previewBar, "BOTTOM", 0, -offset)
+    sample:SetPoint("TOP", previewBar, "BOTTOM", shift, -offset)
+    -- Center the ensemble (the plate with the rail seated off its bar) in the scene: the paint
+    -- starts contentTop below the sample's top (30 below the plate top, the bar bottom) plus the
+    -- offset; 36 is the plate's height. Heights come from the render just done, never a previous.
+    local scene = sample:GetParent()
+    local plate = scene and scene.hunterPlate or nil
+    if plate and type(plate.frame) == "table" then
+        contentTop = type(contentTop) == "number" and contentTop or 0
+        if type(contentH) ~= "number" or contentH <= 0 then
+            contentH = select(2, pcall(sample.GetHeight, sample))
+            contentTop = 0
+        end
+        contentH = type(contentH) == "number" and contentH or 40
+        local sceneH = select(2, pcall(scene.GetHeight, scene))
+        sceneH = type(sceneH) == "number" and sceneH or 228
+        local above = math.max(0, -(30 + offset + contentTop))
+        local below = math.max(0, 30 + offset + contentTop + contentH - 36)
+        plate.frame:ClearAllPoints()
+        plate.frame:SetPoint("TOP", scene, "TOP", 0, -(sceneH / 2 - 18 + (above - below) / 2))
+    end
 end
 
 -- The retained preview, re-rendered from the resolved style and the TRY IT band. Pure:
 -- fictitious data only, never a live probe.
 local function renderPreview()
     if not sample then return end
-    seatPreviewRail()
     renderScene(sample, BIT.Style.Resolve(M.moduleName, hunterLegacy), previewBand, false)
+    seatPreviewRail()
 end
 
 -- Style edits, preset clicks and settings changes all land here: the preview first, then the
@@ -1130,9 +1197,7 @@ end
 ----------------------------------------------------------------------------------------------
 
 local function setBackdrop(frame, shade, alpha)
-    frame:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-    frame:SetBackdropColor(shade, shade, shade, alpha or 1)
-    frame:SetBackdropBorderColor(0.28, 0.28, 0.3, 1)
+    BIT.UI.Backdrop(frame, shade, alpha)
 end
 
 local function pushButton(parent, text, width, onClick)
@@ -1140,7 +1205,7 @@ local function pushButton(parent, text, width, onClick)
     button:SetSize(width, 22)
     button:SetText(text)
     button:SetScript("OnClick", onClick)
-    return button
+    return BIT.UI.SkinButton(button)
 end
 
 local function makeRow(parent, labelText, opts)
@@ -1159,8 +1224,8 @@ local function makeRow(parent, labelText, opts)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(labelText, 1, 1, 1)
-            GameTooltip:AddLine(opts.tooltip, nil, nil, nil, true)
+            GameTooltip:SetText(labelText, 1, 0.82, 0)
+            GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
             GameTooltip:Show()
         end)
         row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1185,6 +1250,7 @@ local function checkbox(parent, key, labelText, opts)
     box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
     box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
     box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+    BIT.UI.SkinCheck(box)
     box:SetScript("OnClick", function(self)
         db()[key] = self:GetChecked() and true or false
         changed()
@@ -1210,13 +1276,9 @@ local function sliderRow(parent, labelText, min, max, step, get, set, opts)
     slider:SetMinMaxValues(min, max)
     slider:SetValueStep(step)
     if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-    local track = slider:CreateTexture(nil, "BACKGROUND")
-    track:SetColorTexture(0.3, 0.3, 0.32, 1)
-    track:SetHeight(4)
-    track:SetPoint("LEFT")
-    track:SetPoint("RIGHT")
     slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
     slider:GetThumbTexture():SetSize(18, 24)
+    BIT.UI.SkinSlider(slider, 6)
     local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
     local suffix = opts.suffix or ""
@@ -1293,8 +1355,7 @@ local function selectTab(tab)
     for _, other in ipairs(tabs) do
         local selected = other == tab
         other.content:SetShown(selected)
-        other.button.text:SetTextColor(selected and 1 or 0.6, selected and 0.82 or 0.6, selected and 0 or 0.6)
-        other.button.underline:SetShown(selected)
+        BIT.UI.TabSelected(other.button, selected)
     end
 end
 
@@ -1315,16 +1376,12 @@ local function addTab(name)
     tab.content, tab.inner = content, inner
     content:Hide()
 
-    local button = CreateFrame("Button", nil, area)
+    local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
     button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     button.text:SetText(name)
     button:SetSize(button.text:GetStringWidth() + 20, 26)
     button.text:SetPoint("CENTER")
-    button.underline = button:CreateTexture(nil, "ARTWORK")
-    button.underline:SetColorTexture(1, 0.82, 0, 1)
-    button.underline:SetHeight(2)
-    button.underline:SetPoint("BOTTOMLEFT", 6, 0)
-    button.underline:SetPoint("BOTTOMRIGHT", -6, 0)
+    BIT.UI.SkinTabButton(button, button.text)
     local previous = tabs[#tabs]
     if previous then
         button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
@@ -1456,7 +1513,7 @@ local function buildLivePreview(pane)
     title:SetPoint("TOPLEFT", SIDE, -12)
     title:SetText("Live preview")
     local titleRule = pane:CreateTexture(nil, "ARTWORK")
-    titleRule:SetColorTexture(0.28, 0.28, 0.3, 1)
+    titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     titleRule:SetHeight(1)
     titleRule:SetPoint("TOPLEFT", 8, -34)
     titleRule:SetPoint("TOPRIGHT", -8, -34)
@@ -1469,6 +1526,7 @@ local function buildLivePreview(pane)
     -- is seated above it and re-seated whenever the saved offset changes.
     local plate = BIT.UI.Preview.Nameplate(scene, { width = CARD_WIDTH - 24, health = 72 })
     plate.frame:SetPoint("BOTTOM", scene, "BOTTOM", 0, 14)
+    scene.hunterPlate = plate
     previewBar = plate.bar
 
     -- The rail itself: the retained scene the HUD draws, re-rendered from the resolved style
@@ -1484,7 +1542,7 @@ local function buildLivePreview(pane)
         label:SetText(text)
         label:SetTextColor(0.85, 0.7, 0.3)
         local rule = pane:CreateTexture(nil, "ARTWORK")
-        rule:SetColorTexture(0.28, 0.28, 0.3, 1)
+        rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
         rule:SetHeight(1)
         rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
         rule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
@@ -1562,7 +1620,7 @@ local function build(parent)
     parent.hunterArea = area
 
     local divider = area:CreateTexture(nil, "ARTWORK")
-    divider:SetColorTexture(0.28, 0.28, 0.3, 1)
+    divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     divider:SetHeight(1)
     divider:SetPoint("TOPLEFT", 8, -34)
     divider:SetPoint("TOPRIGHT", -8, -34)

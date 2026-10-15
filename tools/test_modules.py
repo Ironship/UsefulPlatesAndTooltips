@@ -70,6 +70,24 @@ def adapt_sdi_fixture(text, filename):
              'T.check(label(ActionButton7) and label(ActionButton7).color[1] == ns.Format.REDUCTION_COLOR[1], "pet transfer costs are red")', 1),
             ('"Bei 5 Combopunkten, ohne Angriffskraft; 1-4: 224-332 / 394-502 / 564-672 / 734-842"',
              '"Bei den aktuellen 5 Combopunkten, ohne Angriffskraft; die übrigen: 1: 224-332 / 2: 394-502 / 3: 564-672 / 4: 734-842"', 1),
+            # The BIT fork's settings wear the core theme; the standalone smoke test loads the
+            # files without it, so every skin call is a no-op there (behaviour stays under test).
+            ('local ns = {}\n',
+             'local ns = {}\n'
+             'ns.UI = {\n'
+             '    MEDIA = {},\n'
+             '    COLOR = { heading = { 0.99, 0.82, 0.62 }, panel = { 0, 0, 0 }, panelIn = { 0, 0, 0 },\n'
+             '        edge = { 1, 1, 1 }, edgeOn = { 1, 1, 1 }, button = { 0, 0, 0 }, buttonHover = { 0, 0, 0 },\n'
+             '        buttonHoverGlow = { 0, 0, 0 }, buttonOff = { 0, 0, 0 }, divider = { 1, 1, 1 }, track = { 0, 0, 0 } },\n'
+             '    Backdrop = function() end,\n'
+             '    SkinButton = function(button) return button end,\n'
+             '    SkinSlider = function(slider) return slider end,\n'
+             '    SkinCheck = function(box) return box end,\n'
+             '    SkinTabButton = function(button) return button end,\n'
+             '    TabSelected = function() end,\n'
+             '    RoundHighlight = function() end,\n'
+             '    RoundBorder = function() end,\n'
+             '}\n', 1),
         ]
     elif filename == "test_parser.lua":
         replacements = [

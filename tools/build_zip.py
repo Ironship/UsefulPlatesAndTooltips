@@ -20,7 +20,7 @@ toc = (root / toc_name).read_text(encoding="utf-8")
 version = re.search(r"^## Version:\s*(\S+)", toc, re.M).group(1)
 files = [toc_name] + [l.strip().replace("\\", "/") for l in toc.splitlines()
                                   if l.strip() and not l.startswith("#")]
-asset_roots = [root / "Modules" / module for module in ("DoTInfo", "ResourceDing", "ShieldsInfo", "SpellDamageInfo")] if args.retail else [root / "Modules"]
+asset_roots = ([root / "Modules" / module for module in ("DoTInfo", "ResourceDing", "ShieldsInfo", "SpellDamageInfo")] if args.retail else [root / "Modules"]) + [root / "Core"]
 files += sorted(p.relative_to(root).as_posix() for directory in asset_roots for p in directory.rglob("*.tga"))
 files += sorted(p.relative_to(root).as_posix() for directory in asset_roots for p in directory.rglob("LICENSE*.txt"))
 files.append("LICENSE")
