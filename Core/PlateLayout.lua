@@ -133,8 +133,8 @@ function Plate.RefreshDue(remaining, duration, interval)
   return remaining <= window
 end
 
--- Settings preview: available rows on this character, independent of whether a target
--- currently exists. The same rows and dimensions drive Together and clash warnings.
+-- Available indicator rows on this character, independent of whether a target
+-- currently exists. These dimensions drive the settings overlap warnings.
 function Plate.Rows()
   local function on(name)
     return BIT.IsRunning(name) or (BIT.woke and BIT.woke[name] == true)

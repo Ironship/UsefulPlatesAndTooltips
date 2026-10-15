@@ -166,7 +166,7 @@ resolved = BIT.Style.Resolve("Range")
 assert resolved.scale == BIT.Style.GetDefaults("Range").scale
 assert list(resolved.colors.accent.values()) == list(BIT.Style.GetDefaults("Range").colors.accent.values())
 assert BIT.Style.Set("Range", "fontSize", float("nan")) is None
-# Together uses the same available resource maximum as live dots, independent
+# Placement warnings use the same available resource maximum as live dots, independent
 # of whether a target exists. A Retail Fire/Frost mage has no Arcane Charges.
 rt, G, BIT, _ = load('''
 playerClass="MAGE"
@@ -178,18 +178,14 @@ target={hostile=true}; plate=NewPlate()
 ''')
 G.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
 G.Fire("PLAYER_LOGIN")
-BIT.OpenSettings("__together")
-together = BIT._pages["__together"]
-assert not BIT.modules.ResourceDing._dotsRow().shown and not together.rows.dots.shown
+assert not BIT.modules.ResourceDing._dotsRow().shown and not BIT.Plate.Rows().dots.on
 G.availableCharges = 4
 G.target = None
-together.refresh(together)
-assert together.rows.dots.shown, "available resource preview must not require a target"
+assert BIT.Plate.Rows().dots.on, "available resource placement must not require a target"
 
 # Classic target-owned combo points keep their fallback maximum when the
 # player power maximum is zero, including settings-only wake.
 rt, G, BIT, _ = load('playerClass="ROGUE"; function UnitPowerMax() return 0 end')
 G.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
-BIT.OpenSettings("__together")
-assert BIT._pages["__together"].rows.dots.shown
+assert BIT.Plate.Rows().dots.on
 print("ok final review: reusable OFF pages, subscribers, saved types, Hunter/Range lanes and probes, compact shield hooks, resource reset and available resources")

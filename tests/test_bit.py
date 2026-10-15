@@ -2453,14 +2453,13 @@ for i in range(1, len(winU.children) + 1):
     if getattr(child, "kind", None) == "Button" and isinstance(getattr(child, "name", None), str) and font is not None:
         labelsU[child.name] = font.text
 check("the tabs use short names", labelsU, {
-    "__together": "Together", "SpellDamageInfo": "Spells", "DoTInfo": "DoTs", "StatsInfo": "Stats",
+    "SpellDamageInfo": "Spells", "DoTInfo": "DoTs", "StatsInfo": "Stats",
     "ResourceDing": "Points", "Range": "Range", "ShieldsInfo": "Shields", "HunterRangeFinder": "Hunter",
 })
-GU.SlashCmdList.USEFULPLATESANDTOOLTIPS("together")
-together = BITU._pages["__together"]
-check("/upt together shows the shared nameplate", together is not None and together.shown, True)
-check("the settings page has a scrollbar", together.scrollBar is not None and together.scrollBar.kind == "Slider", True)
-check("opening Together did not report a failed build",
+spells = BITU._pages["SpellDamageInfo"]
+check("/upt starts on Spells", spells is not None and spells.shown, True)
+check("the settings page has a scrollbar", spells.scrollBar is not None and spells.scrollBar.kind == "Slider", True)
+check("opening Spells did not report a failed build",
       [m for m in chat(GU) if "could not be built" in m], [])
 BITU.OpenSettings("StatsInfo")
 BITU.OpenSettings("SpellDamageInfo")
@@ -2571,20 +2570,15 @@ rdOn.LookAtDisplay()
 rdOn.CheckPower = real_on
 check("a running module still checks the bar on that redraw", probe_on["n"], 1)
 
-# Together does not warn about a module that is not on the plate.
+# Placement warnings ignore a module that is not on the plate.
 rtT, GT, BITT, _ = load(saved="UsefulPlatesAndTooltipsDB = { modules = { HunterRangeFinder = { enabled = false } } }")
 GT.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
 GT.Fire("PLAYER_LOGIN")
-GT.SlashCmdList.USEFULPLATESANDTOOLTIPS("together")
-together_text = []
-for i in range(1, len(GT.AllFrames) + 1):
-    text = getattr(GT.AllFrames[i], "text", None)
-    if isinstance(text, str):
-        together_text.append(text)
+clash_text = BITT.Plate.ClashText()
 check("a switched-off hunter rail is not an overlap",
-      any("Hunter rail overlaps" in t for t in together_text), False)
+      "Hunter rail overlaps" in clash_text, False)
 check("a Classic warlock has diamonds, not a simultaneous combo row",
-      any("Combo dots overlap shard diamonds." in t for t in together_text), False)
+      "Combo dots overlap shard diamonds." in clash_text, False)
 
 print("failed:", failures)
 sys.exit(1 if failures else 0)

@@ -5,7 +5,7 @@ Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo i SpellDamageInfo**,
 ## Instalacja
 
 1. Zbuduj paczkę: `python tools/build_zip.py --retail`.
-2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.80-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
+2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.81-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
 3. Włącz addon w grze. `/upt` otwiera ustawienia; `/reload` stosuje zmianę włączenia modułu. Włącz wyświetlanie wrogich nameplate klawiszem `V`.
 
 ZIP Retail ma własny `UsefulPlatesAndTooltips_Mainline.toc`; nie zawiera manifestu Forever ani pozostałych modułów. Zwykłe `python tools/build_zip.py` nadal buduje dotychczasową paczkę Forever.

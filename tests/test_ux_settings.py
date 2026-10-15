@@ -21,36 +21,23 @@ effects = next(tab for tab in BIT.modules["ShieldsInfo"]._tabs.values() if tab.e
 effects.editor.SetAdvanced(effects.editor, True)
 assert effects.inner.GetHeight(effects.inner) >= 34 + effects.editor.GetHeight(effects.editor)
 
-BIT.OpenSettings("__together")
-page = BIT._pages["__together"]
+# Placement warnings follow the same active resource rows as the live HUD.
 rd = BIT.modules["ResourceDing"]
 rd.db.dots = False
 rd.db.shardDiamonds = False
-page.refresh(page)
-assert not page.rows.dots.shown and not page.rows.shards.shown and not page.rows.hunter.shown
+rows = BIT.Plate.Rows()
+assert not rows.dots.on and not rows.shards.on and not rows.hunter.on
 assert BIT.Plate.ClashText() == "Nameplate lanes are clear."
 G.playerClass = "ROGUE"
 rd.db.dots = True
 rd.db.dotSize = 24
-page.refresh(page)
-assert page.rows.dots.shown and not page.rows.shards.shown
-assert page.rows.dots.height == 24
-assert all(mark.kind == "CreateTexture" for mark in page.rows.dots.marks.values())
+rows = BIT.Plate.Rows()
+assert rows.dots.on and not rows.shards.on
+assert rows.dots.height == 24
 G.playerClass = "HUNTER"
-page.refresh(page)
-assert page.rows.hunter.shown and not page.rows.dots.shown
+rows = BIT.Plate.Rows()
+assert rows.hunter.on and not rows.dots.on
 G.playerClass = "WARLOCK"
-
-# Together: the caption names the shield's thin top edge (or the bar it fills) whenever the shield shows.
-BIT.DB().modules.ShieldsInfo.nameplates = True
-page.refresh(page)
-assert "thin top edge" in page.caption.text or "fills the bar" in page.caption.text, page.caption.text
-BIT.DB().modules.ShieldsInfo.nameplates = False
-page.refresh(page)
-assert "Shields off" in page.caption.text, page.caption.text
-assert "thin top edge" not in page.caption.text and "fills the bar" not in page.caption.text, page.caption.text
-BIT.DB().modules.ShieldsInfo.nameplates = True
-page.refresh(page)
 
 # Shields: each frame button is as wide as its name, and the four with their gaps fit the card.
 frame_buttons = BIT.modules["ShieldsInfo"]._frameButtons
@@ -179,14 +166,14 @@ G.combat = False
 G.Fire("PLAYER_REGEN_ENABLED")
 assert len(G.reviewPaints) > before
 print("ok UX: Advanced scroll, texture rows, class/settings lanes, complete compact/full preview, world-marker invalidation, "
-      "Spells caption columns and Drain Life icon, Shields frame buttons, optional aura art, Together shield caption")
+      "Spells caption columns and Drain Life icon, Shields frame buttons, optional aura art")
 
 # Native template selection and button helpers must preserve navigation, tooltips and clicks.
-BIT.OpenSettings("__together")
+BIT.OpenSettings("DoTInfo")
 window = G.UsefulPlatesAndTooltipsSettings
 assert window.template == "ButtonFrameTemplate" and window.portraitHidden and not window.Inset.shown
 tabs = [child for child in window.children.values() if child.template == "PanelTopTabButtonTemplate"]
-assert len(tabs) == 8 and sum(bool(tab.nativeSelected) for tab in tabs) == 1
+assert len(tabs) == 7 and sum(bool(tab.nativeSelected) for tab in tabs) == 1
 spells = next(tab for tab in tabs if tab.name == "SpellDamageInfo")
 spells.scripts.OnEnter(spells)
 assert G.GameTooltip.shown and not spells.nativeSelected
@@ -195,7 +182,7 @@ assert spells.nativeSelected and BIT._pages["SpellDamageInfo"].shown
 assert sum(bool(tab.nativeSelected) for tab in tabs) == 1
 window.CloseButton.scripts.OnClick(window.CloseButton)
 assert not window.shown
-BIT.OpenSettings("__together")
+BIT.OpenSettings("DoTInfo")
 assert window.shown
 rt.execute("nativeClicks = 0")
 action = BIT.UI.Button(window, "Try", 80, rt.eval("function() nativeClicks = nativeClicks + 1 end"))
