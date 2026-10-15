@@ -20,6 +20,39 @@ def click(button):
 
 
 class SettingsRegressions(unittest.TestCase):
+    def test_dot_tabs_fit_after_native_buttons_expand(self):
+        rt, g, bit = ready()
+        bit.OpenSettings("DoTInfo")
+        area = bit._pages.DoTInfo.content.settingsArea
+        buttons = [f for f in area.children.values() if f.template == "PanelTopTabButtonTemplate"]
+        self.assertEqual([b.GetText(b) for b in buttons],
+                         ["Kill icon", "Marker", "Effects", "Text", "Nameplates", "Behavior"])
+        # Native OnShow imposes a minimum width after the addon anchors the tabs.
+        for button in buttons:
+            button.SetWidth(button, max(90, button.width))
+        available = bit.tabs.DoTInfo.width - 290 - 40
+        positions = {}
+        for button in buttons:
+            point = button.points[len(button.points)]
+            if point[1] == "TOPLEFT":
+                self.assertTrue(g.Same(point[2], area))
+                x, y = point[4], point[5]
+            else:
+                self.assertEqual((point[1], point[3]), ("LEFT", "RIGHT"))
+                previous_x, previous_y, previous_width = positions[point[2].GetText(point[2])]
+                x, y = previous_x + previous_width + point[4], previous_y + point[5]
+            positions[button.GetText(button)] = (x, y, button.width)
+            self.assertGreaterEqual(x - 3, 0)
+            self.assertLessEqual(x + button.width + 9, available, button.GetText(button))
+            click(button)
+            self.assertTrue(button.nativeSelected)
+            self.assertEqual(sum(bool(b.nativeSelected) for b in buttons), 1)
+        row_bottom = min(y - 26 for _, y, _ in positions.values())
+        contents = [f for f in area.children.values() if f.kind == "Frame"]
+        self.assertEqual(len(contents), 6)
+        for content in contents:
+            self.assertLessEqual(content.points[1][5], row_bottom - 6)
+
     def test_selected_tab_label_moves_outward(self):
         rt, g, bit = ready()
         for page in ("__together", "ResourceDing", "DoTInfo", "StatsInfo", "Range", "ShieldsInfo", "HunterRangeFinder"):
