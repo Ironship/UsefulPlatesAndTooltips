@@ -29,6 +29,10 @@ class SettingsRegressions(unittest.TestCase):
         for button in buttons:
             label = button.caption if button.caption is not None else button.text
             self.assertTrue(g.Same(label, button.GetFontString(button)), "visible label bypasses native tab state")
+            self.assertGreater(button.LeftActive.height, button.Left.height, "selected tab rim must project outward")
+            height = button.LeftActive.height
+            bit.UI.SkinTabButton(button, label)
+            self.assertEqual(button.LeftActive.height, height, "reskinning must not keep enlarging the tab")
             bit.UI.TabSelected(button, True)
             selected_y = label.points[len(label.points)][5]
             bit.UI.TabSelected(button, False)
