@@ -14,8 +14,9 @@ local ADDON_NAME, BIT = ...
 local ns = BIT.Module("DoTInfo")
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 548 -- tall enough for the longest tab (Nameplates, 15 rows)
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 574 -- two tab rows plus the longest page (Nameplates, 15 rows)
 local HEADER_HEIGHT = 52 -- title bar: title, presets, close button
+local TAB_HEIGHT = 26
 local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = 26
 local SETTINGS_LAYOUT = { label = 170, control = 200 }
@@ -458,21 +459,22 @@ local function addTab(name)
     local area = window.settingsArea
     local tab = { keys = {}, y = 0 }
     tab.content = CreateFrame("Frame", nil, area)
-    tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40)
+    tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40 - TAB_HEIGHT)
     tab.content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, 40)
     tab.content:Hide()
 
     local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
     button:SetText(name)
     button.text = button:GetFontString()
-    button:SetSize(button.text:GetStringWidth() + 20, 26)
+    button:SetSize(button.text:GetStringWidth() + 20, TAB_HEIGHT)
     button.text:SetPoint("CENTER")
     BIT.UI.SkinTabButton(button, button.text)
     local previous = tabs[#tabs]
-    if previous then
+    -- Native tabs grow to fit their end caps on show; keep three per row.
+    if previous and #tabs % 3 ~= 0 then
         button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
     else
-        button:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -8)
+        button:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -8 - math.floor(#tabs / 3) * TAB_HEIGHT)
     end
     button:SetScript("OnClick", function() selectTab(tab) end)
     tab.button = button
@@ -965,8 +967,8 @@ local function buildContent(top, anchor)
     local divider = area:CreateTexture(nil, "ARTWORK")
     divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     divider:SetHeight(1)
-    divider:SetPoint("TOPLEFT", 8, -34)
-    divider:SetPoint("TOPRIGHT", -8, -34)
+    divider:SetPoint("TOPLEFT", 8, -34 - TAB_HEIGHT)
+    divider:SetPoint("TOPRIGHT", -8, -34 - TAB_HEIGHT)
 
     buildTabs()
     local reset = pushButton(area, "Reset this tab", 120, function() resetTab(activeTab) end)
