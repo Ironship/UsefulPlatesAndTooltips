@@ -70,7 +70,11 @@ end
 function methods.GetParent(self) return self.parent end
 function methods.SetPoint(self, ...) table.insert(self.points, { ... }) end
 function methods.ClearAllPoints(self) self.points = {} end
-function methods.SetText(self, t) self.text = t end
+function methods.SetText(self, t) self.text = t; if self.fontString then self.fontString:SetText(t) end end
+function methods.GetFontString(self)
+    if not self.fontString then self.fontString = mock("text", self); self.fontString:SetText(self.text or "") end
+    return self.fontString
+end
 function methods.GetText(self) return self.text end
 function methods.SetTexture(self, t) self.texture = t end
 function methods.GetTexture(self) return self.texture end

@@ -29,6 +29,14 @@ local function setBackdrop(frame, shade, alpha)
   BIT.UI.Backdrop(frame, shade, alpha)
 end
 
+local function previewIsShards()
+  return activeTab and activeTab.name == "Shards"
+end
+
+local function previewOffsetKey()
+  return previewIsShards() and "shardOffset" or "dotOffset"
+end
+
 local function soundEntries()
   local entries = {}
   for _, key in ipairs(Addon.SOUND_ORDER) do
@@ -265,10 +273,10 @@ function applySetting(key, value, quiet)
     if Addon.RefreshDots then Addon.RefreshDots() end
     if Addon.RefreshShards then Addon.RefreshShards() end -- the diamonds size from dotSize too
   elseif key == "dotOffset" then
-    db.dotOffset = clampNumber(value, -80, 30, 2)
+    db.dotOffset = clampNumber(value, -80, 30, -60)
     if Addon.RefreshDots then Addon.RefreshDots() end
   elseif key == "shardOffset" then
-    db.shardOffset = clampNumber(value, -80, 30, 2)
+    db.shardOffset = clampNumber(value, -80, 30, -60)
     if Addon.RefreshShards then Addon.RefreshShards() end
   elseif key == "manaPercent" then
     db.manaPercent = value
@@ -301,8 +309,8 @@ function updateLivePreview()
   scene.updates = (scene.updates or 0) + 1
   local db = Addon.db
   local size = clampNumber(db.dotSize, 8, 24, 14)
-  local dotOffset = clampNumber(db.dotOffset, -80, 30, 2)
-  local shardOffset = clampNumber(db.shardOffset, -80, 30, 2)
+  local dotOffset = clampNumber(db.dotOffset, -80, 30, -60)
+  local shardOffset = clampNumber(db.shardOffset, -80, 30, -60)
   if plateClashRow and plateClashRow.text and BIT.Plate and type(BIT.Plate.ClashText) == "function" then
     plateClashRow.text:SetText(BIT.Plate.ClashText())
   end
@@ -315,7 +323,9 @@ function updateLivePreview()
     if ok and type(resolved) == "table" then style = resolved end
   end
 
-  local showDots = db.enabled and db.dots
+  local shards = previewIsShards()
+  local showDots = db.enabled and db.dots and not shards
+  local showDiamonds = db.enabled and db.shardDiamonds and points > 0 and shards
   -- Center the ensemble (the plate with the dots and diamonds hanging off its bar, whose
   -- offsets are the user's own sliders) in the scene. The rows seat their top 30 below the
   -- plate top (the bar bottom) plus the offset; 36 is the plate's height.
@@ -325,7 +335,7 @@ function updateLivePreview()
       above = math.max(above, math.max(0, -(30 + dotOffset)))
       below = math.max(below, math.max(0, dotOffset + size - 6))
     end
-    if db.enabled and db.shardDiamonds and points > 0 then
+    if showDiamonds then
       above = math.max(above, math.max(0, -(30 + shardOffset)))
       below = math.max(below, math.max(0, shardOffset + size - 6))
     end
@@ -362,7 +372,6 @@ function updateLivePreview()
     end
   end
 
-  local showDiamonds = db.enabled and db.shardDiamonds and points > 0
   scene.shardsRow:SetShown(showDiamonds)
   scene.shardsRow:ClearAllPoints()
   scene.shardsRow:SetPoint("TOP", scene.healthBar, "BOTTOM", 0, -shardOffset)
@@ -384,10 +393,11 @@ function updateLivePreview()
     end
   end
 
-  local caption = "Sample: " .. points .. " of " .. MAX_POINTS .. " combo points"
+  local caption = "Sample: " .. points .. " of " .. MAX_POINTS .. (shards and " soul shards" or " combo points")
   if points >= MAX_POINTS then caption = caption .. " (full)" end
-  if db.enabled and db.shardDiamonds then caption = caption .. "  |  " .. points .. " soul shards" end
   scene.caption:SetText(caption)
+  if scene.pointsControl then scene.pointsControl.label:SetText(shards and "Soul shards" or "Combo points") end
+  if scene.diamondsControl then scene.diamondsControl:SetShown(shards) end
 end
 
 local function buildLivePreview(pane)
@@ -430,24 +440,25 @@ local function buildLivePreview(pane)
   local points = sliderRow(pane, "Combo points", 0, MAX_POINTS, 1,
     function() return previewState.points end,
     function(value) previewState.points = value; updateLivePreview() end,
-    { layout = PREVIEW_LAYOUT, tooltip = "How many of the mock target's five points are lit. "
-        .. "The Soul Shard diamonds show the same number." })
+    { layout = PREVIEW_LAYOUT, tooltip = "How many combo points or soul shards the sample shows." })
+  scene.pointsControl = points
   points:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -6)
   local size = sliderRow(pane, "Size", 8, 24, 1,
     function() return Addon.db.dotSize end,
     function(value) applySetting("dotSize", value) end,
-    { layout = PREVIEW_LAYOUT, tooltip = "Dot and diamond size, the same setting as the Dots tab." })
+    { layout = PREVIEW_LAYOUT, tooltip = "Size of the combo points and soul shards." })
   size:SetPoint("TOPLEFT", points, "BOTTOMLEFT", 0, 0)
   local offset = sliderRow(pane, "Offset", -80, 30, 1,
-    function() return Addon.db.dotOffset end,
-    function(value) applySetting("dotOffset", value) end,
-    { layout = PREVIEW_LAYOUT, tooltip = "The dots' offset from the health bar, the same setting as the Dots tab." })
+    function() return Addon.db[previewOffsetKey()] end,
+    function(value) applySetting(previewOffsetKey(), value) end,
+    { layout = PREVIEW_LAYOUT, tooltip = "Offset for the resource in the selected tab." })
   offset:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, 0)
   local diamonds = checkboxRow(pane, "Shard diamonds",
     function() return Addon.db.shardDiamonds end,
     function(value) applySetting("shardDiamonds", value) end,
     { layout = PREVIEW_LAYOUT, tooltip = "Purple diamonds under the target, the same setting as the Shards tab." })
   diamonds:SetPoint("TOPLEFT", offset, "BOTTOMLEFT", 0, 0)
+  scene.diamondsControl = diamonds
 
   local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", 12, 8)
@@ -469,19 +480,21 @@ local function selectTab(tab)
     other.content:SetShown(selected)
     BIT.UI.TabSelected(other.button, selected)
   end
+  refreshControls()
+  updateLivePreview()
 end
 
 -- A tab whose methods add rows top to bottom and remember the setting keys, for "Reset this tab".
 local function addTab(name)
-  local tab = { keys = {}, widgets = {}, y = 0 }
+  local tab = { name = name, keys = {}, widgets = {}, y = 0 }
   tab.content = CreateFrame("Frame", nil, settingsArea)
   tab.content:SetPoint("TOPLEFT", settingsArea, "TOPLEFT", 8, -40)
   tab.content:SetPoint("BOTTOMRIGHT", settingsArea, "BOTTOMRIGHT", -8, 40)
   tab.content:Hide()
 
   local button = CreateFrame("Button", nil, settingsArea, "PanelTopTabButtonTemplate")
-  button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  button.text:SetText(name)
+  button:SetText(name)
+  button.text = button:GetFontString()
   button:SetSize(button.text:GetStringWidth() + 20, 26)
   button.text:SetPoint("CENTER")
   BIT.UI.SkinTabButton(button, button.text)
@@ -541,7 +554,7 @@ end
 local function buildTabs()
   local widgets = {}
 
-  local dots = addTab("Dots")
+  local dots = addTab("Combo")
   dots:checkbox("dots", "Show the points as dots under the target's nameplate",
     { tooltip = "Your class resource as circles below the target's health bar. Warlocks use these when shard diamonds are off." })
   dots:slider("dotSize", "Dot / diamond size", 8, 24, 1,

@@ -30,7 +30,7 @@ local DEFAULTS = {
     -- values still map onto the shared style (the legacy fallback below).
     chevronHeight = 1, chevronWidth = 1,
     locked = true,
-    attachToPlate = true, plateOffset = -8,
+    attachToPlate = true, plateOffset = -60,
     longRange = false,
     -- Retired display flags, kept so saved values survive: they never restore
     -- the old artwork. A stored animation flag maps onto reducedMotion = false.
@@ -50,13 +50,13 @@ local MELEE_ICON = "Interface\\Icons\\INV_Sword_04"
 local R1_SHAPE_MIGRATION_VERSION = 1
 
 -- Requested module defaults via the frozen Core registry: round dots,
--- border8/thickness12/gap7/length10/scale1, inverted near-RED / far-GREEN
+-- border0/thickness17/gap21/length12/scale0.9, inverted near-RED / far-GREEN
 -- distance gradient (mid stays product yellow). Explicit global/per-module
 -- RGB writes keep winning; legacy fallback holds no shape/colors so it
 -- cannot override these.
 if BIT.Style and BIT.Style.RegisterDefaults then
     BIT.Style.RegisterDefaults("HunterRangeFinder", {
-        shape = "dots", thickness = 14, border = 2, gap = 4, length = 10, scale = 1,
+        shape = "dots", thickness = 17, border = 0, gap = 21, length = 12, scale = 0.9,
         colors = {
             distanceNear = { 1, 0.25, 0.25, 1 },
             distanceFar = { 0.3, 1, 0.3, 1 },
@@ -402,7 +402,7 @@ local function reanchorHunterHud()
         screenFallback()
         return
     end
-    local offset = finiteNum(tonumber(settings.plateOffset), -8)
+    local offset = finiteNum(tonumber(settings.plateOffset), DEFAULTS.plateOffset)
     if offset < -80 then offset = -80 elseif offset > 30 then offset = 30 end
     if reanchorKey ~= plate or reanchorOffset ~= offset then
         if hud:GetParent() ~= plate then hud:SetParent(plate) end
@@ -1377,8 +1377,8 @@ local function addTab(name)
     content:Hide()
 
     local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
-    button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    button.text:SetText(name)
+    button:SetText(name)
+    button.text = button:GetFontString()
     button:SetSize(button.text:GetStringWidth() + 20, 26)
     button.text:SetPoint("CENTER")
     BIT.UI.SkinTabButton(button, button.text)

@@ -55,10 +55,10 @@ UsefulPlatesAndTooltips_ResourceDingDB={dots="false",dotOffset=0/0,shardOffset=m
 G.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
 G.Fire("PLAYER_LOGIN")
 assert BIT.DB().modules.Range.size == 26 and BIT.DB().modules.Range.showIn is True
-assert BIT.DB().modules.HunterRangeFinder.plateOffset == -8
+assert BIT.DB().modules.HunterRangeFinder.plateOffset == -60
 assert BIT.DB().modules.HunterRangeFinder.attachToPlate is True
 assert G.UsefulPlatesAndTooltips_ResourceDingDB.dots is True
-assert G.UsefulPlatesAndTooltips_ResourceDingDB.dotOffset == G.UsefulPlatesAndTooltips_ResourceDingDB.shardOffset == 2
+assert G.UsefulPlatesAndTooltips_ResourceDingDB.dotOffset == G.UsefulPlatesAndTooltips_ResourceDingDB.shardOffset == -60
 
 # Hunter preview and live lane share the same edge/offset. Range owns the target
 # mark whenever the hunter rail is hidden, including out-of-range acquisition.
@@ -81,7 +81,7 @@ G.itemAnswers[17626] = True
 assert hunter.CurrentBand() == "Y10", "trade distance cannot establish melee"
 BIT.OpenSettings("HunterRangeFinder")
 scene = hunter._previewScene()
-assert (scene.points[1][1], scene.points[1][3], scene.points[1][5]) == ("TOP", "BOTTOM", 8)
+assert (scene.points[1][1], scene.points[1][3], scene.points[1][5]) == ("TOP", "BOTTOM", 60)
 G.spellAnswers[2974] = False
 G.spellAnswers[75] = False
 for item in (17626, 10699, 17689, 4559, 10645, 1191, 4388, 13289, 7734, 17202, 835, 2091, 18904):

@@ -185,9 +185,10 @@ function UI.RoundBorder(frame, color, layer)
   return tex
 end
 
--- Blizzard's top-tab art; custom labels share the native gold/white states.
+-- The selected top tab lifts its native label out of the content.
 function UI.SkinTabButton(button, label, onClick)
   if type(button) ~= "table" or type(label) ~= "table" then return button end
+  button.selectedTextY, button.deselectedTextY = -10, -6
   if type(onClick) == "function" then button:SetScript("OnClick", onClick) end
   local function paint(selected, hover)
     local C = UI.COLOR
@@ -781,10 +782,9 @@ end
 local function addTabButton(name, label, tipTitle, tipBody, extraTip)
   local button = CreateFrame("Button", nil, window, "PanelTopTabButtonTemplate")
   button.name = name
-  button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  button.text:SetPoint("CENTER")
-  button.text:SetText(label)
-  local width = math.max(64, (button.text:GetStringWidth() or 48) + 18)
+  button:SetText(label)
+  button.text = button:GetFontString()
+  local width = math.max(64, (button.text:GetStringWidth() or 48) + 20)
   button:SetSize(width, TAB_HEIGHT - 2)
   button:SetScript("OnClick", function() selectTab(name) end)
   button:SetScript("OnEnter", function(self)

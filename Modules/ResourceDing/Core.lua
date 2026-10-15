@@ -104,8 +104,8 @@ local defaults = {
   sound = "auction",
   dots = true,     -- combo points as dots under the target's nameplate (Dots.lua)
   dotSize = 14,
-  dotOffset = 2,   -- vertical offset from the health bar (negative = above)
-  shardOffset = 2, -- the warlock diamonds' own offset: dots and diamonds move independently
+  dotOffset = -60,   -- vertical offset from the health bar (negative = above)
+  shardOffset = -60, -- the warlock diamonds' own offset: dots and diamonds move independently
   shards = true,         -- a warlock's Soul Shard coming in plays the sound (Shards.lua)
   shardDiamonds = true,  -- and they show as purple diamonds under the target's nameplate
   mana = true,           -- a sound when mana climbs to manaPercent (Mana.lua); manaPercent is

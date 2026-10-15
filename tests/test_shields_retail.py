@@ -70,6 +70,20 @@ for bar in bars:
 assert module._overlayCount() == 4
 print("ok Retail player/target/nested-party/nameplate bars pass hidden absorb and health unchanged to native setters")
 
+# The Juicy button must restyle every live overlay, including secret readings.
+addon.OpenSettings("ShieldsInfo")
+juicy = next(f for f in game.AllFrames.values() if f.kind == "Button" and f.GetText(f) == "Juicy")
+juicy.scripts.OnClick(juicy)
+for bar in bars:
+    overlay = module._overlay(bar)
+    assert overlay.bar.statusTexture.endswith("ShieldsInfo\\Textures\\Stripes.tga")
+    fill = overlay.bar.GetStatusBarTexture(overlay.bar)
+    assert fill.horizTile and fill.vertTile
+    assert overlay.bar.statusColor[4] == 0.5
+    assert same(game, overlay.bar.value, game.SECRET_ABSORB)
+    assert same(game, overlay.bar.maxValue, game.SECRET_MAX)
+print("ok Juicy restyles all four Retail overlays as tiled half-opacity stripes without interpreting hidden values")
+
 rt, game, addon, module = boot("""
 party.HealthBarContainer = nil
 party.healthbar = FakeMock('nativePartyAlias', party)

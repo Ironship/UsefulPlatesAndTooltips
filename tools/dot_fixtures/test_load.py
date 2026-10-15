@@ -53,7 +53,11 @@ end
 function methods.SetShown(self, v) if v then self:Show() else self:Hide() end end
 function methods.IsShown(self) return self.shown end
 function methods.IsVisible(self) return self.shown end
-function methods.SetText(self, t) self.text = t end
+function methods.SetText(self, t) self.text = t; if self.fontString then self.fontString:SetText(t) end end
+function methods.GetFontString(self)
+    if not self.fontString then self.fontString = mock("fontstring", self); self.fontString:SetText(self.text or "") end
+    return self.fontString
+end
 function methods.GetText(self) return self.text end
 function methods.SetTexture(self, t) self.texture = t end
 function methods.SetVertexColor(self, ...) self.vertex = { ... } end

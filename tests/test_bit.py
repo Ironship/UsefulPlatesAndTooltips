@@ -71,8 +71,12 @@ function methods.SetTitle(self, text)
     local title = rawget(self, 'TitleContainer')
     if title then title.TitleText:SetText(text) end
 end
-function methods.GetText(self) return self.text end
+function methods.GetText(self) return self.fontString and self.fontString.text or self.text end
 function methods.SetTexture(self, t) self.texture = t end
+function methods.SetHorizTile(self, v) self.horizTile = v end
+function methods.SetVertTile(self, v) self.vertTile = v end
+function methods.SetValue(self, v) self.value = v end
+function methods.GetValue(self) return self.value end
 function methods.SetNormalTexture(self, texture) self.normalTexture = texture end
 function methods.GetTexture(self) return self.texture end
 function methods.SetChecked(self, v) self.checked = v and true or false end
@@ -102,6 +106,8 @@ function CreateFrame(kind, name, parent, template)
     if type(template) == "string" and template:find("CheckButton") then f.Text = mock("text", f) end
     if template == 'UIPanelButtonTemplate' or template == 'PanelTopTabButtonTemplate' then
         f.fontString = mock('CreateFontString', f)
+        f.Text = f.fontString
+        f.isTopTab = template == 'PanelTopTabButtonTemplate'
         f.normalTexture = 'native-button-art'
     elseif template == 'ButtonFrameTemplate' then
         f.Inset = mock('Inset', f)
@@ -116,10 +122,16 @@ function ButtonFrameTemplate_HidePortrait(frame) frame.portraitHidden = true end
 function PanelTemplates_SelectTab(button)
     assert(button.template == 'PanelTopTabButtonTemplate', 'native tab art requires its template')
     button.nativeSelected = true
+    local y = button.selectedTextY or -3
+    if button.isTopTab then y = -y - 7 end
+    button.Text:SetPoint('CENTER', button, 'CENTER', button.selectedTextX or 0, y)
 end
 function PanelTemplates_DeselectTab(button)
     assert(button.template == 'PanelTopTabButtonTemplate', 'native tab art requires its template')
     button.nativeSelected = false
+    local y = button.deselectedTextY or 2
+    if button.isTopTab then y = -y - 6 end
+    button.Text:SetPoint('CENTER', button, 'CENTER', button.deselectedTextX or 0, y)
 end
 UIParent = mock("UIParent")
 GameTooltip = mock("GameTooltip")
@@ -1836,10 +1848,10 @@ panel5 = rd5.CreateSettingsPanel(rtRD5.eval("FakeMock('settings')"))
 # dragging Dot size to 20: the combo dots move, and so must the diamonds (shared size)
 panel5.dotSize.scripts.OnValueChanged(panel5.dotSize, 20)
 check("  Dot size 20 resizes the shard diamonds at once", rd5._diamonds[1].width, 20)
-# dragging the dot offset moves the combo dots but leaves the diamonds at dotOffset 2
+# dragging the dot offset moves the combo dots but leaves the diamonds at their default
 panel5.dotOffset.scripts.OnValueChanged(panel5.dotOffset, 11)
 rowPts5 = [rd5._shardRow().points[i] for i in range(1, len(rd5._shardRow().points) + 1)]
-check("  the dot offset slider leaves the diamonds alone", rowPts5[-1][5], -2)
+check("  the dot offset slider leaves the diamonds alone", rowPts5[-1][5], 60)
 # the shard offset slider moves the diamonds right away (-30 puts them above the bar)
 panel5.shardOffset.scripts.OnValueChanged(panel5.shardOffset, -30)
 rowPts5b = [rd5._shardRow().points[i] for i in range(1, len(rd5._shardRow().points) + 1)]

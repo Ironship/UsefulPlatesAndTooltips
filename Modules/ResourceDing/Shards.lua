@@ -109,8 +109,8 @@ function Addon.RefreshShards()
   row:SetSize(shown * (size - 2) + 2, size)
   row:SetParent(plate)
   row:ClearAllPoints()
-  local shardOffset = tonumber(Addon.db.shardOffset) or 2
-  if shardOffset ~= shardOffset then shardOffset = 2 end
+  local shardOffset = tonumber(Addon.db.shardOffset) or -60
+  if shardOffset ~= shardOffset then shardOffset = -60 end
   if shardOffset < -80 then shardOffset = -80 elseif shardOffset > 30 then shardOffset = 30 end
   row:SetPoint("TOP", healthBarOf(plate), "BOTTOM", 0, -shardOffset)
   row:Show()

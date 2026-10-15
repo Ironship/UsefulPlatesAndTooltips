@@ -149,6 +149,14 @@ def check_retail_lifecycle(path):
     assert globals_.UsefulPlatesAndTooltips_ResourceDingDB is not None
 
     resource = addon.modules.ResourceDing
+    panel = resource.settingsPanel
+    scene = next(f for f in globals_.AllFrames.values() if f.dotsRow is not None)
+    for name in ("Combo", "Shards", "Combo"):
+        tab = next(t for t in panel.tabs.values() if t.button.text.text == name)
+        tab.button.scripts.OnClick(tab.button)
+        assert bool(scene.dotsRow.shown) == (name == "Combo")
+        assert bool(scene.shardsRow.shown) == (name == "Shards")
+    assert (resource.db.dotOffset, resource.db.shardOffset) == (-60, -60)
     rows = addon.Plate.Rows()
     assert rows.shards.on and not rows.dots.on, "Retail warlock preview must show its live diamonds"
     resource.db.shardDiamonds = False
