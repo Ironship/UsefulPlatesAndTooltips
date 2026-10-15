@@ -147,6 +147,8 @@ def check_retail_lifecycle(path):
     assert globals_.UsefulPlatesAndTooltips_SpellDamageInfoDB is not None
     assert globals_.UsefulPlatesAndTooltips_DoTInfoDB is not None
     assert globals_.UsefulPlatesAndTooltips_ResourceDingDB is not None
+    shield = addon.DB().modules.ShieldsInfo
+    assert (shield.fillTexture, shield.overlayAlpha) == ("stripes", 0.5)
 
     resource = addon.modules.ResourceDing
     panel = resource.settingsPanel
