@@ -108,6 +108,12 @@ function CreateFrame(kind, name, parent, template)
         f.fontString = mock('CreateFontString', f)
         f.Text = f.fontString
         f.isTopTab = template == 'PanelTopTabButtonTemplate'
+        if f.isTopTab then
+            for _, key in ipairs({'Left', 'Middle', 'Right', 'LeftActive', 'MiddleActive', 'RightActive'}) do
+                f[key] = mock('nativeTabTexture', f)
+                f[key]:SetHeight(20)
+            end
+        end
         f.normalTexture = 'native-button-art'
     elseif template == 'ButtonFrameTemplate' then
         f.Inset = mock('Inset', f)

@@ -185,10 +185,17 @@ function UI.RoundBorder(frame, color, layer)
   return tex
 end
 
--- The selected top tab lifts its native label out of the content.
+-- The selected top tab lifts its native label and upper rim out of the content.
 function UI.SkinTabButton(button, label, onClick)
   if type(button) ~= "table" or type(label) ~= "table" then return button end
   button.selectedTextY, button.deselectedTextY = -10, -6
+  if not button.uptRaisedTab then
+    for _, key in ipairs({ "LeftActive", "MiddleActive", "RightActive" }) do
+      local texture = button[key]
+      if type(texture) == "table" then texture:SetHeight(texture:GetHeight() + 3) end
+    end
+    button.uptRaisedTab = true
+  end
   if type(onClick) == "function" then button:SetScript("OnClick", onClick) end
   local function paint(selected, hover)
     local C = UI.COLOR
