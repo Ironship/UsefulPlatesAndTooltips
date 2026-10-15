@@ -1946,21 +1946,20 @@ local function hookTooltips()
     if inAdd or not trackedTooltip(tooltip) then return end
     local _, link = ask(tooltip.GetItem, tooltip)
     if type(link) ~= "string" or isSecret(link) then return end
-    -- A fire for a tooltip that still holds the block we added (same link and density, no
-    -- native clear since, rows still counted) is skipped: rebuilding would append the whole
-    -- block again and build it again. A tooltip cleared since -- or one we never filled --
-    -- falls through to a fresh add. The same-frame check covers clients that report no row
-    -- count. Without GetTime either (a minimal client) addedTo.cleared still tells a re-fire
-    -- from a rebuild, because OnTooltipCleared needs no GetTime.
+    -- A fire for a tooltip that still holds the block we added (same link, no native clear
+    -- since, rows still counted) is skipped: rebuilding would append the whole block again
+    -- and build it again. The clear counter is the only "rebuild" signal -- a re-fire
+    -- without a clear keeps the rows the tooltip holds whatever the density says, or a
+    -- Shift toggle would stack a second block below the first. A tooltip cleared since --
+    -- or one we never filled -- falls through to a fresh add.
     addedTo.watchClears(tooltip)
     local t = ask(GetTime)
     local density = tooltipWantsFull() and "full" or "compact"
     local rec = addedTo[tooltip]
-    if rec and rec.link == link and rec.density == density then
+    if rec and rec.link == link then
       local n = ask(tooltip.NumLines, tooltip)
       local rowsHeld = n == nil or (rec.lines and n >= rec.lines)
-      if rowsHeld and (rec.gen == (addedTo.cleared[tooltip] or 0)
-          or (type(t) == "number" and rec.t == t)) then
+      if rowsHeld and rec.gen == (addedTo.cleared[tooltip] or 0) then
         return
       end
     end
@@ -1990,6 +1989,11 @@ local function hookTooltips()
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, add)
   elseif GameTooltip and type(GameTooltip.HookScript) == "function" then
     GameTooltip:HookScript("OnTooltipSetItem", add)
+    -- trackedTooltip accepts ItemRefTooltip (chat links); the legacy branch must hook it too,
+    -- or clicked links get no block on a client without TooltipDataProcessor.
+    if type(ItemRefTooltip) == "table" and type(ItemRefTooltip.HookScript) == "function" then
+      ItemRefTooltip:HookScript("OnTooltipSetItem", add)
+    end
   end
 end
 

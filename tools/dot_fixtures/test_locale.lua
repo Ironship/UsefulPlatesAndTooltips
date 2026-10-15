@@ -143,6 +143,11 @@ for _, case in ipairs({
       desc = "Dröhnt in der Nähe befindliche Feinde mit Donner zu, erhöht die Zeit zwischen ihren Angriffen 30 Sek. lang um 10% und fügt ihnen 103 Schaden zu. Wirkt auf maximal 4 Ziele." },
     { lang = "de", source = "wowhead", name = "Heiliger Schild", id = 20928,
       desc = "Erhöht die Blockchance 10 Sek. lang um 30% und verursacht, solange aktiv, mit jedem geblockten Angriff 130 Heiligschaden. Durch 'Heiliger Schild' verursachter Schaden verursacht 20% zusätzliche Bedrohung. Jedes Blocken verbraucht eine Aufladung. 4 Aufladungen." },
+    -- The same shape without a percent or "jeder" in between (audit finding): the amount 200
+    -- comes before the damage word, so the duration belongs to the armor line, not to a DoT
+    -- of 50 (OFF-2 follow-up).
+    { lang = "de", source = "review", name = "Rüstung verringern", id = 0,
+      desc = "Verringert 10 Sek. lang die Rüstung des Ziels um 200 und verursacht 50 Schaden." },
 }) do
     checkReading(case, "", track(case), nil)
 end

@@ -319,6 +319,11 @@ class RetailSpellDamageTests(unittest.TestCase):
             g.maximumHealth = maximum
             g.Fire("UNIT_MAXHEALTH", "player")
             self.assertEqual(label(addon, g.ActionButton1), "25% HP")
+            # The tooltip must not go silent exactly when the percentage is the only readable
+            # number (the fallback view): it states the share the description gives.
+            view = addon.ComputeItem(5512)
+            lines = [row[1] for row in addon.Format.TooltipLines(view, addon.Locales.en).values()]
+            self.assertTrue(any("25" in text and "maximum health" in text for text in lines), lines)
         rt.execute("function UnitHealthMax() error('HP unavailable') end")
         addon.Refresh()
         self.assertEqual(label(addon, g.ActionButton1), "25% HP")

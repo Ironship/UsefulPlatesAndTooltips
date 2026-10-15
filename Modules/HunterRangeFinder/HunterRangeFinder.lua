@@ -906,8 +906,12 @@ local function start()
     driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
     driver:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_TARGET_CHANGED" then
-            -- Hide the previous target immediately, before the next range poll.
+            -- Hide the previous target immediately, before the next range poll. The drawn-band
+            -- cache clears here, not only in the non-preview branch of updateDisplay: in the
+            -- settings preview the band is the constant "PREVIEW", and without this the rail
+            -- would stay hidden after a target change (the same clear the unlock path does).
             hud:Hide()
+            lastRenderedBand, lastRenderedScatter, lastRenderedScatterRange = nil, nil, nil
             targetSelectionChanged = true
             acquiringTarget, acquisitionTime = true, 0
             acquisitionBand, acquisitionSamples = nil, 0
@@ -1458,57 +1462,14 @@ local function buildLivePreview(pane)
     titleRule:SetPoint("TOPRIGHT", -8, -34)
 
     -- The scene: a patch of dusky world behind the mock plate, so the rail reads in place.
-    local scene = CreateFrame("Frame", nil, pane, "BackdropTemplate")
-    scene:SetSize(CARD_WIDTH, 228)
+    local scene = BIT.UI.Preview.Scene(pane, CARD_WIDTH, 228)
     scene:SetPoint("TOP", pane, "TOP", 0, -44)
-    scene:SetBackdrop({ edgeFile = WHITE, edgeSize = 1 })
-    scene:SetBackdropBorderColor(0, 0, 0, 1)
-    local ground = scene:CreateTexture(nil, "BACKGROUND", nil, -8)
-    ground:SetPoint("TOPLEFT", 1, -1)
-    ground:SetPoint("BOTTOMRIGHT", -1, 1)
-    ground:SetTexture("Interface\\FrameGeneral\\UI-Background-Rock")
-    ground:SetTexCoord(0, 0.26, 0, 0.2)
-    ground:SetVertexColor(0.75, 0.8, 0.75)
-    local sky = scene:CreateTexture(nil, "BACKGROUND", nil, -7)
-    sky:SetAllPoints(ground)
-    sky:SetColorTexture(0.06, 0.09, 0.12, 0.5)
-    local shade = scene:CreateTexture(nil, "BACKGROUND", nil, -6)
-    shade:SetPoint("BOTTOMLEFT", ground, "BOTTOMLEFT")
-    shade:SetPoint("BOTTOMRIGHT", ground, "BOTTOMRIGHT")
-    shade:SetHeight(40)
-    shade:SetColorTexture(0, 0, 0, 0.45)
 
-    -- Mock enemy nameplate: a hostile name under a red health bar with the target's selection
-    -- glow. The rail is seated above it and re-seated whenever the saved offset changes.
-    local plate = CreateFrame("Frame", nil, scene)
-    plate:SetSize(CARD_WIDTH - 24, 62)
-    plate:SetPoint("BOTTOM", scene, "BOTTOM", 0, 14)
-    local name = plate:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    name:SetPoint("BOTTOMLEFT", plate, "BOTTOMLEFT", 6, 2)
-    name:SetText("Murloc Raider")
-    name:SetTextColor(1, 0.13, 0.13)
-    local level = plate:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    level:SetPoint("BOTTOMRIGHT", plate, "BOTTOMRIGHT", -6, 2)
-    level:SetText("12")
-    level:SetTextColor(1, 0.82, 0)
-    local healthBar = CreateFrame("StatusBar", nil, plate)
-    healthBar:SetSize(CARD_WIDTH - 48, 16)
-    healthBar:SetPoint("BOTTOM", plate, "BOTTOM", 0, 22)
-    healthBar:SetMinMaxValues(0, 100)
-    healthBar:SetValue(72)
-    healthBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-    healthBar:SetStatusBarColor(0.85, 0.1, 0.1)
-    local barBack = healthBar:CreateTexture(nil, "BACKGROUND")
-    barBack:SetAllPoints()
-    barBack:SetColorTexture(0.1, 0.02, 0.02, 1)
-    local barGlow = healthBar:CreateTexture(nil, "OVERLAY")
-    barGlow:SetPoint("TOPLEFT", healthBar, "TOPLEFT", -3, 2)
-    barGlow:SetPoint("BOTTOMRIGHT", healthBar, "BOTTOMRIGHT", 3, -2)
-    barGlow:SetColorTexture(1, 0.82, 0, 0.18)
-    local healthText = healthBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    healthText:SetPoint("LEFT", healthBar, "LEFT", 4, 0)
-    healthText:SetText("72%")
-    previewBar = healthBar
+    -- Mock enemy nameplate from the shared preview kit (the client's own atlases): the rail
+    -- is seated above it and re-seated whenever the saved offset changes.
+    local plate = BIT.UI.Preview.Nameplate(scene, { width = CARD_WIDTH - 24, health = 72 })
+    plate.frame:SetPoint("BOTTOM", scene, "BOTTOM", 0, 14)
+    previewBar = plate.bar
 
     -- The rail itself: the retained scene the HUD draws, re-rendered from the resolved style
     -- and the TRY IT band, seated above the mock bar exactly like the live anchor.

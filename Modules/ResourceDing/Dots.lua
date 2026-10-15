@@ -18,6 +18,13 @@ local _, BIT = ...
 local Addon = BIT.Module and BIT.Module("ResourceDing") or BIT
 
 local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask" -- a white disc
+-- The combo orb set (tools/make_resource_textures.py): a matte dark centre, the glossy
+-- fill the palette tints, the lit metal bezel, and the halo for the newest point.
+local TEXTURE_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\"
+local ORB = TEXTURE_DIR .. "ComboOrb"
+local RING = TEXTURE_DIR .. "ComboRing"
+local ORB_DARK = TEXTURE_DIR .. "ComboOrbDark"
+local GLOW = TEXTURE_DIR .. "ComboGlow"
 local MAX_DOTS = 10
 local DRUID_CAT_FORM = 1
 
@@ -83,16 +90,17 @@ function Addon.DotColor(style, i, n, full)
   return { c[1], c[2], c[3], c[4] * alpha }
 end
 
--- Fixed round chrome: a neutral dark disc plus a black 1px outline, independent of
--- the role palette. Alpha multiplies the shared style opacity exactly once here;
--- no frame alpha is set, so opacity 0.4 never double-applies via parent and fill.
-local CHROME_BACK_RGB = { 0.15, 0.15, 0.15 }
-local CHROME_BACK_ALPHA = 0.85
+-- Fixed round chrome (its own dark tone now lives in the texture art): a neutral dark
+-- centre plus a black 1px outline, independent of the role palette. Alpha multiplies the
+-- shared style opacity exactly once here; no frame alpha is set, so opacity 0.4 never
+-- double-applies via parent and fill.
+local CHROME_BACK_RGB = { 1, 1, 1 } -- the dark centre's own shading; tint stays neutral
+local CHROME_BACK_ALPHA = 0.9
 local CHROME_BORDER_RGB = { 0, 0, 0 }
 local CHROME_BORDER_ALPHA = 0.9
 
--- Shared chrome geometry: anchors back/border once for BOTH the live HUD and the
--- fixed-data sample. Pure: no unit, target, audio or saved reads.
+-- Shared chrome geometry: anchors back/border (and the halo and the bezel) once for BOTH
+-- the live HUD and the fixed-data sample. Pure: no unit, target, audio or saved reads.
 function Addon.LayoutCircleChrome(dot)
   if type(dot) ~= "table" then return end
   if dot.border ~= nil and type(dot.border.ClearAllPoints) == "function" then
@@ -107,6 +115,18 @@ function Addon.LayoutCircleChrome(dot)
   end
   if dot.back ~= nil and type(dot.back.SetAllPoints) == "function" then
     dot.back:SetAllPoints(dot)
+  end
+  -- The halo: centred, sized by the callers (they know the dot size).
+  if dot.glow ~= nil and type(dot.glow.ClearAllPoints) == "function" then
+    dot.glow:ClearAllPoints()
+    if type(dot.glow.SetPoint) == "function" then dot.glow:SetPoint("CENTER", dot, "CENTER") end
+  end
+  -- The metal bezel rides the overlay frame: it must stay above the fill and above the
+  -- green full-state disc.
+  local ring = type(dot.overlay) == "table" and dot.overlay.ring or nil
+  if ring ~= nil and type(ring.ClearAllPoints) == "function" then
+    ring:ClearAllPoints()
+    if type(ring.SetAllPoints) == "function" then ring:SetAllPoints(dot.overlay) end
   end
 end
 
@@ -131,6 +151,14 @@ function Addon.PaintCircleDot(dot, style, i, n, full)
   if dot.overlay ~= nil and type(dot.overlay.SetStatusBarColor) == "function" then
     local g = Addon.DotColor(style, 1, 1, true)
     dot.overlay:SetStatusBarColor(g[1], g[2], g[3], g[4])
+  end
+  -- Bezel and halo are neutral: the art carries the shading, the shared opacity the rest.
+  local ring = type(dot.overlay) == "table" and dot.overlay.ring or nil
+  if ring ~= nil and type(ring.SetVertexColor) == "function" then
+    ring:SetVertexColor(1, 1, 1, alpha)
+  end
+  if dot.glow ~= nil and type(dot.glow.SetVertexColor) == "function" then
+    dot.glow:SetVertexColor(1, 1, 1, alpha)
   end
 end
 
@@ -206,19 +234,27 @@ end
 
 local function newCircle(parent)
   local dot = CreateFrame("StatusBar", nil, parent)
+  -- The halo for the newest point sits behind everything; the dark empty centre over it,
+  -- then the outer black rim; the glossy fill is the bar's own texture, and the metal
+  -- bezel lives on the overlay frame so it stays above the fill AND the full-state green.
+  dot.glow = dot:CreateTexture(nil, "BACKGROUND", nil, -1)
+  dot.glow:SetTexture(GLOW)
   dot.border = dot:CreateTexture(nil, "BACKGROUND", nil, 0)
   dot.border:SetTexture(CIRCLE)
   dot.border:SetVertexColor(0, 0, 0, 0.9)
   dot.back = dot:CreateTexture(nil, "BACKGROUND", nil, 1)
-  dot.back:SetTexture(CIRCLE)
-  dot.back:SetVertexColor(0.15, 0.15, 0.15, 0.85)
-  dot:SetStatusBarTexture(CIRCLE)
+  dot.back:SetTexture(ORB_DARK)
+  dot.back:SetVertexColor(1, 1, 1, 0.9)
+  dot:SetStatusBarTexture(ORB)
   -- The secret-safe full-bar overlay: the same round mask in full green, one level above
   -- the dot's own fill. Its range spans the whole row and its value is the raw count, so
   -- the native client -- never this code -- shows it only at maximum, even when the count
   -- itself is a secret no Lua comparison may touch.
   local overlay = CreateFrame("StatusBar", nil, dot)
-  overlay:SetStatusBarTexture(CIRCLE)
+  overlay:SetStatusBarTexture(ORB)
+  overlay.ring = overlay:CreateTexture(nil, "OVERLAY", nil, 7)
+  overlay.ring:SetTexture(RING)
+  overlay.ring:SetVertexColor(1, 1, 1, 1)
   if type(dot.GetFrameLevel) == "function" and type(overlay.SetFrameLevel) == "function" then
     overlay:SetFrameLevel(dot:GetFrameLevel() + 1)
   end
@@ -263,6 +299,9 @@ function Addon.MakeCircleDot(parent, size)
   local dot = newCircle(parent)
   dot:SetSize(size, size)
   dot:ClearAllPoints()
+  if dot.glow ~= nil and type(dot.glow.SetSize) == "function" then
+    dot.glow:SetSize(size * 1.9, size * 1.9)
+  end
   Addon.LayoutCircleChrome(dot)
   return dot
 end
@@ -280,6 +319,9 @@ local function layout(n)
       dot:SetShown(i <= n)
       if dot.overlay then dot.overlay:SetShown(i <= n) end
       dot:SetSize(size, size)
+      if dot.glow ~= nil and type(dot.glow.SetSize) == "function" then
+        dot.glow:SetSize(size * 1.9, size * 1.9)
+      end
       dot:ClearAllPoints()
       dot:SetPoint("LEFT", row, "LEFT", (i - 1) * (size + gap), 0)
       Addon.LayoutCircleChrome(dot)
@@ -315,11 +357,21 @@ function Addon.RefreshDots()
   local style = palette()
   local full = false
   if not isSecret(count) and type(count) == "number" then full = count >= n end
+  -- The halo marks the newest point. Only a plainly readable count may name it; a secret
+  -- count still reaches nothing but the native SetValue calls below.
+  local newest
+  if not isSecret(count) and type(count) == "number"
+      and count >= 1 and count <= n and count == math.floor(count) then
+    newest = count
+  end
   for i = 1, n do
     local dot = dots[i]
     if dot.overlay then
       dot.overlay:SetMinMaxValues(n - 1, n)
       pcall(dot.overlay.SetValue, dot.overlay, count)
+    end
+    if dot.glow ~= nil and type(dot.glow.SetShown) == "function" then
+      dot.glow:SetShown(i == newest)
     end
     Addon.PaintCircleDot(dot, style, i, n, full)
     pcall(dot.SetValue, dot, count)

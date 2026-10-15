@@ -398,8 +398,11 @@ end
 
 function Addon.ResetPowerState()
   Addon.CheckPower(true)
+  -- ResetShards already refreshes the shards (its CheckShards ends in RefreshShards on
+  -- every path that has anything to show); only the dots need their refresh here, or the
+  -- shard work would run twice per reset (the red lifecycle test pinned this).
   if Addon.ResetShards then Addon.ResetShards() end
-  Addon.RefreshMarks()
+  if Addon.RefreshDots then Addon.RefreshDots() end
   if Addon.settingsPanel and Addon.settingsPanel.refresh then Addon.settingsPanel.refresh() end
 end
 
@@ -464,32 +467,36 @@ local function lookAgainLater()
 end
 
 Addon.hooks = {}
-if type(ComboFrame) == "table" and type(ComboFrame.HookScript) == "function" then
-  -- The frame's own OnEvent has already drawn the display when this runs. The
-  -- immediate look is the ComboFrame_Update hook's, which fires inside that
-  -- same dispatch; on a client without that global, do the look here instead.
-  Addon.hooks.frame = (pcall(ComboFrame.HookScript, ComboFrame, "OnEvent", function()
-    if not Addon.hooks.update and nativeCanRepaintCombo() then
-      comboDisplayReady = true
-      lookAtDisplay()
-    end
-    lookAgainLater()
-  end))
-end
-if type(hooksecurefunc) == "function" then
-  if type(ComboFrame_Update) == "function" then
-    hooksecurefunc("ComboFrame_Update", function()
-      if nativeCanRepaintCombo() then
+-- The native repaint hooks are installed once the module actually runs (the ADDON_LOADED
+-- gate below): a switched-off module must not pay their body on every ComboFrame redraw.
+local function installComboHooks()
+  if type(ComboFrame) == "table" and type(ComboFrame.HookScript) == "function" then
+    -- The frame's own OnEvent has already drawn the display when this runs. The
+    -- immediate look is the ComboFrame_Update hook's, which fires inside that
+    -- same dispatch; on a client without that global, do the look here instead.
+    Addon.hooks.frame = (pcall(ComboFrame.HookScript, ComboFrame, "OnEvent", function()
+      if not Addon.hooks.update and nativeCanRepaintCombo() then
         comboDisplayReady = true
         lookAtDisplay()
       end
       lookAgainLater()
-    end)
-    Addon.hooks.update = true
+    end))
   end
-  if type(ComboPointShineFadeIn) == "function" then
-    hooksecurefunc("ComboPointShineFadeIn", lookAtDisplay)
-    Addon.hooks.shine = true
+  if type(hooksecurefunc) == "function" then
+    if type(ComboFrame_Update) == "function" then
+      hooksecurefunc("ComboFrame_Update", function()
+        if nativeCanRepaintCombo() then
+          comboDisplayReady = true
+          lookAtDisplay()
+        end
+        lookAgainLater()
+      end)
+      Addon.hooks.update = true
+    end
+    if type(ComboPointShineFadeIn) == "function" then
+      hooksecurefunc("ComboPointShineFadeIn", lookAtDisplay)
+      Addon.hooks.shine = true
+    end
   end
 end
 Addon.LookAtDisplay = lookAtDisplay
@@ -515,6 +522,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
     -- switched off in UsefulPlatesAndTooltips: silent
     if BIT.ShouldRun and not BIT.ShouldRun("ResourceDing") then events:UnregisterAllEvents() return end
     initializeDatabase()
+    installComboHooks()
     -- inside UsefulPlatesAndTooltips the settings are built into its tab when that is first shown
     if not BIT.RegisterTab and Addon.CreateSettingsPanel then Addon.CreateSettingsPanel() end
     Addon.ResetPowerState()

@@ -297,12 +297,20 @@ local function headerBottom()
   return HEADER_HEIGHT + TAB_HEIGHT * tabRows
 end
 
+-- Anchor points a saved window position may name; anything else (or a non-finite offset)
+-- must never reach Frame:SetPoint -- a corrupt shared SavedVariables would break /upt.
+local WINDOW_POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true, CENTER = true,
+  RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true }
+
 local function savedWindowPoint()
   if type(BIT.DB) ~= "function" then return nil end
   local saved = BIT.DB()
   local p = type(saved) == "table" and saved.window or nil
-  if type(p) ~= "table" or type(p.point) ~= "string" then return nil end
+  if type(p) ~= "table" or type(p.point) ~= "string" or not WINDOW_POINTS[p.point] then return nil end
   if type(p.x) ~= "number" or type(p.y) ~= "number" then return nil end
+  if p.x ~= p.x or p.y ~= p.y or p.x == math.huge or p.x == -math.huge
+      or p.y == math.huge or p.y == -math.huge then return nil end
+  if type(p.relativePoint) == "string" and not WINDOW_POINTS[p.relativePoint] then p.relativePoint = nil end
   return p
 end
 
@@ -342,14 +350,13 @@ local function buildTogether(page)
   blurb:SetJustifyH("LEFT")
   blurb:SetText("Every enabled mark on one nameplate. Offsets use the live seat: the top of a row is -offset under the health bar.")
 
-  local scene = CreateFrame("Frame", nil, content)
-  scene:SetSize(400, 230)
+  -- The scene and the mock nameplate come from the shared preview kit (built from the
+  -- client's own atlases), so the lanes read on the game's own furniture.
+  local scene = BIT.UI.Preview.Scene(content, 400, 230)
   scene:SetPoint("TOPLEFT", 8, -64)
-  local bar = CreateFrame("StatusBar", nil, scene)
-  bar:SetSize(240, 18)
-  bar:SetPoint("TOPLEFT", 28, -110)
-  bar:SetMinMaxValues(0, 100)
-  bar:SetValue(100)
+  local plate = BIT.UI.Preview.Nameplate(scene, { width = 260, health = 100, level = "60" })
+  plate.frame:SetPoint("TOPLEFT", scene, "TOPLEFT", 70, -96)
+  local bar = plate.bar
   local barFill = bar:CreateTexture(nil, "BACKGROUND")
   barFill:SetAllPoints()
   barFill:SetColorTexture(0.25, 0.05, 0.05, 1)
@@ -704,9 +711,14 @@ local function createWindow()
 end
 
 -- Opens the window, on a module's tab when name is given; a second call without a name closes it.
+-- A second call with the SAME tab name closes it too (the README's "type it again to hide").
 function BIT.OpenSettings(name)
   if not window then createWindow() end
   if name == TOGETHER or (name and BIT.tabs[name]) then
+    if window:IsShown() and current == name then
+      window:Hide()
+      return
+    end
     selectTab(name)
     window:Show()
     return

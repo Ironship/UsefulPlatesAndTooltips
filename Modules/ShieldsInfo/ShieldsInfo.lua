@@ -1299,31 +1299,29 @@ local function buildLivePreview(pane)
     return label
   end
 
-  scene = CreateFrame("Frame", nil, pane, "BackdropTemplate")
-  scene:SetSize(CARD_WIDTH, SCENE_HEIGHT)
+  -- The scene and the four mock frames come from the shared preview kit: the real player and
+  -- target frames and the enemy nameplate rebuilt from the client's own atlases, plus a
+  -- compact party bar. The shield overlay lies on whichever mock the switch selects.
+  scene = BIT.UI.Preview.Scene(pane, CARD_WIDTH, SCENE_HEIGHT)
   scene:SetPoint("TOP", pane, "TOP", 0, -44)
-  setBackdrop(scene, 0.06)
-  local ground = scene:CreateTexture(nil, "BACKGROUND")
-  ground:SetPoint("TOPLEFT", 1, -1)
-  ground:SetPoint("BOTTOMRIGHT", -1, 1)
-  ground:SetTexture("Interface\\FrameGeneral\\UI-Background-Rock")
-  ground:SetTexCoord(0, 0.26, 0, 0.18) -- about 1:1 texels on the card
-  ground:SetVertexColor(0.75, 0.8, 0.75)
-
-  -- The mock health bar the overlay lies on, and the overlay itself: exactly as overlayFor
-  -- builds it on a live bar (its own StatusBar covering the health bar, one frame level up so
-  -- the fill draws over the bar's own), carrying the sample reading instead of a game one.
-  scene.bar = CreateFrame("StatusBar", nil, scene)
-  scene.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-  scene.bar:SetMinMaxValues(0, SAMPLE_MAX)
-  scene.bar:SetValue(SAMPLE_MAX)
-  scene.name = scene:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   scene.caption = scene:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  scene.overlay = CreateFrame("StatusBar", nil, scene.bar)
-  scene.overlay:SetAllPoints(scene.bar)
-  scene.overlay:SetFrameLevel((scene.bar:GetFrameLevel() or 0) + 1)
-  scene.overlay:SetMinMaxValues(0, SAMPLE_MAX)
-  scene.overlay:SetValue(SAMPLE_ABSORB)
+  scene.kits = {
+    player = BIT.UI.Preview.PlayerFrame(scene, { name = "You" }),
+    target = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider" }),
+    party = BIT.UI.Preview.PartyBar(scene, { name = "Kaya" }),
+    nameplate = BIT.UI.Preview.Nameplate(scene, { name = "Murloc Raider" }),
+  }
+  for id, kit in pairs(scene.kits) do
+    local m = findMock(id)
+    kit.frame:SetPoint("BOTTOMLEFT", scene, "BOTTOMLEFT", m.x, BAR_SEAT)
+    kit.frame:Hide()
+  end
+  scene.bar = scene.kits.target.bar -- refreshPreview points it at the selected mock
+  -- The overlay, exactly as overlayFor builds it on a live bar: its own StatusBar covering
+  -- the health bar, one frame level up so the fill draws over the bar's own.
+  scene.overlay = CreateFrame("StatusBar", nil, scene)
+  scene.overlay:SetMinMaxValues(0, 100)
+  scene.overlay:SetValue(clampPercent(preview.absorb))
 
   -- The frame switch: which of the module's frames the mock stands for.
   local which = header("FRAME", scene, 12)
@@ -1398,23 +1396,19 @@ local function buildLivePreview(pane)
     if type(scene) ~= "table" then return end
     pcall(function()
       local m = findMock(preview.frame)
-      scene.bar:SetSize(m.width, m.height)
-      scene.bar:ClearAllPoints()
-      scene.bar:SetPoint("BOTTOMLEFT", scene, "BOTTOMLEFT", m.x, BAR_SEAT)
-      scene.bar:SetStatusBarColor(m.barColor[1], m.barColor[2], m.barColor[3], 1)
-      scene.bar:SetMinMaxValues(0, SAMPLE_MAX)
-      scene.bar:SetValue(SAMPLE_MAX * clampPercent(preview.health) / 100)
-      scene.name:SetText(m.name)
-      scene.name:SetTextColor(m.nameColor[1], m.nameColor[2], m.nameColor[3], 1)
-      scene.name:ClearAllPoints()
-      scene.name:SetPoint("BOTTOMLEFT", scene.bar, "TOPLEFT", 0, 4)
+      local kit = scene.kits[m.id] or scene.kits.target
+      for id, other in pairs(scene.kits) do other.frame:SetShown(id == m.id) end
+      scene.bar = kit.bar
+      kit.bar:SetMinMaxValues(0, 100)
+      kit.bar:SetValue(clampPercent(preview.health))
       scene.caption:SetText(m.caption)
       scene.caption:ClearAllPoints()
-      scene.caption:SetPoint("TOPLEFT", scene.bar, "BOTTOMLEFT", 0, -6)
-      scene.overlay:SetAllPoints(scene.bar)
-      scene.overlay:SetFrameLevel((scene.bar:GetFrameLevel() or 0) + 1)
-      scene.overlay:SetMinMaxValues(0, SAMPLE_MAX)
-      scene.overlay:SetValue(SAMPLE_MAX * clampPercent(preview.absorb) / 100)
+      scene.caption:SetPoint("TOPLEFT", kit.frame, "BOTTOMLEFT", 0, -6)
+      scene.overlay:SetParent(kit.bar)
+      scene.overlay:SetAllPoints(kit.bar)
+      scene.overlay:SetFrameLevel((kit.bar:GetFrameLevel() or 0) + 1)
+      scene.overlay:SetMinMaxValues(0, 100)
+      scene.overlay:SetValue(clampPercent(preview.absorb))
       styleOverlay(scene.overlay)
     end)
   end

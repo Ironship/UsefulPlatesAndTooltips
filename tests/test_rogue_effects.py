@@ -341,6 +341,22 @@ pulse(game)
 assert total(dot) == 140
 print("ok periodic Forever scans preserve learned/AP-adjusted bleed ticks instead of replacing them with base damage")
 
+# A scan that CAN read the aura tooltip must not downgrade a learned bleed to a prediction:
+# the learned ticks stay and keep matching the combat log (OFF-1 follow-up).
+rt, game, dot = setup(False)
+cast(game, 703)
+game.Advance(3)
+game.Fire("UNIT_COMBAT", "target", "WOUND", "", 28, 1)
+assert total(dot) == 140 and dot.db.ticks[703] == 28
+game.effect("target", 703, 501, 18, game.GetTime() + 15, 1, "Causing 24 damage every 3 sec.")
+game.Advance(0.1)
+pulse(game)  # the periodic scan reads the aura (+0.3s)
+assert total(dot) == 140, total(dot)  # old code replaced the learned dot with a prediction here
+game.Advance(2.6)
+game.Fire("UNIT_COMBAT", "target", "WOUND", "", 28, 1)
+assert total(dot) == 112, total(dot)  # the next learned tick matched: 4 ticks of 28 remain
+print("ok a readable aura tooltip keeps a learned bleed matching its ticks")
+
 rt, game, dot = setup(False)
 aura = add(rt, game, 2818, expiration=game.SECRET)
 for _ in range(10): pulse(game)

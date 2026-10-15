@@ -18,6 +18,8 @@ Locales.en = {
   DOT = "Damage over time",
   HEAL = "Healing",
   HOT = "Healing over time",
+  HEAL_PERCENT = "Healing: %s%% of maximum health",
+  HEAL_PERCENT_OVER = "Healing: %s%% of maximum health over %s sec",
   OVER = "%s in %s sec",
   ESTIMATE = "incl. +%s from spell power, estimate",
   REDUCE_DAMAGE = "Enemy damage: %s",
@@ -156,6 +158,8 @@ Locales.de = {
   DOT = "Schaden \195\188ber Zeit",
   HEAL = "Heilung",
   HOT = "Heilung \195\188ber Zeit",
+  HEAL_PERCENT = "Heilung: %s %% der maximalen Gesundheit",
+  HEAL_PERCENT_OVER = "Heilung: %s %% der maximalen Gesundheit \195\188ber %s Sek.",
   OVER = "%s in %s Sek.",
   ESTIMATE = "inkl. +%s durch Zaubermacht, gesch\195\164tzt",
   REDUCE_DAMAGE = "Schaden des Gegners: %s",
@@ -550,6 +554,15 @@ function Format.TooltipLines(view, L)
   if view.dot then add(L.DOT, periodic(view.dot), view.dot.added, DAMAGE_COLOR) end
   if view.heal then add(L.HEAL, rangeText(view.heal, L), view.heal.added, HEAL_COLOR) end
   if view.hot then add(L.HOT, periodic(view.hot), view.hot.added, HEAL_COLOR) end
+  if view.healPercent then
+    -- Maximum health is hidden (combat): keep the share the description states -- the action
+    -- button says "% HP" the same way. Without this branch the tooltip showed no SDI line
+    -- exactly when the percentage fallback was the only readable number.
+    local pct = tostring(view.healPercent)
+    local text = view.duration and string.format(L.HEAL_PERCENT_OVER, pct, Format.Seconds(view.duration, L))
+      or string.format(L.HEAL_PERCENT, pct)
+    lines[#lines + 1] = { text, HEAL_COLOR[1], HEAL_COLOR[2], HEAL_COLOR[3] }
+  end
   if view.hp5 then
     -- Demon Skin's regeneration: health per 5 sec, green like healing
     lines[#lines + 1] = { "+" .. Format.Thousands(view.hp5, L) .. " " .. (L.HP5 or "HP/5s"), HEAL_COLOR[1], HEAL_COLOR[2], HEAL_COLOR[3] }

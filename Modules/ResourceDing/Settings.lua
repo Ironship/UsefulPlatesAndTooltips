@@ -347,6 +347,7 @@ function updateLivePreview()
         dot.overlay:SetMinMaxValues(MAX_POINTS - 1, MAX_POINTS)
         dot.overlay:SetValue(points)
       end
+      if dot.glow and dot.glow.SetShown then dot.glow:SetShown(i == points) end
       Addon.PaintCircleDot(dot, style, i, MAX_POINTS, points >= MAX_POINTS)
     end
   end
@@ -389,40 +390,15 @@ local function buildLivePreview(pane)
   titleRule:SetPoint("TOPLEFT", 8, -34)
   titleRule:SetPoint("TOPRIGHT", -8, -34)
 
-  local scene = CreateFrame("Frame", nil, pane, "BackdropTemplate")
-  scene:SetSize(PANE_WIDTH - 24, 180)
+  -- The scene and the mock enemy nameplate come from the shared preview kit (built from the
+  -- client's own atlases), so the dots sit under a plate that reads like the game's own HUD.
+  local scene = BIT.UI.Preview.Scene(pane, PANE_WIDTH - 24, 180)
   scene:SetPoint("TOP", pane, "TOP", 0, -44)
-  setBackdrop(scene, 0.02, 1)
-  local ground = scene:CreateTexture(nil, "BACKGROUND", nil, -8)
-  ground:SetPoint("TOPLEFT", 1, -1)
-  ground:SetPoint("BOTTOMRIGHT", -1, 1)
-  ground:SetTexture("Interface\\FrameGeneral\\UI-Background-Rock")
-  ground:SetTexCoord(0, 0.26, 0, 0.18)
-  ground:SetVertexColor(0.75, 0.8, 0.75)
-
-  local name = scene:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  name:SetPoint("TOP", scene, "TOP", 0, -8)
-  name:SetText("Murloc Raider")
-  name:SetTextColor(1, 0.2, 0.2)
-
-  local healthBar = CreateFrame("StatusBar", nil, scene)
-  healthBar:SetSize(200, 20)
-  healthBar:SetPoint("TOP", scene, "TOP", 0, -46)
-  healthBar:SetMinMaxValues(0, 100)
-  healthBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-  healthBar:SetStatusBarColor(0.1, 0.8, 0.1)
-  healthBar:SetValue(62)
-  local healthBack = healthBar:CreateTexture(nil, "BACKGROUND")
-  healthBack:SetAllPoints()
-  healthBack:SetColorTexture(0.25, 0.08, 0.08, 1)
-  local healthPercent = healthBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  healthPercent:SetPoint("LEFT", healthBar, "LEFT", 3, 0)
-  healthPercent:SetText("62%")
-  local healthValue = healthBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  healthValue:SetPoint("RIGHT", healthBar, "RIGHT", -3, 0)
-  healthValue:SetText("88")
-
-  scene.healthBar = healthBar
+  local plate = BIT.UI.Preview.Nameplate(scene, { width = 190, health = 62 })
+  -- The plate's bar sits 17..30 px below the plate top: seat it where the old flat bar was,
+  -- so the dots and diamonds hang into the scene exactly as before.
+  plate.frame:SetPoint("TOP", scene, "TOP", 0, -29)
+  scene.healthBar = plate.bar
   scene.dotsRow = CreateFrame("Frame", nil, scene)
   scene.shardsRow = CreateFrame("Frame", nil, scene)
   scene.dots, scene.diamonds = {}, {}
@@ -826,6 +802,7 @@ local function renderResourceDingPreview(scene, style)
         dot.overlay:SetMinMaxValues(spec.total - 1, spec.total)
         dot.overlay:SetValue(spec.count)
       end
+      if dot.glow and dot.glow.SetShown then dot.glow:SetShown(i == spec.count) end
       Addon.PaintCircleDot(dot, style, i, spec.total, full)
     end
   end
