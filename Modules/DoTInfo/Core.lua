@@ -380,13 +380,23 @@ end
 
 local function castRecipient(castGUID, spellID)
     local sent = ns._pendingForCast(castGUID, spellID)
-    if sent then return sent.key end
+    if sent then
+        if sent.key then return sent.key end
+        -- A NAMED recipient that stayed unknown must not move to whatever is targeted now
+        -- (DOT-1). Only dynamic targeting -- SENT carried no target name at all, the client
+        -- picks the victim itself -- lands on the mob it picked by the time of SUCCEEDED.
+        if not sent.dynamic then return end
+        return unitKey("target") or unitKey("softenemy")
+    end
     if ns.Retail then return end -- No SENT snapshot can prove a delayed event's recipient.
     return unitKey("target") or unitKey("softenemy")
 end
 
 local function outcomeRecipient()
-    if pendingCast then return pendingCast.key end
+    if pendingCast then
+        if pendingCast.key then return pendingCast.key end
+        if not pendingCast.dynamic then return end
+    end
     return unitKey("target") or unitKey("softenemy")
 end
 
@@ -486,10 +496,21 @@ local function onCastSent(spellID, castGUID, targetName)
     -- the (maybe tabbed-away) current target. Never cleared by target change.
     -- Action targeting can have only softenemy. Hard targets keep precedence; unitKey only uses
     -- a soft target whose own GUID or matching nameplate's GUID can be read safely.
-    local recipient
+    local recipient, dynamicTargeting
     if ns.Retail then recipient = ns.Retail.Recipient(targetName)
-    else recipient = unitKey("target") or unitKey("softenemy") end
-    pendingCast = { key = recipient, spellID = spellID,
+    else
+        recipient = unitKey("target") or unitKey("softenemy")
+        -- Forever's dynamic targeting: the client picks the victim itself, so SENT names no
+        -- target at all. Such a cast may land on the current target at SUCCEEDED; a named but
+        -- unreadable recipient must never (DOT-1).
+        dynamicTargeting = targetName == nil or (not isSecret(targetName) and targetName == "")
+        local shown = targetName
+        if isSecret(targetName) then shown = "<secret>"
+        elseif shown == nil then shown = "nil"
+        elseif type(shown) ~= "string" then shown = "<" .. type(shown) .. ">" end
+        trace("SENT id " .. tostring(spellID) .. " target=" .. tostring(shown) .. " dynamic=" .. tostring(dynamicTargeting))
+    end
+    pendingCast = { key = recipient, dynamic = dynamicTargeting, spellID = spellID,
         castGUID = not isSecret(castGUID) and castGUID or nil, sentAt = GetTime() }
     if ns.Retail and type(pendingCast.castGUID) == "string" then ns._retailPending[pendingCast.castGUID] = pendingCast end
     comboAtSend = nil

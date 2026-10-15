@@ -275,7 +275,7 @@ def chat(G):
 # ---------------------------------------------------------------------------------------------
 print("-- every module on")
 rt, G, BIT, files = load()
-check("the .toc lists the core and seven modules' files", len(files), 29)
+check("the .toc lists the core and seven modules' files", len(files), 30)
 check("the tabs are in the order the files load", list(BIT.order.values()),
       ["SpellDamageInfo", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HunterRangeFinder"])
 G.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
@@ -1094,11 +1094,13 @@ check("  its tab says how to switch it on instead of building settings", BIT._pa
 
 # ---------------------------------------------------------------------------------------------
 print("-- StatsInfo and Range switched off")
-rt, G, BIT, _ = load(saved="UsefulPlatesAndTooltipsDB = { modules = { StatsInfo = { enabled = false }, Range = { enabled = false } } }")
+rt, G, BIT, _ = load(saved="UsefulPlatesAndTooltipsDB = { modules = { StatsInfo = { enabled = false }, Range = { enabled = false }, SpellDamageInfo = { enabled = false } } }")
 G.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
 G.Fire("PLAYER_LOGIN")
 check("both are off", (BIT.state["StatsInfo"], BIT.state["Range"]), ("off", "off"))
-check("  StatsInfo hooked no tooltip", G.GameTooltip.scripts.OnTooltipSetItem, None)
+# SpellDamageInfo is off here too: since the poison item lines it is another module that
+# hooks OnTooltipSetItem, so only all-hooks-absent proves the off modules left it alone.
+check("  the off modules hooked no tooltip", G.GameTooltip.scripts.OnTooltipSetItem, None)
 check("  Range made no icon and no updater", (BIT.modules["Range"]._icon(), BIT.modules["Range"]._driver()), (None, None))
 check("  nor hooked the action bar", G.hooks["ActionButton_UpdateRangeIndicator"], None)
 

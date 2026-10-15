@@ -405,7 +405,10 @@ end
 
 function M.BagVerdictState(link)
   if type(link) ~= "string" or isSecret(link) then return "dead" end
-  local hit = verdictMemo[link]
+  -- Only remembered while the marker subsystem runs: its invalidation events (the revision
+  -- bumps) are registered with it, while world/quest markers call this function even when
+  -- the bags themselves are off -- a hit from a stale revision would freeze their arrows.
+  local hit = active and verdictMemo[link]
   if hit then return "ok", hit end
   local r = itemReadiness(link)
   if r ~= "ok" then return r end
@@ -454,7 +457,7 @@ function M.BagVerdictState(link)
   else
     answer = { verdict = "none" }
   end
-  rememberVerdict(link, answer)
+  if active then rememberVerdict(link, answer) end
   return "ok", answer
 end
 
@@ -856,10 +859,21 @@ end
 -- arrow can be pinned to one gate of the live widget path instead of guessed at.
 widgetProbes = {}
 M._widgetProbes = widgetProbes -- test seam, not part of the addon's interface
+-- Capped like the other diagnostics memos: one entry per item id ever seen would grow for
+-- the whole session; when full it starts over (the probe prints totals since the last reload).
+local widgetProbeCount = 0
 local function noteWidget(id, outcome, extra)
   if type(id) ~= "number" or isSecret(id) then return end
   local d = widgetProbes[id]
-  if not d then d = {} widgetProbes[id] = d end
+  if not d then
+    if widgetProbeCount >= 1024 then
+      for k in pairs(widgetProbes) do widgetProbes[k] = nil end
+      widgetProbeCount = 0
+    end
+    d = {}
+    widgetProbes[id] = d
+    widgetProbeCount = widgetProbeCount + 1
+  end
   d[outcome] = (d[outcome] or 0) + 1
   d.last = outcome
   if type(extra) == "table" then for k, v in pairs(extra) do d[k] = v end end

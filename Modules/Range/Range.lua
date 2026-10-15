@@ -753,43 +753,17 @@ local function buildLivePreview(pane)
   titleRule:SetPoint("TOPRIGHT", -8, -34)
 
   -- A mock nameplate of an enemy: the mark goes above its health bar, where the real one goes.
-  local scene = CreateFrame("Frame", nil, pane, "BackdropTemplate")
-  scene:SetSize(CARD_WIDTH, 184)
+  -- The shared preview kit draws the plate from the client's own atlases, so this reads like
+  -- the DoT preview and the game's HUD alike.
+  local scene = BIT.UI.Preview.Scene(pane, CARD_WIDTH, 184)
   scene:SetPoint("TOP", pane, "TOP", 0, -44)
-  setBackdrop(scene, 0.07)
-  local ground = scene:CreateTexture(nil, "BACKGROUND")
-  ground:SetPoint("TOPLEFT", 1, -1)
-  ground:SetPoint("BOTTOMRIGHT", -1, 1)
-  ground:SetTexture("Interface\\FrameGeneral\\UI-Background-Rock")
-  ground:SetTexCoord(0, 0.26, 0, 0.18) -- about 1:1 texels on the card
-  ground:SetVertexColor(0.75, 0.8, 0.75)
-
-  local plate = CreateFrame("Frame", nil, scene)
-  plate:SetSize(190, 36)
-  plate:SetPoint("BOTTOM", scene, "BOTTOM", 0, 12)
-  local bar = CreateFrame("StatusBar", nil, plate)
-  bar:SetSize(133, 13)
-  bar:SetPoint("BOTTOMLEFT", plate, "BOTTOMLEFT", 12, 6)
-  bar:SetMinMaxValues(0, 100)
-  bar:SetValue(72)
-  bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-  bar:SetStatusBarColor(0.85, 0.1, 0.1) -- hostile
-  local back = plate:CreateTexture(nil, "BACKGROUND")
-  back:SetPoint("TOPLEFT", bar, "TOPLEFT", -2, 3)
-  back:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 6, -6)
-  back:SetColorTexture(0.1, 0.02, 0.02, 1)
-  local name = plate:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  name:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", 0, 5)
-  name:SetText("Murloc Raider")
-  name:SetTextColor(1, 0.13, 0.13) -- hostile
-  local level = plate:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  level:SetPoint("LEFT", bar, "RIGHT", 6, 0)
-  level:SetText("12")
-  level:SetTextColor(1, 0.82, 0)
+  local plate = BIT.UI.Preview.Nameplate(scene, { width = 190, health = 72 })
+  plate.frame:SetPoint("BOTTOM", scene, "BOTTOM", 0, 12)
+  local bar = plate.bar
 
   -- The mark, painted above the mock nameplate as the real one is above the real one.
   local mark = CreateFrame("Frame", nil, scene)
-  mark:SetFrameLevel(plate:GetFrameLevel() + 10)
+  mark:SetFrameLevel(plate.frame:GetFrameLevel() + 10)
   mark.texture = mark:CreateTexture(nil, "OVERLAY")
   mark.texture:SetAllPoints()
   mark.texture:SetTexture(ICON["in"])

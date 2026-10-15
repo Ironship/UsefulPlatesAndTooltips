@@ -229,8 +229,13 @@ function L.parseDot(desc, comboPoints)
             -- verursacht ... 130 Heiligschaden"), or each attack (Forever's Seal of Fury: "30 Sek. lang mit
             -- göttlichem Furor, wodurch jeder Nahkampfangriff zusätzlich 14 Heiligschaden verursacht").
             local between = amount and clause:sub(1, at - 1)
-            if amount and not between:find("Sekunde") and not between:find("%%") and not between:find("[Jj]ede")
-                and (not best or start > best) then
+            -- A stat amount introduced by "um" before the damage makes the duration belong to
+            -- that line, not to a DoT: "Verringert 10 Sek. lang die Rüstung des Ziels um 200
+            -- und verursacht 50 Schaden." (OFF-2 follow-up). Plain counts stay readable --
+            -- Arcane Missiles names "5 Wellen ... 2.189 Arkanschaden", Explosive Trap
+            -- "10 Metern, indem ... 150 Feuerschaden" -- so this only rejects " um N".
+            if amount and not between:find(" um %d") and not between:find("Sekunde") and not between:find("%%")
+                and not between:find("[Jj]ede") and (not best or start > best) then
                 best, total, school, duration = start, amount, amountSchool, tonumber(secs)
             end
         end

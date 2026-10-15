@@ -132,6 +132,12 @@ local function describe(unit, aura, filtered)
     if currentTotal then
         -- The aura tooltip already describes its current stacks/scaling; never multiply it again.
         total, duration, interval = currentTotal, currentDuration, currentInterval
+        -- A bleed that already matched real ticks keeps its learned (AP-adjusted) size: the
+        -- description-derived reading would drop it to a prediction (ObserveRogueAura's
+        -- non-keepTicks path) and the remaining ticks would stop matching. A dot with no
+        -- tick yet (a fresh cast) takes the aura's reading as before.
+        if previous and not retail and not previous.predictionOnly
+            and (previous.ticksSeen or 0) > 0 then keepTicks = true end
     elseif config.dynamic then
         return nil, "current effect damage unavailable" -- Talent percentages are not current periodic damage.
     elseif config.stacked then

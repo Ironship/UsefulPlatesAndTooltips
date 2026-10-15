@@ -333,3 +333,14 @@ assert total(dot) == 700
 game.Fire("UNIT_COMBAT", "nameplate1", "WOUND", "", 100, 32)
 assert total(dot) == 600  # Another genuine tick from the original token can feed the other DoT.
 print("ok interleaved cross-token duplicates stay rejected while identical real ticks both count")
+
+# Dynamic targeting: the client picks the victim itself, so SENT has no target yet and no
+# recipient can be remembered. The cast must land on the target the client just acquired
+# instead of vanishing as "no target" (OFF-1 follow-up).
+rt, game, dot = fight(hard=False)
+game.Fire("UNIT_SPELLCAST_SENT", "player", "", "Cast-Dyn", 172)
+rt.execute("units.target = mobA; target = { hostile = true }")  # the client's own pick
+game.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-Dyn", 172)
+assert total(dot) == 400, total(dot)
+assert total(dot, "nameplate2") == 0
+print("ok dynamic targeting lands the cast on the target the client just picked")

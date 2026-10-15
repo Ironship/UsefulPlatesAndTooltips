@@ -462,11 +462,17 @@ function Style.Resolve(moduleName, legacy)
     local container = CreateFrame("Frame", nil, parent)
     container.markers = {}
     count = tonumber(count) or 0
-    local holderTemplate
-    if type(BackdropTemplateMixin) == "table" then
-      local ok = pcall(CreateFrame, "Frame", nil, nil, "BackdropTemplate")
-      if ok then holderTemplate = "BackdropTemplate" end
+    -- The template probe runs once per session, not once per panel: it used to create and
+    -- throw away a real frame on every call (each appearance panel and every cached scene).
+    if Style._holderTemplate == nil then
+      local found = false
+      if type(BackdropTemplateMixin) == "table" then
+        local ok = pcall(CreateFrame, "Frame", nil, nil, "BackdropTemplate")
+        if ok then found = "BackdropTemplate" end
+      end
+      Style._holderTemplate = found
     end
+    local holderTemplate = Style._holderTemplate or nil
     for i = 1, count do
       local holder = CreateFrame("Frame", nil, container, holderTemplate)
       local fill = holder:CreateTexture(nil, "ARTWORK")
@@ -845,7 +851,14 @@ local function openNativeColorPicker(commit, r, g, b, a, hasOpacity, cancel)
     swatchFunc = changed,
     opacityFunc = changed,
     cancelFunc = function(previous)
-      if previous then cancel(previous.r, previous.g, previous.b, previous.a) end
+      if previous then
+        -- Blizzard hands back the setup table, which carries the alpha as "opacity"; reading
+        -- previous.a alone dropped every translucent role color back to opaque on Cancel.
+        local a = previous.opacity
+        if type(a) ~= "number" then a = previous.a end
+        if type(a) ~= "number" then a = 1 end
+        cancel(previous.r, previous.g, previous.b, a)
+      end
     end,
   })
   initializing = false
