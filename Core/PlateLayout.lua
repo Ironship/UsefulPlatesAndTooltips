@@ -19,9 +19,60 @@ Plate.DOT_ROW_HEIGHT = 14
 Plate.SHARD_ROW_HEIGHT = 14
 Plate.SHIELD_EDGE = 4
 
+local function read(fn, ...)
+  if type(fn) ~= "function" then return end
+  local ok, value = pcall(fn, ...)
+  if ok and not (type(issecretvalue) == "function" and issecretvalue(value)) then return value end
+end
+
+-- EUI keeps Blizzard's frames alive but hidden, so follow the profile's active source.
+function Plate.UnitFrame(unit)
+  local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
+  local eui = type(modules) == "table" and modules.EllesmereUIUnitFrames
+  local source = type(eui) == "table" and read(eui.GetUnitFrameSource, unit)
+  if source == "hidden" then return end
+  local custom = _G["EllesmereUIUnitFrames_" .. (unit == "player" and "Player" or "Target")]
+  if source == "eui" or (source ~= "blizzard" and type(custom) == "table"
+      and read(custom.IsVisible, custom) == true) then
+    if type(custom) ~= "table" or read(custom.IsForbidden, custom) == true then return end
+    local bar, portrait = custom.Health, custom.Portrait
+    if type(bar) ~= "table" or read(bar.IsForbidden, bar) == true then return end
+    if type(portrait) ~= "table" or read(portrait.IsVisible, portrait) ~= true then portrait = nil end
+    return custom, bar, portrait
+  end
+  local frame
+  if unit == "player" then frame = PlayerFrame else frame = TargetFrame end
+  local content = type(frame) == "table" and (unit == "player" and frame.PlayerFrameContent or frame.TargetFrameContent)
+  local main = type(content) == "table" and (unit == "player" and content.PlayerFrameContentMain or content.TargetFrameContentMain)
+  local container = type(main) == "table" and main.HealthBarsContainer
+  local bar = type(container) == "table" and container.HealthBar
+  if type(bar) ~= "table" then bar = type(main) == "table" and main.HealthBar end
+  if type(bar) ~= "table" then bar = type(frame) == "table" and frame.HealthBar end
+  if type(bar) ~= "table" then bar = type(frame) == "table" and frame.healthbar end
+  if type(bar) ~= "table" then bar = _G[unit == "player" and "PlayerFrameHealthBar" or "TargetFrameHealthBar"] end
+  local portraitHost = type(frame) == "table" and frame.TargetFrameContainer
+  local portrait = type(portraitHost) == "table" and portraitHost.Portrait
+  if type(portrait) ~= "table" then portrait = _G[unit == "player" and "PlayerFramePortrait" or "TargetFramePortrait"] end
+  if type(portrait) ~= "table" then portrait = type(frame) == "table" and frame.portrait end
+  return frame, bar, portrait
+end
+
 -- Platynator reparents Blizzard's UnitFrame to a hidden host; use its active health widget.
 function Plate.HealthBar(plate)
   if type(plate) ~= "table" then return nil, "no nameplate" end
+  if type(EllesmereNameplates_NS) == "table" then
+    local children = { pcall(plate.GetChildren, plate) }
+    if children[1] then
+      for i = 2, #children do
+        local ok, bar = pcall(function()
+          local child = children[i]
+          if child.nameplate == plate and type(child.health) == "table" and child:IsVisible()
+            and child.health:IsVisible() and not child.health:IsForbidden() then return child.health end
+        end)
+        if ok and type(bar) == "table" then return bar, "EllesmereUINameplates.health" end
+      end
+    end
+  end
   if type(Platynator) == "table" then
     local children = { pcall(plate.GetChildren, plate) }
     if children[1] then
@@ -44,6 +95,11 @@ function Plate.HealthBar(plate)
   local unitFrame = plate.UnitFrame
   if type(unitFrame) ~= "table" then return nil, "no UnitFrame" end
   local container = unitFrame.HealthBarsContainer
+  if type(EllesmereNameplates_NS) == "table" then
+    local bar = (type(container) == "table" and (container.healthBar or container.HealthBar))
+      or unitFrame.healthBar or unitFrame.HealthBar
+    if type(bar) ~= "table" or read(bar.IsVisible, bar) ~= true then return nil, "EllesmereUI: no visible health bar" end
+  end
   if type(container) == "table" then
     if type(container.healthBar) == "table" then return container.healthBar, "UnitFrame.HealthBarsContainer.healthBar" end
     if type(container.HealthBar) == "table" then return container.HealthBar, "UnitFrame.HealthBarsContainer.HealthBar" end

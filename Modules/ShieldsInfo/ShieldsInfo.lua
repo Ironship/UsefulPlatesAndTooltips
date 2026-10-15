@@ -252,6 +252,7 @@ local function overlayFor(healthBar)
   if not usableBar(healthBar) then return nil end
   local o = overlays[healthBar]
   if o then return o end
+  if ask(InCombatLockdown) == true and ask(healthBar.IsProtected, healthBar) == true then return nil end
   local ok, bar = pcall(function()
     local b = CreateFrame("StatusBar", nil, healthBar)
     b:SetAllPoints(healthBar)
@@ -328,6 +329,7 @@ end
 -- parentKey="HealthBar"), then the legacy small key, then the global the vanilla
 -- client keeps instead of a frame field.
 local function playerBar()
+  if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("player")) end
   local pf = _G.PlayerFrame
   if type(pf) == "table" then
   if type(pf.PlayerFrameContent) == "table"
@@ -352,6 +354,7 @@ end
 -- then the legacy small key, then the global the vanilla client (no parentKey) keeps
 -- instead of a frame field.
 local function targetBar()
+  if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("target")) end
   local tf = _G.TargetFrame
   if type(tf) == "table" then
   if type(tf.TargetFrameContent) == "table"
@@ -503,6 +506,23 @@ local function partyBars()
     poolFrames(pf.PartyMemberFramePool, bars)
   end
   compactBars(bars)
+  local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
+  local eui = type(modules) == "table" and modules.EllesmereUIRaidFrames
+  local internals = type(eui) == "table" and eui._internals
+  local members = type(internals) == "table" and internals.unitToButton
+  if type(members) == "table" then
+    for unit, frame in pairs(members) do
+      if not isSecret(unit) and type(unit) == "string" and (unit == "player"
+          or unit:match("^party%d+$") or unit:match("^raid%d+$")) then
+        local data = ask(eui.GetFFD, frame)
+        local current = type(frame) == "table" and ask(frame.GetAttribute, frame, "unit")
+        if current == unit and type(data) == "table" and type(data.health) == "table"
+            and ask(frame.IsVisible, frame) == true then
+          bars[#bars + 1] = { unit = unit, bar = data.health }
+        end
+      end
+    end
+  end
   local seen, out = {}, {}
   for _, b in ipairs(bars) do
     if not seen[b.bar] then

@@ -57,8 +57,7 @@ end
 
 local function healthBarOf(plate)
   if type(BIT.Plate) == "table" and type(BIT.Plate.HealthBar) == "function" then
-    local bar = BIT.Plate.HealthBar(plate)
-    return type(bar) == "table" and bar or plate
+    return BIT.Plate.HealthBar(plate)
   end
   local unitFrame = type(plate.UnitFrame) == "table" and plate.UnitFrame or nil
   local container = unitFrame and type(unitFrame.HealthBarsContainer) == "table"
@@ -112,7 +111,9 @@ function Addon.RefreshShards()
   local shardOffset = tonumber(Addon.db.shardOffset) or -60
   if shardOffset ~= shardOffset then shardOffset = -60 end
   if shardOffset < -80 then shardOffset = -80 elseif shardOffset > 30 then shardOffset = 30 end
-  row:SetPoint("TOP", healthBarOf(plate), "BOTTOM", 0, -shardOffset)
+  local healthBar = healthBarOf(plate)
+  if not healthBar then row:Hide(); return end
+  row:SetPoint("TOP", healthBar, "BOTTOM", 0, -shardOffset)
   row:Show()
 end
 

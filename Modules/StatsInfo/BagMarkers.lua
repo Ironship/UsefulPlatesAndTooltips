@@ -1046,6 +1046,72 @@ local function linkOf(bag, slot)
   return nil, itemCount
 end
 
+-- EUI's public painter runs on secure item buttons: keep all state on our own frames/tables.
+local euiSlots = setmetatable({}, { __mode = "k" })
+local euiRegistered
+local function paintEUI(button, record)
+  local marker = record.marker
+  local link, count = linkOf(record.bag, record.slot)
+  local verdict
+  if active and M.settings and M.settings.bagMarkers and BIT.IsSwitchedOn("StatsInfo") and type(record.link) == "string"
+      and ask(button.IsVisible, button) == true and link == record.link and count ~= 0 then
+    local state, answer = M.BagVerdictState(link)
+    if state == "ok" then verdict = answer end
+  end
+  if not verdict or verdict.verdict == "none" then
+    if marker then M.PaintVerdictMarker(marker, nil) end
+    return
+  end
+  if not marker then
+    if ask(InCombatLockdown) == true then return end
+    marker = CreateFrame("Frame", nil, record.host)
+    marker:EnableMouse(false)
+    marker:SetSize(MARKER_W, MARKER_H)
+    marker:SetPoint("TOPRIGHT", record.host, "TOPRIGHT", MARKER_DX, MARKER_DY)
+    marker:SetFrameLevel((ask(record.host.GetFrameLevel, record.host) or 1) + 1)
+    record.marker = marker
+  end
+  M.PaintVerdictMarker(marker, verdict)
+end
+
+local function euiOnUpdate(button, data)
+  if isSecret(button) or type(button) ~= "table" or isSecret(data) then return end
+  local record = euiSlots[button]
+  local host = rawget(button, "_textOverlay")
+  if type(data) ~= "table" or isSecret(data.bag) or isSecret(data.slot) or isSecret(data.itemLink)
+      or type(data.bag) ~= "number" or type(data.slot) ~= "number" or data.slot < 1
+      or type(data.itemLink) ~= "string" or isSecret(host) or type(host) ~= "table" then
+    if record and record.marker then M.PaintVerdictMarker(record.marker, nil) end
+    if record then record.link = nil end
+    return
+  end
+  if record and record.host ~= host then
+    if record.marker then M.PaintVerdictMarker(record.marker, nil) end
+    record = nil
+  end
+  record = record or { host = host }
+  record.bag, record.slot, record.link = data.bag, data.slot, data.itemLink
+  euiSlots[button] = record
+  paintEUI(button, record)
+end
+
+local function registerEUI()
+  local api = EUI_Bags
+  if not active or euiRegistered == api or type(api) ~= "table"
+      or type(api.RegisterItemOverlayIcon) ~= "function" then return end
+  local ok = pcall(api.RegisterItemOverlayIcon, WIDGET_ID, euiOnUpdate)
+  if not ok then return end
+  euiRegistered = api
+  if ask(api.IsShown, api) == true and ask(InCombatLockdown) ~= true then ask(api.RefreshInventory, api) end
+end
+
+local function unregisterEUI()
+  if euiRegistered then ask(euiRegistered.UnregisterItemOverlayIcon, WIDGET_ID); euiRegistered = nil end
+  for _, record in pairs(euiSlots) do
+    if record.marker then M.PaintVerdictMarker(record.marker, nil) end
+  end
+end
+
 -- The per-slot memo (Pawn-style, clean-room: the pattern, not the code): a verdict is
 -- recomputed only when the slot's link changed, or when the revision counter grew -- a
 -- settings change, a gear swap or a level-up, i.e. anything that can give an UNCHANGED
@@ -1091,6 +1157,7 @@ end
 moduleOn = function() return BIT.IsSwitchedOn("StatsInfo") end
 
 local function refreshVisible()
+  for button, record in pairs(euiSlots) do paintEUI(button, record) end
   -- `active` first: DisableBagMarkers must stop the drawing at once even when the setting
   -- itself is still on (the live module switch), or the very refresh it calls repaints.
   if not active or not (M.settings and M.settings.bagMarkers)
@@ -1275,6 +1342,7 @@ end
 function M.EnableBagMarkers()
   if not (M.settings and M.settings.bagMarkers == true) then
     active = false
+    unregisterEUI()
     clearEvents()
     hideAll()
     return
@@ -1283,12 +1351,14 @@ function M.EnableBagMarkers()
   installHooks()
   ensureEvents()
   registerBaganator()
+  registerEUI()
   M.RefreshBags(true)
   requestBaganatorRefresh()
 end
 
 function M.DisableBagMarkers()
   active = false
+  unregisterEUI()
   clearEvents()
   for k in pairs(pendingCreate) do pendingCreate[k] = nil end
   for _, map in ipairs({ wanted, outstanding, arrived, waits }) do
@@ -1302,6 +1372,7 @@ loader:RegisterEvent("ADDON_LOADED")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function(self, event, arg1)
   if event == "ADDON_LOADED" then
+    if arg1 == "EllesmereUIBags" then registerEUI(); return end
     if arg1 == "Baganator" then
       -- the user enabled Baganator later; Baganator owns the bag grid now
       registerBaganator()
@@ -1318,6 +1389,7 @@ loader:SetScript("OnEvent", function(self, event, arg1)
     installHooks()
     ensureEvents()
     registerBaganator()
+    registerEUI()
     return
   end
   if not active then return end

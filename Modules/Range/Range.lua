@@ -212,14 +212,12 @@ end
 local function place(plate)
   icon:ClearAllPoints()
   if plate then
-    local unitFrame = type(plate.UnitFrame) == "table" and plate.UnitFrame or nil
-    local bar = unitFrame and (unitFrame.healthBar or (type(unitFrame.HealthBarsContainer) == "table"
-      and unitFrame.HealthBarsContainer.healthBar)) or nil
-    if type(bar) ~= "table" then bar = nil end
+    local bar = BIT.Plate.HealthBar(plate)
+    if not bar then return false end
     icon:SetParent(plate)
     icon:SetPoint("BOTTOM", bar or plate, "TOP", 0, settings.offset)
   else
-    local frame = _G.TargetFrame
+    local frame = BIT.Plate.UnitFrame("target")
     if not (settings.besideFrame and type(frame) == "table") then return false end
     icon:SetParent(UIParent)
     icon:SetPoint("LEFT", frame, "RIGHT", 2, 8)
