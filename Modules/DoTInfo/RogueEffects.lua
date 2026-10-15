@@ -189,8 +189,9 @@ local function observe(unit, aura, filtered, signal, seen)
 end
 
 local function scan(unit)
-    if not C_UnitAuras then report(unit, "aura API unavailable"); return end
+    local seen = {}
     local ok, reason = pcall(function()
+        if not C_UnitAuras then return "aura API unavailable" end
         local auras
         if type(C_UnitAuras.GetUnitAuras) == "function" then
             auras = C_UnitAuras.GetUnitAuras(unit, "HARMFUL|PLAYER")
@@ -203,14 +204,16 @@ local function scan(unit)
             end
         else return "aura API unavailable" end
         if not plain(auras, "table") then return "aura list hidden" end
-        local seen, unavailable = {}, nil
+        local unavailable
         for _, aura in ipairs(auras) do unavailable = observe(unit, aura, true, false, seen) or unavailable end
-        -- An incomplete/hidden scan cannot prove that an already-tracked effect was removed.
-        if not unavailable then ns.RemoveRogueAuras(unit, seen, nil, idleNPC(unit)) end
         return unavailable
     end)
     if not ok then reason = "aura access denied" end
     if reason then report(unit, reason) end
+    -- An idle, visible NPC has left combat even when Retail still restricts its aura list.
+    -- Keep effects actually read in a partial scan; an unavailable scan alone never clears PvP/combat.
+    local resetReason = idleNPC(unit) and (reason and "aura unavailable" or "aura absent") or nil
+    if not reason or resetReason then ns.RemoveRogueAuras(unit, seen, nil, resetReason) end
 end
 
 function E.Refresh(unitKey)

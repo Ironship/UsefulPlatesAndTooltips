@@ -107,7 +107,7 @@ class CombatReset(unittest.TestCase):
                 pulse(game)
                 self.assertEqual(total(dot), 0)
 
-    def test_hidden_or_denied_aura_scans_do_not_prove_reset(self):
+    def test_idle_npc_reset_clears_predictions_even_when_auras_are_unavailable(self):
         for retail in (False, True):
             for hidden in ("denyAuras=true", "C_UnitAuras.GetUnitAuras=function() return SECRET end",
                            "mobA.auras[999]={spellId=SECRET,sourceUnit='player',isHarmful=true}"):
@@ -117,7 +117,33 @@ class CombatReset(unittest.TestCase):
                     rt.execute(hidden)
                     game.Fire("PLAYER_REGEN_ENABLED")
                     pulse(game)
+                    self.assertEqual(total(dot), 0)
+                    self.assertFalse(dot.HasMarker("nameplate1"))
+                    self.assertTrue(any("idle NPC; aura unavailable" in line for line in dot.db.log.values()))
+
+    def test_denied_scan_preserves_pvp_and_npcs_still_in_combat(self):
+        for retail in (False, True):
+            for state in ("mobA.isPlayer=true; mobA.fighting=false", "mobA.fighting=true"):
+                with self.subTest(retail=retail, state=state):
+                    rt, game, dot = setup(retail)
+                    leave(rt, game, reset=False, event=False)
+                    rt.execute("denyAuras=true; " + state)
+                    game.Fire("PLAYER_REGEN_ENABLED")
+                    pulse(game)
                     self.assertGreater(total(dot), 0)
+
+    def test_partial_scan_keeps_readable_effects_on_idle_npc(self):
+        for retail in (False, True):
+            with self.subTest(retail=retail):
+                rt, game, dot = setup(retail)
+                add(rt, game, 703, instance=102, duration=18)
+                leave(rt, game, reset=False, event=False)
+                rt.execute("mobA.fighting=false; mobA.auras[101]=nil; "
+                           "mobA.auras[999]={spellId=SECRET,sourceUnit='player',isHarmful=true}")
+                game.Fire("PLAYER_REGEN_ENABLED")
+                pulse(game)
+                entries = dot.dotBreakdownForUnit("nameplate1")[0]
+                self.assertEqual({e.familyID for e in entries.values()}, {703})
 
     def test_unreadable_or_out_of_range_npc_state_preserves_cast_predictions(self):
         for retail in (False, True):
@@ -140,6 +166,20 @@ class CombatReset(unittest.TestCase):
                 pulse(game, 0.1)
                 self.assertGreater(total(dot), 0)
                 add(rt, game, 703, instance=102, duration=18)
+                rt.execute("combat=true; mobA.fighting=true")
+                pulse(game, 0.7)
+                self.assertGreater(total(dot), 0)
+
+    def test_denied_reset_scan_gives_new_casts_and_procs_time_to_enter_combat(self):
+        for retail in (False, True):
+            with self.subTest(retail=retail):
+                rt, game, dot = context["setup"](retail, WORLD + "combat=false; mobA.fighting=false")
+                cast(game, 703)
+                add(rt, game, 2818)
+                rt.execute("denyAuras=true")
+                pulse(game, 0.1)
+                self.assertEqual({e.familyID for e in dot.dotBreakdownForUnit("nameplate1")[0].values()},
+                                 {703, 2818})
                 rt.execute("combat=true; mobA.fighting=true")
                 pulse(game, 0.7)
                 self.assertGreater(total(dot), 0)
