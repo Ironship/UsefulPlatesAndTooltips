@@ -823,9 +823,7 @@ local scene -- the live preview's mock frame
 local refreshPreview -- built with the preview; repaints it from the settings and the style
 
 local function setBackdrop(frame, shade, alpha)
-  frame:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-  frame:SetBackdropColor(shade, shade, shade, alpha or 1)
-  frame:SetBackdropBorderColor(0.28, 0.28, 0.3, 1)
+  BIT.UI.Backdrop(frame, shade, alpha)
 end
 
 local function refreshControls()
@@ -879,8 +877,8 @@ local function makeRow(parent, labelText, opts)
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 1, 1)
-      GameTooltip:AddLine(opts.tooltip, nil, nil, nil, true)
+      GameTooltip:SetText(labelText, 1, 0.82, 0)
+      GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
       GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -905,6 +903,7 @@ local function checkbox(parent, key, labelText, opts)
   box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
   box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
   box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+  BIT.UI.SkinCheck(box)
   box:SetScript("OnClick", function(self)
     settings[key] = self:GetChecked() and true or false
     changed()
@@ -928,14 +927,10 @@ local function sliderRow(parent, labelText, min, max, step, get, set, opts)
   slider:SetMinMaxValues(min, max)
   slider:SetValueStep(step)
   pcall(function() slider:SetObeyStepOnDrag(true) end)
-  local track = slider:CreateTexture(nil, "BACKGROUND")
-  track:SetColorTexture(0.3, 0.3, 0.32, 1)
-  track:SetHeight(4)
-  track:SetPoint("LEFT")
-  track:SetPoint("RIGHT")
   slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
   local thumb = slider:GetThumbTexture()
   if thumb and thumb.SetSize then thumb:SetSize(18, 24) end
+  BIT.UI.SkinSlider(slider, 6)
   local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
   local function show(v)
@@ -972,7 +967,7 @@ local function pushButton(parent, text, width, onClick)
   button:SetSize(width, 22)
   button:SetText(text)
   button:SetScript("OnClick", onClick)
-  return button
+  return BIT.UI.SkinButton(button)
 end
 
 -- The width the text needs in the panel button's own font (GameFontNormal), measured on a hidden
@@ -1010,9 +1005,7 @@ local function openMenu(owner, list, current, pick)
     if not button then
       button = CreateFrame("Button", nil, menu)
       button:SetHeight(20)
-      local highlight = button:CreateTexture(nil, "HIGHLIGHT")
-      highlight:SetAllPoints()
-      highlight:SetColorTexture(1, 1, 1, 0.1)
+      BIT.UI.RoundHighlight(button)
       button.swatch = button:CreateTexture(nil, "ARTWORK")
       button.swatch:SetSize(12, 12)
       button.swatch:SetPoint("LEFT", 8, 0)
@@ -1122,10 +1115,10 @@ local function absorbColorRow(parent, labelText)
     tooltip = "The colour of the shield fill: the shared appearance's absorb colour. "
       .. "The Effects tab holds the full palette.",
   })
-  local button = CreateFrame("Button", nil, row, "BackdropTemplate")
+  local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
   button:SetSize(row.layout.control, 22)
   button:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  setBackdrop(button, 0.13)
+  BIT.UI.SkinButton(button)
   local swatch = button:CreateTexture(nil, "ARTWORK")
   swatch:SetSize(12, 12)
   swatch:SetPoint("LEFT", 8, 0)
@@ -1183,8 +1176,7 @@ local function selectTab(tab)
   for _, other in ipairs(tabs) do
     local selected = other == tab
     other.content:SetShown(selected)
-    other.button.text:SetTextColor(selected and 1 or 0.6, selected and 0.82 or 0.6, selected and 0 or 0.6)
-    other.button.underline:SetShown(selected)
+    BIT.UI.TabSelected(other.button, selected)
   end
 end
 
@@ -1214,16 +1206,12 @@ local function addTab(name, area)
   tab.content, tab.inner = content, inner
   content:Hide()
 
-  local button = CreateFrame("Button", nil, area)
+  local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
   button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   button.text:SetText(name)
   button:SetSize(button.text:GetStringWidth() + 20, 26)
   button.text:SetPoint("CENTER")
-  button.underline = button:CreateTexture(nil, "ARTWORK")
-  button.underline:SetColorTexture(1, 0.82, 0, 1)
-  button.underline:SetHeight(2)
-  button.underline:SetPoint("BOTTOMLEFT", 6, 0)
-  button.underline:SetPoint("BOTTOMRIGHT", -6, 0)
+  BIT.UI.SkinTabButton(button, button.text)
   local previous = tabs[#tabs]
   if previous then
     button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
@@ -1270,7 +1258,7 @@ end
 local function buildLivePreview(pane)
   local SIDE = 12
   local CARD_WIDTH = PREVIEW_WIDTH - 2 * SIDE
-  local RULE = { 0.28, 0.28, 0.3 }
+  local RULE = BIT.UI.COLOR.divider
   local SCENE_HEIGHT = 170
   local BAR_SEAT = 40 -- the bar's bottom edge, above the caption it hangs over the floor
 
@@ -1278,7 +1266,7 @@ local function buildLivePreview(pane)
   title:SetPoint("TOPLEFT", pane, "TOPLEFT", SIDE, -12)
   title:SetText("Live preview")
   local titleRule = pane:CreateTexture(nil, "ARTWORK")
-  titleRule:SetColorTexture(RULE[1], RULE[2], RULE[3], 1)
+  titleRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
   titleRule:SetHeight(1)
   titleRule:SetPoint("TOPLEFT", 8, -34)
   titleRule:SetPoint("TOPRIGHT", -8, -34)
@@ -1292,7 +1280,7 @@ local function buildLivePreview(pane)
     label:SetText(text)
     label:SetTextColor(0.85, 0.7, 0.3)
     local rule = pane:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(RULE[1], RULE[2], RULE[3], 1)
+    rule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
     rule:SetHeight(1)
     rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
     rule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
@@ -1385,7 +1373,7 @@ local function buildLivePreview(pane)
   hint:SetText("The preview paints a fixed sample with the same painter as the live overlays; "
     .. "no live absorb is read here.")
   local hintRule = pane:CreateTexture(nil, "ARTWORK")
-  hintRule:SetColorTexture(RULE[1], RULE[2], RULE[3], 1)
+  hintRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
   hintRule:SetHeight(1)
   hintRule:SetPoint("BOTTOMLEFT", hint, "TOPLEFT", 0, 8)
   hintRule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
@@ -1466,8 +1454,8 @@ local function buildTabs(area)
     end)
     b:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(entry.label, 1, 1, 1)
-      GameTooltip:AddLine(entry.hint, nil, nil, nil, true)
+      GameTooltip:SetText(entry.label, 1, 0.82, 0)
+      GameTooltip:AddLine(entry.hint, 1, 1, 1, true)
       GameTooltip:Show()
     end)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1559,7 +1547,7 @@ local function buildContent(parent)
     end
     button:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(preset.label .. " preset", 1, 1, 1)
+      GameTooltip:SetText(preset.label .. " preset", 1, 0.82, 0)
       GameTooltip:AddLine("Only the fill style and its opacity change; your frame switches stay.",
         nil, nil, nil, true)
       GameTooltip:Show()
@@ -1582,7 +1570,7 @@ local function buildContent(parent)
   setBackdrop(area, 0.09)
 
   local divider = area:CreateTexture(nil, "ARTWORK")
-  divider:SetColorTexture(0.28, 0.28, 0.3, 1)
+  divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))
   divider:SetHeight(1)
   divider:SetPoint("TOPLEFT", 8, -34)
   divider:SetPoint("TOPRIGHT", -8, -34)

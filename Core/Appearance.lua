@@ -418,7 +418,10 @@ function Style.Resolve(moduleName, legacy)
   ---------------------------------------------------------------------------------------------
 
   local WHITE = "Interface\\Buttons\\WHITE8X8"
-  local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask" -- white disc, same as ResourceDing combo dots
+  local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+  -- The glossy fill for round markers (the combo orbs' own art, shared): tinted by the role
+  -- colour, it reads the same as the Points orbs wherever a "dots" marker family is drawn.
+  local ORB = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\ComboOrb" -- white disc, same as ResourceDing combo dots
   local INACTIVE_ALPHA = 0.25 -- the dim level of inactive markers
 
   local function roleColor(style, role)
@@ -687,11 +690,10 @@ function Style.Resolve(moduleName, legacy)
             b:SetVertexColor(c[1], c[2], c[3], alpha)
           end
           local f = m.fill
-          if applyCircleMask(m, f, "dotFillMask") then
-            f:SetTexture(WHITE)
-          else
-            f:SetTexture(CIRCLE)
-          end
+          -- The orb art alone proves the round shape (its corners are transparent); the
+          -- circle mask, where the client has one, only sharpens the edge.
+          applyCircleMask(m, f, "dotFillMask")
+          f:SetTexture(ORB)
           if type(f.ClearAllPoints) == "function" then f:ClearAllPoints() end
           f:SetPoint("TOPLEFT", m, "TOPLEFT", borderPx, -borderPx)
           f:SetPoint("BOTTOMRIGHT", m, "BOTTOMRIGHT", -borderPx, borderPx)
@@ -951,6 +953,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     swatch:SetPoint("TOPLEFT", ax, ay)
     swatch.tex = swatch:CreateTexture(nil, "ARTWORK")
     swatch.tex:SetAllPoints()
+    BIT.UI.RoundBorder(swatch, { 0.6, 0.6, 0.6, 0.65 })
     local label = advanced:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     label:SetPoint("LEFT", swatch, "RIGHT", 4, 0)
     label:SetText(role)

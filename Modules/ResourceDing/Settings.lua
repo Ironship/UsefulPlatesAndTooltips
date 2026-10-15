@@ -3,7 +3,6 @@
 local _, BIT = ...
 local Addon = BIT.Module("ResourceDing")
 
-local WHITE = "Interface\\Buttons\\WHITE8X8"
 local PANE_WIDTH = 290
 local ROW_HEIGHT = 26
 local SETTINGS_LAYOUT = { label = 170, control = 200 }
@@ -27,10 +26,7 @@ local function clampNumber(value, low, high, fallback)
 end
 
 local function setBackdrop(frame, shade, alpha)
-  if type(frame.SetBackdrop) ~= "function" then return end
-  frame:SetBackdrop({ bgFile = WHITE, edgeFile = WHITE, edgeSize = 1 })
-  frame:SetBackdropColor(shade, shade, shade, alpha or 1)
-  frame:SetBackdropBorderColor(0.28, 0.28, 0.3, 1)
+  BIT.UI.Backdrop(frame, shade, alpha)
 end
 
 local function soundEntries()
@@ -103,8 +99,8 @@ local function makeRow(parent, labelText, opts)
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 1, 1)
-      GameTooltip:AddLine(opts.tooltip, nil, nil, nil, true)
+      GameTooltip:SetText(labelText, 1, 0.82, 0)
+      GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
       GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -128,6 +124,7 @@ local function checkboxRow(parent, labelText, get, set, opts)
   box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
   box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
   box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+  BIT.UI.SkinCheck(box)
   box:SetScript("OnClick", function(self)
     set(self:GetChecked() and true or false)
   end)
@@ -150,12 +147,8 @@ local function sliderRow(parent, labelText, min, max, step, get, set, opts)
   slider:SetMinMaxValues(min, max)
   slider:SetValueStep(step)
   if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-  local track = slider:CreateTexture(nil, "BACKGROUND")
-  track:SetColorTexture(0.3, 0.3, 0.32, 1)
-  track:SetHeight(4)
-  track:SetPoint("LEFT")
-  track:SetPoint("RIGHT")
   slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+  BIT.UI.SkinSlider(slider, 6)
   local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
   local suffix = opts.suffix or ""
@@ -201,7 +194,7 @@ local function pushButton(parent, text, width, onClick)
   button:SetSize(width, 22)
   button:SetText(text)
   button:SetScript("OnClick", onClick)
-  return button
+  return BIT.UI.SkinButton(button)
 end
 
 local function actionRow(parent, labelText, buttonText, onClick, opts)
@@ -323,6 +316,23 @@ function updateLivePreview()
   end
 
   local showDots = db.enabled and db.dots
+  -- Center the ensemble (the plate with the dots and diamonds hanging off its bar, whose
+  -- offsets are the user's own sliders) in the scene. The rows seat their top 30 below the
+  -- plate top (the bar bottom) plus the offset; 36 is the plate's height.
+  if scene.plate then
+    local above, below = 0, 0
+    if showDots then
+      above = math.max(above, math.max(0, -(30 + dotOffset)))
+      below = math.max(below, math.max(0, dotOffset + size - 6))
+    end
+    if db.enabled and db.shardDiamonds and points > 0 then
+      above = math.max(above, math.max(0, -(30 + shardOffset)))
+      below = math.max(below, math.max(0, shardOffset + size - 6))
+    end
+    local sceneH = select(2, pcall(scene.GetHeight, scene))
+    sceneH = type(sceneH) == "number" and sceneH or 180
+    scene.plate.frame:SetPoint("TOP", scene, "TOP", 0, -(sceneH / 2 - 18 + (above - below) / 2))
+  end
   scene.dotsRow:SetShown(showDots)
   scene.dotsRow:ClearAllPoints()
   scene.dotsRow:SetPoint("TOP", scene.healthBar, "BOTTOM", 0, -dotOffset)
@@ -385,7 +395,7 @@ local function buildLivePreview(pane)
   title:SetPoint("TOPLEFT", 12, -12)
   title:SetText("Live preview")
   local titleRule = pane:CreateTexture(nil, "ARTWORK")
-  titleRule:SetColorTexture(0.28, 0.28, 0.3, 1)
+  titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
   titleRule:SetHeight(1)
   titleRule:SetPoint("TOPLEFT", 8, -34)
   titleRule:SetPoint("TOPRIGHT", -8, -34)
@@ -395,9 +405,8 @@ local function buildLivePreview(pane)
   local scene = BIT.UI.Preview.Scene(pane, PANE_WIDTH - 24, 180)
   scene:SetPoint("TOP", pane, "TOP", 0, -44)
   local plate = BIT.UI.Preview.Nameplate(scene, { width = 190, health = 62 })
-  -- The plate's bar sits 17..30 px below the plate top: seat it where the old flat bar was,
-  -- so the dots and diamonds hang into the scene exactly as before.
-  plate.frame:SetPoint("TOP", scene, "TOP", 0, -29)
+  plate.frame:SetPoint("TOP", scene, "TOP", 0, -57)
+  scene.plate = plate
   scene.healthBar = plate.bar
   scene.dotsRow = CreateFrame("Frame", nil, scene)
   scene.shardsRow = CreateFrame("Frame", nil, scene)
@@ -413,7 +422,7 @@ local function buildLivePreview(pane)
   tryIt:SetText("TRY IT")
   tryIt:SetTextColor(0.85, 0.7, 0.3)
   local tryRule = pane:CreateTexture(nil, "ARTWORK")
-  tryRule:SetColorTexture(0.28, 0.28, 0.3, 1)
+  tryRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
   tryRule:SetHeight(1)
   tryRule:SetPoint("LEFT", tryIt, "RIGHT", 8, 0)
   tryRule:SetPoint("RIGHT", pane, "RIGHT", -12, 0)
@@ -458,8 +467,7 @@ local function selectTab(tab)
   for _, other in ipairs(tabs) do
     local selected = other == tab
     other.content:SetShown(selected)
-    other.button.text:SetTextColor(selected and 1 or 0.6, selected and 0.82 or 0.6, selected and 0 or 0.6)
-    other.button.underline:SetShown(selected)
+    BIT.UI.TabSelected(other.button, selected)
   end
 end
 
@@ -471,16 +479,12 @@ local function addTab(name)
   tab.content:SetPoint("BOTTOMRIGHT", settingsArea, "BOTTOMRIGHT", -8, 40)
   tab.content:Hide()
 
-  local button = CreateFrame("Button", nil, settingsArea)
+  local button = CreateFrame("Button", nil, settingsArea, "PanelTopTabButtonTemplate")
   button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   button.text:SetText(name)
   button:SetSize(button.text:GetStringWidth() + 20, 26)
   button.text:SetPoint("CENTER")
-  button.underline = button:CreateTexture(nil, "ARTWORK")
-  button.underline:SetColorTexture(1, 0.82, 0, 1)
-  button.underline:SetHeight(2)
-  button.underline:SetPoint("BOTTOMLEFT", 6, 0)
-  button.underline:SetPoint("BOTTOMRIGHT", -6, 0)
+  BIT.UI.SkinTabButton(button, button.text)
   local previous = tabs[#tabs]
   if previous then
     button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
@@ -630,7 +634,7 @@ function Addon.CreateSettingsPanel(parent)
   panel.settingsArea = area
 
   local divider = area:CreateTexture(nil, "ARTWORK")
-  divider:SetColorTexture(0.28, 0.28, 0.3, 1)
+  divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))
   divider:SetHeight(1)
   divider:SetPoint("TOPLEFT", 8, -34)
   divider:SetPoint("TOPRIGHT", -8, -34)

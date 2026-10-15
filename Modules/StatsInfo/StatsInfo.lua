@@ -2520,9 +2520,9 @@ BIT.RegisterTab("StatsInfo", {
     local tabs = {}
     local active -- the tab whose content is on screen; re-asserted whenever the tab is shown
     -- Only the active tab's content is ever shown. Every flip is its own pcall and Show/Hide,
-    -- not SetShown: the underline is a texture and SetShown is not a method every widget has
-    -- (see BagMarkers' own guard), so one raising call used to stop the loop half way -- the
-    -- clicked tab's content never came up and the leftovers stayed visible together.
+    -- not SetShown: not every widget the suites hand in has SetShown (see BagMarkers' own
+    -- guard), so one raising call used to stop the loop half way -- the clicked tab's content
+    -- never came up and the leftovers stayed visible together.
     local function setVisible(widget, on)
       if not widget then return end
       pcall(on and widget.Show or widget.Hide, widget)
@@ -2533,12 +2533,7 @@ BIT.RegisterTab("StatsInfo", {
       for _, other in ipairs(tabs) do
         local on = other == tab
         setVisible(other.content, on)
-        setVisible(other.button and other.button.underline, on)
-        local caption = other.button and other.button.caption
-        if caption then
-          pcall(caption.SetTextColor, caption,
-            on and 1 or 0.6, on and 0.82 or 0.6, on and 0 or 0.6)
-        end
+        if other.button then pcall(BIT.UI.TabSelected, other.button, on) end
       end
     end
     local function addTab(name)
@@ -2547,18 +2542,14 @@ BIT.RegisterTab("StatsInfo", {
       tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -32)
       tab.content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", 0, 0)
       tab.content:Hide()
-      local button = CreateFrame("Button", nil, area)
+      local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
       -- "caption", not "text": the settings and the suites read a frame's .text as the
       -- string it shows, so a font string must not live under that name
       button.caption = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
       button.caption:SetText(name)
       button:SetSize(button.caption:GetStringWidth() + 20, 26)
       button.caption:SetPoint("CENTER")
-      button.underline = button:CreateTexture(nil, "ARTWORK")
-      button.underline:SetColorTexture(1, 0.82, 0, 1)
-      button.underline:SetHeight(2)
-      button.underline:SetPoint("BOTTOMLEFT", 6, 0)
-      button.underline:SetPoint("BOTTOMRIGHT", -6, 0)
+      BIT.UI.SkinTabButton(button, button.caption)
       local previous = tabs[#tabs]
       if previous then
         button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)

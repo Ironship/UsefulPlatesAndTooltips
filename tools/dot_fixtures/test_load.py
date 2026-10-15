@@ -238,6 +238,27 @@ def step(label, fn):
 
 
 lua.execute("ns = { Module = function(name) return ns end }")
+lua.execute("""
+-- The core theme the ported settings and rows call into; the fixture exercises behaviour,
+-- not pixels, so every skin call is a no-op that hands the widget back unchanged.
+ns.UI = {
+    MEDIA = {},
+    COLOR = {
+        heading = { 0.99, 0.82, 0.62 },
+        panel = { 0, 0, 0 }, panelIn = { 0, 0, 0 }, edge = { 1, 1, 1 }, edgeOn = { 1, 1, 1 },
+        button = { 0, 0, 0 }, buttonHover = { 0, 0, 0 }, buttonHoverGlow = { 0, 0, 0 },
+        buttonOff = { 0, 0, 0 }, divider = { 1, 1, 1 }, track = { 0, 0, 0 },
+    },
+    Backdrop = function() end,
+    SkinButton = function(button) return button end,
+    SkinSlider = function(slider) return slider end,
+    SkinCheck = function(box) return box end,
+    SkinTabButton = function(button) return button end,
+    TabSelected = function() end,
+    RoundHighlight = function() end,
+    RoundBorder = function() end,
+}
+""")
 ns = lua.globals()["ns"]
 step("load shared nameplate layout", lambda: H.load("Core/PlateLayout.lua",
     open(os.path.join(ROOT, "Core", "PlateLayout.lua"), encoding="utf-8").read(), ns))

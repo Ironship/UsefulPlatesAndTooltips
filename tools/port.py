@@ -324,6 +324,10 @@ MODULES["SpellDamageInfo"] = {
 def port(name):
     if name == "DoTInfo":
         sys.exit("DoTInfo frozen in BIT per user decision: the standalone addon is read-only; edit Modules/DoTInfo/* directly")
+    if name == "ResourceDing":
+        sys.exit("ResourceDing frozen in BIT per user decision (2026-10-15): the BIT settings fork "
+                 "(themed setBackdrop/pushButton, centered live preview, skinned rows) is ahead of the "
+                 "standalone addon and this recipe cannot reproduce it -- edit Modules/ResourceDing/* directly")
     if name == "SpellDamageInfo":
         sys.exit("SpellDamageInfo port BLOCKED (2026-10-03): the BIT fork is ahead of upstream "
                  "(ComputeItem/itemOnSlot, ParseItemHeal, combo/finisher views, tooltip row bookkeeping) "
