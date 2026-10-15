@@ -737,11 +737,49 @@ local function itemUseText(itemID)
   return nil
 end
 
+-- A weapon poison's per-proc reading from its own coating text: "Each strike has a 20% chance
+-- of poisoning the enemy, causing 13 to 17 Nature damage." / "Bei jedem Schlag besteht eine
+-- Chance von 20%, den Gegner zu vergiften und ihm sofort 13 bis 17 Naturschaden zuzufuegen."
+-- (Deadly Poison's over-time wording reads as a dot.) The coating wording is the only item
+-- text that reaches the spell parser from here: bombs, oils or a stray damage line can never
+-- become an item number through this path.
+-- The stems are case-proof and stray-capital-proof ("Überzieht eine Waffe"): the leading
+-- umlaut and the following noun's capital never sit inside the stem.
+local COATING_WORDS = { "oats a weapon", "oats your weapon", "berzieht eine ", "berzieht eure " }
+
+local function coatingText(t)
+  if type(t) ~= "string" then return nil end
+  for _, word in ipairs(COATING_WORDS) do
+    if string.find(t, word, 1, true) then return t end
+  end
+  return nil
+end
+
+local function poisonView(text)
+  local t = coatingText(text)
+  if not t then return nil end
+  local entry = Parser.Read(t, ns.DescriptionLang(), ns.IsRetail and ns.IsRetail())
+  local p = entry and entry.parsed
+  if not p then return nil end
+  local view
+  if p.direct then
+    view = { direct = { min = p.direct.min, max = p.direct.max, added = 0 } }
+  end
+  if p.dot then
+    view = view or {}
+    view.dot = { total = p.dot.total, duration = p.dot.duration, added = 0 }
+  end
+  if not view then return nil end
+  if entry.proc then view.proc = entry.proc end
+  return view
+end
+
 -- What to show for a consumable on the bar: its raw instant healing or mana,
 -- or a stated healing total over time -- a bandage's ("Heals 66 damage over 6
 -- sec.") or food's ("Restores 243 health over 21 sec."). Fixed amounts stay literal;
--- percentage healing uses the player's current maximum HP. Damage wordings are never read here,
--- so the damage numbers cannot move. Anything over time without a stated
+-- percentage healing uses the player's current maximum HP. Damage wordings are never read
+-- here -- with one exception: a weapon poison's coating text names the per-trigger damage the
+-- item buys, so that (and only that) reads as its number. Anything over time without a stated
 -- health total stays unread. The text
 -- comes from the use spell's description where that can be read, else from the
 -- item's own "Use:" line; when neither is readable yet nothing is guessed -- the
@@ -758,11 +796,20 @@ function ns.ComputeItem(itemID)
     return nil
   end
   local parsed = Parser.ParseItemHeal(text, ns.DescriptionLang())
+  local fallback
   if not parsed then
-    local fallback = itemUseText(itemID)
+    fallback = itemUseText(itemID)
     if fallback then parsed = Parser.ParseItemHeal(fallback, ns.DescriptionLang()) end
   end
-  if not parsed then return nil end
+  if not parsed then
+    local view = poisonView(text)
+    if not view then
+      fallback = fallback or itemUseText(itemID)
+      view = fallback and poisonView(fallback) or nil
+    end
+    if view then return view end
+    return nil
+  end
   if parsed.healPercent then
     return percentHealView(parsed)
   end
@@ -1523,6 +1570,43 @@ local function appendOwnedRows(tooltip, prev, rows, lines, pet)
   return #rows > 0
 end
 
+-- The row bookkeeping shared by the spell and the item paths: rewrite the rows this tooltip
+-- already holds for the same key, else blank a previous key's rows (a native rebuild drops
+-- them anyway) and append the new set at the end. "pet" only names the suffix the rows wear.
+local function applyOwnedRows(tooltip, key, lines, pet)
+  forgetRowsOnClear(tooltip)
+  local prev = tooltipLines[tooltip]
+  if prev and prev.spellID == key then
+    -- the same effect on the same tooltip again: a refresh (a combo change while the tooltip
+    -- is open). Rows the tooltip still shows are rewritten in place and the set grows or
+    -- shrinks at the end; a tooltip that was rebuilt natively since falls through to a plain
+    -- add at the end.
+    if rewriteOwnedRows(tooltip, prev, lines, pet) then
+      -- a smaller set leaves its surplus rows blanked but tracked, so a later larger set
+      -- rewrites them instead of appending duplicates
+      if #lines > #prev.rows then
+        appendOwnedRows(tooltip, prev, prev.rows, { select(#prev.rows + 1, unpack(lines)) }, pet)
+      end
+      return #lines
+    end
+    if type(tooltip.GetLeftLine) ~= "function" then
+      -- The rows cannot be addressed at all and the tooltip was not cleared (a clear drops
+      -- prev through OnTooltipCleared): appending the same block again would leave two
+      -- copies visible. A client without the accessor keeps the first block until the next
+      -- native rebuild.
+      return #lines
+    end
+  elseif prev then
+    rewriteOwnedRows(tooltip, prev, {}, pet)
+    tooltipLines[tooltip] = nil
+    prev = nil
+  end
+  local added = { spellID = key, rows = {} }
+  appendOwnedRows(tooltip, added, added.rows, lines, pet)
+  if added.count > 0 then tooltipLines[tooltip] = added end
+  return #lines
+end
+
 -- Adds our lines; returns how many. A pet's spell says so at the end of each line.
 local function addTooltipLines(tooltip, spellID, pet)
   if not db.tooltip or isSecret(spellID) or type(spellID) ~= "number" then return 0 end
@@ -1542,35 +1626,36 @@ local function addTooltipLines(tooltip, spellID, pet)
       lines[#lines + 1] = Format.ReductionLine(reduction, L, ns.ReductionPerHit(reduction), ns.TargetSpeed())
     end
   end
-  forgetRowsOnClear(tooltip)
-  local prev = tooltipLines[tooltip]
-  if prev and prev.spellID == spellID then
-    -- the same spell on the same tooltip again: a refresh (a combo change while the tooltip
-    -- is open). Rows the tooltip still shows are rewritten in place and the set grows or
-    -- shrinks at the end; a tooltip that was rebuilt natively since falls through to a plain
-    -- add at the end.
-    if rewriteOwnedRows(tooltip, prev, lines, pet) then
-      -- a smaller set leaves its surplus rows blanked but tracked, so a later larger set
-      -- rewrites them instead of appending duplicates
-      if #lines > #prev.rows then
-        appendOwnedRows(tooltip, prev, prev.rows, { select(#prev.rows + 1, unpack(lines)) }, pet)
-      end
-      return #lines
-    end
-  elseif prev then
-    -- a different spell on a tooltip that kept its rows: blank the previous spell's rows (a
-    -- native rebuild drops them anyway) so no stale number stays readable, then add the new
-    -- set at the end
-    rewriteOwnedRows(tooltip, prev, {}, pet)
-    tooltipLines[tooltip] = nil
-    prev = nil
-  end
-  local added = { spellID = spellID, rows = {} }
-  appendOwnedRows(tooltip, added, added.rows, lines, pet)
-  if added.count > 0 then tooltipLines[tooltip] = added end
-  return #lines
+  return applyOwnedRows(tooltip, spellID, lines, pet)
 end
 ns.AddTooltipLines = addTooltipLines
+
+-- The same lines on an ITEM tooltip for a weapon poison: the per-trigger damage the coating
+-- states, with the chance, so the item says what applying it buys. Only coating items reach
+-- this path; every other item tooltip is left untouched. The rows go through the same
+-- bookkeeping as spell rows, keyed by the item link.
+local function addItemPoisonLines(tooltip)
+  if not db.tooltip or type(tooltip) ~= "table" or type(tooltip.GetItem) ~= "function" then return end
+  local ok, _, link = pcall(tooltip.GetItem, tooltip)
+  if not ok or isSecret(link) or type(link) ~= "string" then return end
+  local itemID = tonumber(link:match("item:(%d+)"))
+  if not itemID then return end
+  local spellID = itemUseSpell(itemID)
+  local text = spellID and getDescription(spellID) or nil
+  if not text then text = itemUseText(itemID) end
+  local view = text and poisonView(text) or nil
+  if not view then
+    -- Nothing readable (yet): blank rows left by another item on the same tooltip, and
+    -- leave this item's own rows alone (its data may still arrive).
+    local prev = tooltipLines[tooltip]
+    if prev and prev.spellID ~= link then
+      rewriteOwnedRows(tooltip, prev, {}, false)
+      tooltipLines[tooltip] = nil
+    end
+    return
+  end
+  applyOwnedRows(tooltip, link, Format.TooltipLines(view, L), false)
+end
 
 -- The pet action slot of the button a tooltip belongs to, or nil.
 local function ownerPetSlot(tooltip)
@@ -1667,6 +1752,18 @@ local function hookTooltips()
         petLinesDone[tooltip] = true
       end
     end)
+  end
+  -- Weapon poison items: their coating text states the per-trigger damage, so the item
+  -- tooltip gets the same lines a spell would (both hooks are harmless together: the row
+  -- bookkeeping rewrites in place instead of appending twice).
+  if postCalls and Enum.TooltipDataType.Item then
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, addItemPoisonLines)
+  end
+  if type(GameTooltip) == "table" and type(GameTooltip.HookScript) == "function" then
+    pcall(GameTooltip.HookScript, GameTooltip, "OnTooltipSetItem", addItemPoisonLines)
+  end
+  if type(ItemRefTooltip) == "table" and type(ItemRefTooltip.HookScript) == "function" then
+    pcall(ItemRefTooltip.HookScript, ItemRefTooltip, "OnTooltipSetItem", addItemPoisonLines)
   end
   if type(hooksecurefunc) == "function" and GameTooltip and type(GameTooltip.SetPetAction) == "function" then
     if type(GameTooltip.HookScript) == "function" then

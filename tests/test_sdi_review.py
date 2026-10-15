@@ -151,6 +151,37 @@ C_TooltipInfo = { GetHyperlink = function() return { lines = secret } end }
 assert(SDI.ComputeItem(999) == nil)
 C_TooltipInfo.GetHyperlink = function() return secret end
 assert(SDI.ComputeItem(998) == nil)
+
+-- A weapon poison: the coating text states the per-trigger damage and the chance, so the
+-- poison item gets both - the number on its button and lines in its own tooltip.
+local sfxDE = "Benutzen: Überzieht eine Waffe mit Gift, das 30 Minuten lang wirkt. Bei jedem Schlag besteht eine Chance von 20%, den Gegner zu vergiften und ihm sofort 13 bis 17 Naturschaden zuzufügen. 60 Aufladungen."
+local sfxEN = "Use: Coats a weapon with poison that lasts 30 min. Each strike has a 20% chance of poisoning the enemy, causing 13 to 17 Nature damage. 60 charges."
+local deadlyDE = "Benutzen: Überzieht eine Waffe mit Gift, das 30 Minuten lang wirkt.\r\nBei jedem Schlag besteht eine Chance von 30%, den Gegner 12 Sek. lang für 36 Punkt(e) Naturschaden zu vergiften. 60 Aufladungen."
+for _, case in ipairs({ { sfxDE, "de" }, { sfxEN, "en" } }) do
+  local read = assert(P.Read(case[1], case[2]), case[1])
+  assert(read.show == "parsed" and read.proc == 20, case[1])
+  assert(read.parsed.direct.min == 13 and read.parsed.direct.max == 17, case[1])
+end
+local deadly = assert(P.Read(deadlyDE, "de"))
+assert(deadly.show == "parsed" and deadly.proc == 30 and deadly.parsed.dot.total == 36
+  and deadly.parsed.dot.duration == 12)
+C_Item.GetItemSpell = function() return "Sofort wirkendes Gift", 200 end
+spellDesc[200] = sfxDE
+C_TooltipInfo = { GetHyperlink = function() return { lines = {} } end }
+local poison = assert(SDI.ComputeItem(5003))
+assert(poison.direct.min == 13 and poison.direct.max == 17 and poison.proc == 20)
+local poisonText = SDI.ButtonText(poison)
+assert(poisonText == "15", tostring(poisonText)) -- the average of 13-17, as every damage range
+GameTooltip.link = "item:5003"
+GameTooltip.reviewLines = {}
+GameTooltip.GetItem = function(self) return "item", self.link end
+GameTooltip.AddLine = function(self, text) self.reviewLines[#self.reviewLines + 1] = text end
+GameTooltip.NumLines = function(self) return #self.reviewLines end
+local hookItems = assert(GameTooltip.scripts.OnTooltipSetItem, "no OnTooltipSetItem hook")
+hookItems(GameTooltip)
+local joined = table.concat(GameTooltip.reviewLines, " | ")
+assert(joined:find("13", 1, true) and joined:find("17", 1, true) and joined:find("20", 1, true),
+  joined)
 ''')
 
 BIT.OpenSettings("SpellDamageInfo")
