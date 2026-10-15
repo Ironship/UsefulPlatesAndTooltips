@@ -137,12 +137,13 @@ def load_retail_archive(path, saved=None, player_class="WARLOCK"):
 
 def check_retail_lifecycle(path):
     rt, globals_, addon = load_retail_archive(path)
+    addon.OpenSettings()
+    assert addon._pages.SpellDamageInfo.shown and addon._pages["__together"] is None
     for name in sorted(RETAIL_MODULES):
         assert addon.state[name] == "on", name
         addon.OpenSettings(name)
         assert addon._pages[name].shown, name
         assert addon._pages[name].offNote is None, name
-    addon.OpenSettings("__together")
     assert not any("could not be built" in str(message) for message in globals_.chat.values())
     assert globals_.UsefulPlatesAndTooltips_SpellDamageInfoDB is not None
     assert globals_.UsefulPlatesAndTooltips_DoTInfoDB is not None
@@ -167,9 +168,6 @@ def check_retail_lifecycle(path):
     assert rows.dots.on and not rows.shards.on, "Disabling diamonds must restore the resource circles"
     resource.db.shardDiamonds = True
     resource.RefreshMarks()
-    together = addon._pages["__together"]
-    together.refresh(together)
-    assert "Range off" not in together.caption.text and "Hunter off" not in together.caption.text
 
     sdi = addon.modules.SpellDamageInfo
     label = sdi._labels[globals_.ActionButton1]
@@ -220,8 +218,7 @@ def check_retail_lifecycle(path):
     rt.execute('playerClass = "DRUID"; function GetShapeshiftFormID() return hidden end')
     rows = addon.Plate.Rows()
     assert not rows.dots.on, "An unreadable druid form must not show inactive combo dots"
-    together.refresh(together)
-    print("ok Retail ZIP integration: four modules, settings, placement, Together parity and masked readings")
+    print("ok Retail ZIP integration: four module tabs, settings, placement and masked readings")
 
     disabled = ", ".join(f'{name} = {{ enabled = false }}' for name in sorted(RETAIL_MODULES))
     _, off_globals, off_addon = load_retail_archive(path, "UsefulPlatesAndTooltipsDB = { modules = { " + disabled + " } }")

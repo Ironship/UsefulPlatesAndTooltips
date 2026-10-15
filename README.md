@@ -17,8 +17,7 @@ The zip made by `tools/build_zip.py` has this folder at its top level, so you ca
 
 | Command | Opens |
 | --- | --- |
-| `/upt` | The window, on the tab you used last (Together at first) |
-| `/upt together` or `/upt all` | Together: every enabled mark on one nameplate |
+| `/upt` | The window, on the tab you used last (Spells at first) |
 | `/upt sdi` | Spells: SpellDamageInfo |
 | `/upt did` or `/upt dot` | DoTs: DoTInfo |
 | `/upt stats` | Stats: StatsInfo |
@@ -32,10 +31,6 @@ Diagnostics: `/upt probe`, `/upt rangecheck`, `/upt hunterprobe`, `/upt bagprobe
 Switching a part on or off takes effect after `/reload`. Other settings apply at once.
 
 ## Parts
-
-### Together
-
-Every enabled mark on one sample nameplate. It warns when the hunter rail, the combo point dots and the Soul Shard diamonds would overlap.
 
 ### SpellDamageInfo
 

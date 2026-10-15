@@ -20,6 +20,27 @@ def click(button):
 
 
 class SettingsRegressions(unittest.TestCase):
+    def test_navigation_opens_spells_without_together_and_remembers_module(self):
+        rt, g, bit = ready()
+        g.SlashCmdList.USEFULPLATESANDTOOLTIPS("")
+        window = g.UsefulPlatesAndTooltipsSettings
+        buttons = [f for f in window.children.values() if f.template == "PanelTopTabButtonTemplate"]
+        self.assertEqual([b.name for b in buttons], list(bit.order.values()))
+        self.assertNotIn("Together", [b.GetText(b) for b in buttons])
+        self.assertTrue(bit._pages.SpellDamageInfo.shown)
+        self.assertIsNone(bit._pages["__together"])
+        g.SlashCmdList.USEFULPLATESANDTOOLTIPS("did")
+        self.assertTrue(bit._pages.DoTInfo.shown)
+        g.SlashCmdList.USEFULPLATESANDTOOLTIPS("")
+        self.assertFalse(window.shown)
+        g.SlashCmdList.USEFULPLATESANDTOOLTIPS("")
+        self.assertTrue(window.shown and bit._pages.DoTInfo.shown)
+        self.assertEqual(sum(bool(b.nativeSelected) for b in buttons), 1)
+        for obsolete in ("together", "all"):
+            g.SlashCmdList.USEFULPLATESANDTOOLTIPS(obsolete)
+            self.assertIsNone(bit._pages["__together"])
+            self.assertTrue(bit._pages.DoTInfo.shown)
+
     def test_shield_defaults_and_fill_reset_are_juicy(self):
         rt, g, bit = ready()
         settings = bit.DB().modules.ShieldsInfo
@@ -76,7 +97,7 @@ class SettingsRegressions(unittest.TestCase):
 
     def test_selected_tab_label_moves_outward(self):
         rt, g, bit = ready()
-        for page in ("__together", "ResourceDing", "DoTInfo", "StatsInfo", "Range", "ShieldsInfo", "HunterRangeFinder"):
+        for page in ("SpellDamageInfo", "ResourceDing", "DoTInfo", "StatsInfo", "Range", "ShieldsInfo", "HunterRangeFinder"):
             bit.OpenSettings(page)
         buttons = [f for f in g.AllFrames.values() if f.template == "PanelTopTabButtonTemplate"]
         self.assertGreater(len(buttons), 20)

@@ -1,5 +1,5 @@
 -- UsefulPlatesAndTooltips: the settings window (/upt). One tab per module, in the order the modules'
--- files load, plus a Together tab that is not a module. Each module tab starts with Enable.
+-- files load. Each module tab starts with Enable.
 -- The module's own settings are built the first time the tab is shown while it runs, and
 -- also the moment Enable is ticked while it is still off (a waker fills defaults only;
 -- gameplay still starts at the next /reload). Opening a tab that is off does not wake it.
@@ -20,7 +20,6 @@ local DEFAULT_TAB = { width = 640, height = 360 }
 local MAX_CONTENT_HEIGHT = 470 -- the window stays bounded; taller tabs scroll inside it
 local MODULE_PREVIEW_GAP = 12 -- OFF-page gap between the appearance editor and a module's own preview scene
 local MODULE_PREVIEW_BOTTOM = 8 -- OFF-page bottom allowance below a module's preview scene
-local TOGETHER = "__together"
 
 local SHORT_LABEL = {
   SpellDamageInfo = "Spells",
@@ -500,169 +499,7 @@ end
 
 local selectTab
 
-local function buildTogether(page)
-  local content = attachScroll(page, 0)
-  local title = content:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 8, -8)
-  title:SetText("Together")
-  title:SetTextColor(UI.COLOR.heading[1], UI.COLOR.heading[2], UI.COLOR.heading[3])
-  local blurb = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  blurb:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-  blurb:SetPoint("RIGHT", content, "RIGHT", -8, 0)
-  blurb:SetJustifyH("LEFT")
-  blurb:SetText("Preview your enabled indicators together. Open a tab above to adjust their appearance and position.")
-
-  -- The scene and the mock nameplate come from the shared preview kit (built from the
-  -- client's own atlases), so the lanes read on the game's own furniture.
-  local scene = BIT.UI.Preview.Scene(content, 400, 230)
-  scene:SetPoint("TOPLEFT", 8, -64)
-  local plate = BIT.UI.Preview.Nameplate(scene, { width = 260, health = 100, level = "60" })
-  plate.frame:SetPoint("TOPLEFT", scene, "TOPLEFT", 70, -96)
-  local bar = plate.bar
-  local barFill = bar:CreateTexture(nil, "BACKGROUND")
-  barFill:SetAllPoints()
-  barFill:SetColorTexture(0.25, 0.05, 0.05, 1)
-
-  local dotFill = bar:CreateTexture(nil, "ARTWORK")
-  dotFill:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
-  dotFill:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 0, 0)
-  dotFill:SetWidth(150)
-  dotFill:SetColorTexture(0.75, 0.2, 0.25, 0.9)
-
-  local shield = bar:CreateTexture(nil, "OVERLAY")
-  shield:SetColorTexture(0.95, 0.85, 0.35, 0.85)
-
-  local rangeIcon = content:CreateTexture(nil, "OVERLAY")
-  rangeIcon:SetSize(16, 16)
-  rangeIcon:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
-
-  local function textureRow(count, texture, color)
-    local row = CreateFrame("Frame", nil, scene)
-    row.marks = {}
-    for i = 1, count do
-      local mark = row:CreateTexture(nil, "ARTWORK")
-      mark:SetTexture(texture)
-      mark:SetVertexColor(color[1], color[2], color[3], i == count and 0.35 or 1)
-      row.marks[i] = mark
-    end
-    return row
-  end
-  -- The dots and the rail wear the same glossy orb art as the Points circles, so the lanes
-  -- read alike in the preview (the shard diamonds keep their icon).
-  local ORB_ART = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\ComboOrb"
-  local dots = textureRow(5, ORB_ART, {1, 0.8, 0.2})
-  local shards = textureRow(2, "Interface\\TargetingFrame\\UI-RaidTargetingIcon_3", {1, 1, 1})
-  local rail = textureRow(6, ORB_ART, {0.9, 0.75, 0.3})
-  page.rows = { dots = dots, shards = shards, hunter = rail }
-  local function layoutRow(row, size)
-    row:SetSize(#row.marks * (size + 3) - 3, size)
-    for i, mark in ipairs(row.marks) do
-      mark:SetSize(size, size)
-      mark:ClearAllPoints()
-      mark:SetPoint("LEFT", row, "LEFT", (i - 1) * (size + 3), 0)
-    end
-  end
-
-  local caption = content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  caption:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -12)
-  caption:SetPoint("RIGHT", content, "RIGHT", -8, 0)
-  caption:SetJustifyH("LEFT")
-  page.caption = caption
-
-  local warn = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  warn:SetPoint("TOPLEFT", caption, "BOTTOMLEFT", 0, -8)
-  warn:SetPoint("RIGHT", content, "RIGHT", -8, 0)
-  warn:SetJustifyH("LEFT")
-
-  local function moduleOn(name)
-    if BIT.IsRunning(name) then return true end
-    return BIT.woke and BIT.woke[name] == true
-  end
-  local function seat(widget, offset)
-    widget:ClearAllPoints()
-    widget:SetPoint("TOP", bar, "BOTTOM", 0, -(offset or 0))
-  end
-
-  function page:refresh()
-    local plate = BIT.Plate or {}
-    local rows = plate.Rows()
-    local owns = rows.hunter.on
-    local dotDB = UsefulPlatesAndTooltips_DoTInfoDB or {}
-    local mods = BIT.DB().modules or {}
-    local dotsOn = moduleOn("DoTInfo") and dotDB.showMarkers ~= false and dotDB.nameplateMode ~= "off"
-    local shieldsOn = moduleOn("ShieldsInfo") and (mods.ShieldsInfo or {}).nameplates ~= false
-    local rs = mods.Range or {}
-    local rangeOn = moduleOn("Range") and (rs.showIn ~= false or rs.showOut ~= false)
-    local rdOn = rows.dots.on or rows.shards.on
-    local hunterOn = rows.hunter.on
-
-    dotFill:SetShown(dotsOn)
-    shield:ClearAllPoints()
-    if shieldsOn and dotsOn then
-      shield:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
-      shield:SetPoint("TOPRIGHT", bar, "TOPRIGHT", 0, 0)
-      shield:SetHeight(plate.SHIELD_EDGE or 4)
-      shield:Show()
-    elseif shieldsOn then
-      shield:SetAllPoints(bar)
-      shield:Show()
-    else
-      shield:Hide()
-    end
-
-    rangeIcon:ClearAllPoints()
-    rangeIcon:SetPoint("BOTTOM", bar, "TOP", 0, 6)
-    rangeIcon:SetTexture(rs.showIn ~= false and "Interface\\RaidFrame\\ReadyCheck-Ready"
-      or "Interface\\RaidFrame\\ReadyCheck-NotReady")
-    rangeIcon:SetShown(rangeOn and not owns)
-
-    for name, widget in pairs(page.rows) do
-      local row = rows[name]
-      widget:SetShown(row.on)
-      layoutRow(widget, row.height)
-      seat(widget, row.offset)
-    end
-    local parts = {}
-    if not dotsOn then parts[#parts + 1] = "DoTs off" end
-    if not shieldsOn then parts[#parts + 1] = "Shields off" end
-    if BIT.modules.Range and not rangeOn then parts[#parts + 1] = "Range off" end
-    if not rdOn then parts[#parts + 1] = "Points unavailable or off" end
-    if BIT.modules.HunterRangeFinder and not hunterOn then parts[#parts + 1] = "Hunter off" end
-    if owns then parts[#parts + 1] = "Range check hidden: the hunter rail owns this plate" end
-    if #parts == 0 then
-      caption:SetText("DoT fill stays on the bar. A shield shares that bar as a thin top edge.")
-    else
-      -- Whatever is switched off, the drawn shield is still named: its gold edge is never unexplained.
-      local text = table.concat(parts, " · ")
-      if shieldsOn then
-        text = text .. "\n" .. (dotsOn and "The thin top edge is the shield." or "The shield fills the bar.")
-      end
-      caption:SetText(text)
-    end
-    local clash = plate.ClashText(rows)
-    warn:SetText(clash)
-    if type(clash) == "string" and clash ~= "Nameplate lanes are clear." then
-      warn:SetTextColor(1, 0.75, 0.3)
-    else
-      warn:SetTextColor(0.6, 0.85, 0.6)
-    end
-    content:SetHeight(400)
-    if page.syncScroll then page.syncScroll() end
-  end
-  page:refresh()
-  return page
-end
-
 local function buildPage(name)
-  if name == TOGETHER then
-    local page = CreateFrame("Frame", nil, window)
-    page:SetPoint("TOPLEFT", MARGIN, -headerBottom())
-    page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
-    page:Hide()
-    page.name = name
-    return buildTogether(page)
-  end
-
   local tab = BIT.tabs[name] or {}
   local page = CreateFrame("Frame", nil, window)
   page:SetPoint("TOPLEFT", MARGIN, -headerBottom())
@@ -782,7 +619,6 @@ selectTab = function(name)
   end
   current = name
   local page = pages[name]
-  if name == TOGETHER and type(page.refresh) == "function" then page:refresh() end
   refreshSwitch(page)
 end
 
@@ -853,8 +689,6 @@ local function createWindow()
   end
   close:SetScript("OnClick", function() window:Hide() end)
 
-  addTabButton(TOGETHER, "Together", "Together",
-    "Every enabled mark on one nameplate, and a warning when their lanes overlap.")
   for _, name in ipairs(BIT.order) do
     local tab = BIT.tabs[name] or {}
     local extra
@@ -868,9 +702,6 @@ local function createWindow()
 
   window:SetScript("OnShow", function()
     if current and pages[current] then
-      if current == TOGETHER and type(pages[current].refresh) == "function" then
-        pages[current]:refresh()
-      end
       refreshSwitch(pages[current])
     end
   end)
@@ -880,7 +711,7 @@ end
 -- A second call with the SAME tab name closes it too (the README's "type it again to hide").
 function BIT.OpenSettings(name)
   if not window then createWindow() end
-  if name == TOGETHER or (name and BIT.tabs[name]) then
+  if name and BIT.tabs[name] then
     if window:IsShown() and current == name then
       window:Hide()
       return
@@ -893,7 +724,7 @@ function BIT.OpenSettings(name)
     window:Hide()
     return
   end
-  selectTab(current or TOGETHER)
+  selectTab(current or BIT.order[1])
   window:Show()
 end
 
@@ -913,7 +744,6 @@ local function slash(msg)
   local word, rest = msg:match("^%s*(%S*)%s*(.-)%s*$")
   word = (word or ""):lower()
   if word == "" then BIT.OpenSettings() return end
-  if word == "together" or word == "all" then BIT.OpenSettings(TOGETHER) return end
   if BIT.commands[word] then BIT.commands[word](rest) return end
   for _, name in ipairs(BIT.order) do
     if word == name:lower() or BIT.tabWords[word] == name then BIT.OpenSettings(name) return end
