@@ -79,10 +79,10 @@ end
 
 -- Hunter rail offset, combo-dot offset, shard offset. Missing saved values are the defaults.
 function Plate.ReadOffsets()
-  local hunter = -8
+  local hunter = -60
   local hs = moduleSettings("HunterRangeFinder")
   if hs and type(hs.plateOffset) == "number" then hunter = hs.plateOffset end
-  local dots, shards = 2, 2
+  local dots, shards = -60, -60
   local rd = UsefulPlatesAndTooltips_ResourceDingDB
   if type(rd) == "table" then
     if type(rd.dotOffset) == "number" then dots = rd.dotOffset end

@@ -56,7 +56,7 @@ local FILL_TEXTURES = {
     path = "Interface\\TargetingFrame\\UI-StatusBar" },
   { id = "raid", label = "Raid bar", hint = "The raid frames' health bar texture.",
     path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
-  { id = "stripes", label = "Stripes", hint = "Diagonal stripes that keep their size on any bar.",
+  { id = "stripes", label = "Stripes", hint = "Backslash stripes, opposite to DoT damage, that keep their size on any bar.",
     path = TEXTURE_DIR .. "Stripes.tga", tiled = true },
   { id = "shield_aura", label = "Shield aura", hint = "The module's own shield aura art.",
     path = TEXTURE_DIR .. "shield_aura.tga" },
@@ -70,7 +70,7 @@ local FILL_TEXTURES = {
 local PRESETS = {
   { label = "Minimal", values = { fillTexture = "flat", overlayAlpha = 0.35 } },
   { label = "Classic", values = { fillTexture = "smooth", overlayAlpha = 0.6 } },
-  { label = "Juicy", values = { fillTexture = "shield_aura", overlayAlpha = 1.0 } },
+  { label = "Juicy", values = { fillTexture = "stripes", overlayAlpha = 0.5 } },
 }
 
 local settings
@@ -1207,8 +1207,8 @@ local function addTab(name, area)
   content:Hide()
 
   local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
-  button.text = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  button.text:SetText(name)
+  button:SetText(name)
+  button.text = button:GetFontString()
   button:SetSize(button.text:GetStringWidth() + 20, 26)
   button.text:SetPoint("CENTER")
   BIT.UI.SkinTabButton(button, button.text)

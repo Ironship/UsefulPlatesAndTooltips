@@ -2545,8 +2545,8 @@ BIT.RegisterTab("StatsInfo", {
       local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
       -- "caption", not "text": the settings and the suites read a frame's .text as the
       -- string it shows, so a font string must not live under that name
-      button.caption = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-      button.caption:SetText(name)
+      button:SetText(name)
+      button.caption = button:GetFontString()
       button:SetSize(button.caption:GetStringWidth() + 20, 26)
       button.caption:SetPoint("CENTER")
       BIT.UI.SkinTabButton(button, button.caption)

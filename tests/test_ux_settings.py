@@ -58,7 +58,7 @@ widths = {key: frame_buttons[key].width for key in ("player", "target", "party",
 assert widths["nameplate"] >= 9 * 6 + 18, widths  # "Nameplate": 9 letters at the test font's 6 px, plus padding
 assert sum(widths.values()) + 3 * 3 <= 290 - 2 * 12, widths  # PREVIEW_WIDTH - 2 * SIDE
 
-# Juicy: the shield aura art is laid out for a horizontal status bar (256 wide, 64 tall), uncompressed 32-bit TGA.
+# The optional shield aura art remains available as a horizontal status bar texture.
 for name in ("shield_aura.tga", "shield_aura_mirrored.tga"):
     tga = (ROOT / "Modules" / "ShieldsInfo" / "Textures" / name).read_bytes()
     assert (tga[2], tga[16]) == (2, 32), (name, list(tga[:18]))
@@ -66,7 +66,7 @@ for name in ("shield_aura.tga", "shield_aura_mirrored.tga"):
     assert (width, height) == (256, 64), (name, width, height)
 
 
-# Mirrored is the same art flipped left-right on the bar, pixel by pixel (a double flip once made it equal to Juicy).
+# Mirrored is the same aura art flipped left-right on the bar, pixel by pixel.
 def tga_rows(name):
     raw = (ROOT / "Modules" / "ShieldsInfo" / "Textures" / name).read_bytes()
     width, height = raw[12] + 256 * raw[13], raw[14] + 256 * raw[15]
@@ -179,7 +179,7 @@ G.combat = False
 G.Fire("PLAYER_REGEN_ENABLED")
 assert len(G.reviewPaints) > before
 print("ok UX: Advanced scroll, texture rows, class/settings lanes, complete compact/full preview, world-marker invalidation, "
-      "Spells caption columns and Drain Life icon, Shields frame buttons, Juicy aura art, Together shield caption")
+      "Spells caption columns and Drain Life icon, Shields frame buttons, optional aura art, Together shield caption")
 
 # Native template selection and button helpers must preserve navigation, tooltips and clicks.
 BIT.OpenSettings("__together")
