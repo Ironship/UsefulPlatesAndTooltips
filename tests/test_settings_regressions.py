@@ -20,6 +20,27 @@ def click(button):
 
 
 class SettingsRegressions(unittest.TestCase):
+    def test_shield_defaults_and_fill_reset_are_juicy(self):
+        rt, g, bit = ready()
+        settings = bit.DB().modules.ShieldsInfo
+        self.assertEqual((settings.fillTexture, settings.overlayAlpha), ("stripes", 0.5))
+        bit.OpenSettings("ShieldsInfo")
+        fill = next(t for t in bit.modules.ShieldsInfo._tabs.values() if t.button.GetText(t.button) == "Fill")
+        click(fill.button)
+        settings.player = False
+        minimal = next(f for f in g.AllFrames.values() if f.kind == "Button" and f.GetText(f) == "Minimal"
+                       and g.Same(f.parent, bit._pages.ShieldsInfo.content))
+        click(minimal)
+        self.assertEqual((settings.fillTexture, settings.overlayAlpha), ("flat", 0.35))
+        reset = next(f for f in fill.button.parent.children.values() if f.kind == "Button"
+                     and f.GetText(f) == "Reset this tab")
+        click(reset)
+        self.assertEqual((settings.fillTexture, settings.overlayAlpha), ("stripes", 0.5))
+        self.assertFalse(settings.player)
+        _, _, saved = ready("UsefulPlatesAndTooltipsDB={modules={ShieldsInfo={fillTexture='smooth',overlayAlpha=0.8}}}")
+        custom = saved.DB().modules.ShieldsInfo
+        self.assertEqual((custom.fillTexture, custom.overlayAlpha), ("smooth", 0.8))
+
     def test_dot_tabs_fit_after_native_buttons_expand(self):
         rt, g, bit = ready()
         bit.OpenSettings("DoTInfo")

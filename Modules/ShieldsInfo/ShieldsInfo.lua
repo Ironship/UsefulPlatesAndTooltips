@@ -37,8 +37,8 @@ local DEFAULTS = {
   target = true,      -- the target frame
   party = true,       -- classic party frames and compact party/raid frames
   nameplates = true,  -- every accessible nameplate
-  overlayAlpha = 1.0, -- the absorb fill translucency (the slider clamps it to 0.2..1.0)
-  fillTexture = "flat", -- the fill art the overlay wears (FILL_TEXTURES below)
+  overlayAlpha = 0.5, -- Juicy: half-opacity stripes, opposite to DoT damage
+  fillTexture = "stripes", -- the fill art the overlay wears (FILL_TEXTURES below)
 }
 -- Retired keys (hud, numbers, scale, mirror, preview, locked, x, y) are not
 -- defaults anymore: BIT.Settings leaves saved values untouched, and this

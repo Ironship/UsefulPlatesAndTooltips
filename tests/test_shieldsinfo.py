@@ -25,6 +25,7 @@ CORE_FILES = [line.strip() for line in (ROOT / "UsefulPlatesAndTooltips.toc").re
 
 AURA = r"Interface\AddOns\UsefulPlatesAndTooltips\Modules\ShieldsInfo\Textures\shield_aura.tga"
 AURA_MIRROR = r"Interface\AddOns\UsefulPlatesAndTooltips\Modules\ShieldsInfo\Textures\shield_aura_mirrored.tga"
+STRIPES = r"Interface\AddOns\UsefulPlatesAndTooltips\Modules\ShieldsInfo\Textures\Stripes.tga"
 
 
 def fake_prefix():
@@ -177,9 +178,9 @@ check("the module makes no global of its own", G.ShieldsInfo, None)
 start(G, BIT)
 check("runs after ADDON_LOADED", BIT.state["ShieldsInfo"], "on")
 check("its settings live in BIT.Settings only", G.Same(BIT.Settings("ShieldsInfo"), settings(G)), True)
-check("defaults: native unit indicators on, flat fill, full opacity",
+check("defaults: native unit indicators on, Juicy stripes, half opacity",
       (settings(G).player, settings(G).target, settings(G).party, settings(G).nameplates,
-       settings(G).fillTexture, settings(G).overlayAlpha), (True, True, True, True, "flat", 1))
+       settings(G).fillTexture, settings(G).overlayAlpha), (True, True, True, True, "stripes", 0.5))
 check("a heartbeat driver exists and an update is exposed",
       (M._driver() is not None, type(M.Update).__name__ != "NoneType"), (True, True))
 
@@ -219,7 +220,8 @@ check("  it is its own frame, and the bar's geometry is untouched",
 check("  it reads raw absorb and the raw health pool",
       on_bar(G, o.bar, "SetMinMaxValues"), [[0, 1000]])
 check("  and shows the remaining absorb", on_bar(G, o.bar, "SetValue"), [[1200]])
-check("  with the native flat shield texture", o.bar.statusTexture, r"Interface\Buttons\WHITE8X8")
+check("  with the default Juicy shield texture", o.bar.statusTexture, STRIPES)
+check("  at half opacity", o.bar.statusColor[4], 0.5)
 
 o2 = M._overlay(G.PlayerFrame.healthbar)
 check("the legacy .healthbar of the player frame is untouched", o2, None)
@@ -585,7 +587,7 @@ GO.Fire("UNIT_ABSORB_AMOUNT_CHANGED", "player")
 old_overlay = MO._overlay(GO.PlayerFrame.PlayerFrameContent.PlayerFrameContentMain.HealthBar)
 check("old HUD settings stay saved while only the native overlay runs",
       (settings(GO).hud, settings(GO).scale, MO._overlayCount(), old_overlay.bar.statusTexture),
-      (True, 9, 1, r"Interface\Buttons\WHITE8X8"))
+      (True, 9, 1, STRIPES))
 
 print("-- frames that arrive or are replaced later")
 rtR, GR, BITR = boot()
