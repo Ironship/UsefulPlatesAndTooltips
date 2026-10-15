@@ -181,6 +181,166 @@ class EllesmereCompatibility(unittest.TestCase):
                 shield.Update()
                 self.assertTrue(shield._overlay(game.euiTarget.Health).bar.shown)
 
+    def test_shields_include_separate_party_map_and_retire_recycled_frames(self):
+        for retail in (False, True):
+            with self.subTest(retail=retail):
+                rt, game, addon, dot = boot(retail, r"""
+                    function UnitGetTotalAbsorbs() return 75 end
+                    partyButton, raidButton = FakeMock('party',UIParent), FakeMock('raid',UIParent)
+                    partyButton.GetAttribute=function() return 'party1' end
+                    raidButton.GetAttribute=function() return 'raid1' end
+                    partyHP, raidHP = FakeMock('party HP',partyButton), FakeMock('raid HP',raidButton)
+                    EllesmereUI._ModuleNS.EllesmereUIRaidFrames={
+                        _internals={unitToButton={raid1=raidButton}},
+                        _partyUnitToButton={party1=partyButton},
+                        GetFFD=function(frame) return {health=frame==partyButton and partyHP or raidHP} end,
+                    }
+                """)
+                shield = addon.modules["ShieldsInfo"]
+                shield.Update()
+                for bar in (game.partyHP, game.raidHP):
+                    self.assertIsNotNone(shield._overlay(bar))
+                    self.assertTrue(shield._overlay(bar).bar.shown)
+                rt.execute("EllesmereUI._ModuleNS.EllesmereUIRaidFrames._internals=nil")
+                shield.Update()
+                self.assertTrue(shield._overlay(game.partyHP).bar.shown)
+                self.assertFalse(shield._overlay(game.raidHP).bar.shown)
+                rt.execute("partyButton.GetAttribute=function() return 'party2' end")
+                shield.Update()
+                self.assertFalse(shield._overlay(game.partyHP).bar.shown)
+                rt.execute("partyButton.GetAttribute=function() return 'party1' end; partyButton:Hide()")
+                shield.Update()
+                self.assertFalse(shield._overlay(game.partyHP).bar.shown)
+
+    def test_shields_follow_host_orientation_and_reverse_fill_after_profile_change(self):
+        for retail in (False, True):
+            with self.subTest(retail=retail):
+                rt, game, addon, dot = boot(retail, r"""
+                    function UnitGetTotalAbsorbs() return 75 end
+                    orientation, reverse = 'HORIZONTAL', true
+                    euiTarget.Health.GetOrientation=function() return orientation end
+                    euiTarget.Health.GetReverseFill=function() return reverse end
+                    local factory=CreateFrame
+                    function CreateFrame(...)
+                        local frame=factory(...)
+                        frame.SetOrientation=function(self,v) self.orientation=v end
+                        frame.SetReverseFill=function(self,v) self.reverseFill=v end
+                        return frame
+                    end
+                """)
+                shield = addon.modules["ShieldsInfo"]
+                for orientation, reverse in (("HORIZONTAL", True), ("VERTICAL", False),
+                                             ("VERTICAL", True), ("HORIZONTAL", False)):
+                    game.orientation, game.reverse = orientation, reverse
+                    shield.Update()
+                    bar = shield._overlay(game.euiTarget.Health).bar
+                    self.assertEqual(bar.orientation, orientation)
+                    self.assertEqual(bar.reverseFill, reverse)
+
+    def test_forever_range_dims_eui_buttons_and_preserves_eui_colors(self):
+        rt, game, addon, dot = boot(False, r"""
+            -- Method hooks run after the real setter, including EUI's own range tint.
+            local globalHook=hooksecurefunc
+            function hooksecurefunc(object,key,callback)
+                if type(object)=='string' then return globalHook(object,key) end
+                local original=object[key]
+                object[key]=function(...) original(...); callback(...) end
+            end
+            function MakeIcon(button)
+                local icon=FakeMock('icon',button)
+                icon.rgb, icon.desat={0.8,0.2,0.1,0.75},false
+                function icon:GetVertexColor() return unpack(self.rgb) end
+                function icon:SetVertexColor(...) self.rgb={...} end
+                function icon:IsDesaturated() return self.desat end
+                function icon:SetDesaturated(value) self.desat=value end
+                return icon
+            end
+            EABButton1.icon=MakeIcon(EABButton1)
+            setmetatable(EABButton1,{__index=getmetatable(EABButton1).__index,
+                __newindex=function() error('custom state written onto an EUI secure button') end})
+            actionRanges={[61]=false,[73]=true}
+            function C_ActionBar.IsActionInRange(slot) return actionRanges[slot] end
+            function C_ActionBar.EnableActionRangeCheck() error('UPT changed EUI range subscription') end
+        """)
+        rng, icon = addon.modules["Range"], game.EABButton1.icon
+
+        def color(expected):
+            self.assertEqual(len(icon.rgb), len(expected))
+            for actual, want in zip(icon.rgb.values(), expected):
+                self.assertAlmostEqual(actual, want)
+
+        pulse(game)
+        self.assertTrue(icon.desat)
+        color((0.48, 0.12, 0.06, 0.75))
+        # EUI repaints a dimmed icon; UPT must keep the latest underlying tint.
+        icon.SetVertexColor(icon, 0.5, 0.5, 1, 1)
+        icon.SetDesaturated(icon, True)
+        color((0.3, 0.3, 0.6, 1))
+        rng.settings.dimIcons = False
+        rng.RefreshDimming()
+        color((0.5, 0.5, 1, 1))
+        self.assertTrue(icon.desat, "restoring range must preserve EUI's own desaturation")
+        rng.settings.dimIcons = True
+        rng.RefreshDimming()
+        game.euiAction = 73
+        pulse(game)
+        color((0.5, 0.5, 1, 1))
+        game.euiAction = 61
+        pulse(game)
+        self.assertTrue(icon.desat)
+        game.actionRanges[61] = game.SECRET
+        pulse(game)
+        color((0.5, 0.5, 1, 1))
+        game.actionRanges[61] = False
+        pulse(game)
+        game.euiAction = game.SECRET
+        pulse(game)
+        color((0.5, 0.5, 1, 1))
+        game.euiAction = 61
+        pulse(game)
+        rt.execute("units.target=nil; target=nil")
+        game.Fire("PLAYER_TARGET_CHANGED")
+        color((0.5, 0.5, 1, 1))
+        # Late EUI buttons are discovered without another addon load.
+        rt.execute("""
+            units.target=mobA; target={hostile=true}
+            EABButton180=CreateFrame('CheckButton','EABButton180',UIParent)
+            EABButton180.GetAttribute=function() return 61 end
+            EABButton180.icon=MakeIcon(EABButton180)
+        """)
+        game.Fire("PLAYER_TARGET_CHANGED")
+        pulse(game)
+        self.assertTrue(game.EABButton180.icon.desat)
+        # Even if EUI calls Blizzard's helper, do not read .action or write button state.
+        game.ActionButton_UpdateRangeIndicator(game.EABButton1, True, False)
+        rt.execute("""
+            EABButton1:Hide()
+            C_ActionBar.IsActionInRange=nil
+            function IsActionInRange() return 0 end
+        """)
+        pulse(game)
+        color((0.5, 0.5, 1, 1))
+        rt.execute("EABButton1:Show()")
+        pulse(game)
+        color((0.3, 0.3, 0.6, 1))
+        rt.execute("function IsActionInRange() return nil end")
+        pulse(game)
+        color((0.5, 0.5, 1, 1))
+
+    def test_disabled_forever_range_leaves_eui_icons_untouched_in_settings(self):
+        rt, game, addon, dot = boot(False, r"""
+            UsefulPlatesAndTooltipsDB={modules={Range={enabled=false}}}
+            rangeReads, colorReads=0,0
+            function C_ActionBar.IsActionInRange() rangeReads=rangeReads+1; return false end
+            EABButton1.icon=FakeMock('icon',EABButton1)
+            EABButton1.icon.GetVertexColor=function() colorReads=colorReads+1; return 1,1,1,1 end
+            EABButton1.icon.IsDesaturated=function() return false end
+        """)
+        addon.OpenSettings("Range")
+        addon.modules["Range"].RefreshDimming()
+        pulse(game)
+        self.assertEqual((game.rangeReads, game.colorReads), (0, 0))
+
     def test_visible_nameplate_bar_and_recycled_health_are_used(self):
         for retail in (False, True):
             with self.subTest(retail=retail):

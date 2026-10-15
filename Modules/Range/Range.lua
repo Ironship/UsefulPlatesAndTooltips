@@ -56,7 +56,7 @@ local DRUID_FORM_SPELLS = { [1] = { 1082 }, [5] = { 6795, 5211 }, [8] = { 6795, 
 -- Spells that count only while they can be used: Charge, out of combat in Battle Stance.
 local WHEN_USABLE = { [100] = true }
 
-local settings
+local settings, running
 
 local function isSecret(v) return type(issecretvalue) == "function" and issecretvalue(v) or false end
 
@@ -200,6 +200,7 @@ BIT.RegisterCommand("rangecheck", function() M.Report() end)
 ---------------------------------------------------------------------------------------------
 
 local icon, driver
+local refreshEuiDimming
 
 -- The target's nameplate, if there is one the addon may use.
 local function targetPlate()
@@ -259,11 +260,13 @@ local function start()
     if since < UPDATE_INTERVAL then return end
     since = 0
     update()
+    refreshEuiDimming()
   end)
   driver:RegisterEvent("PLAYER_TARGET_CHANGED")
   driver:RegisterEvent("NAME_PLATE_UNIT_ADDED")
   driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
   driver:SetScript("OnEvent", function(_, event, unit)
+    refreshEuiDimming()
     -- the plate the icon sits on is being handed to another unit: never leave the icon on it. Other
     -- plates come and go without concern.
     if event == "NAME_PLATE_UNIT_REMOVED" and icon:GetParent() ~= UIParent
@@ -292,6 +295,87 @@ end
 local DIM = 0.6
 local seen = {}   -- every action button the range update has reached
 local dimmed = {} -- the ones dimmed now
+
+-- EUI owns its range subscriptions and icon colors. Poll with the existing target
+-- clock; keep cosmetic state off its secure buttons and remember every EUI repaint.
+local euiDimmed = {}
+local function paintEui(state)
+  state.writing = true
+  pcall(function()
+    local scale = state.active and DIM or 1
+    state.icon:SetVertexColor(state.r * scale, state.g * scale, state.b * scale, state.a)
+    state.icon:SetDesaturated(state.active or state.desaturated)
+  end)
+  state.writing = false
+end
+
+local function plainColor(r, g, b, a)
+  return not isSecret(r) and not isSecret(g) and not isSecret(b) and not isSecret(a)
+    and type(r) == "number" and type(g) == "number" and type(b) == "number"
+    and (a == nil or type(a) == "number")
+end
+
+local function euiState(texture)
+  if type(texture.GetVertexColor) ~= "function" then return nil end
+  local ok, r, g, b, a = pcall(texture.GetVertexColor, texture)
+  local desaturated = ask(texture.IsDesaturated, texture)
+  if not ok or not plainColor(r, g, b, a) or type(desaturated) ~= "boolean" then return nil end
+  local state = { icon = texture, r = r, g = g, b = b, a = a or 1, desaturated = desaturated }
+  hooksecurefunc(texture, "SetVertexColor", function(_, red, green, blue, alpha)
+    if state.writing or not plainColor(red, green, blue, alpha) then return end
+    state.r, state.g, state.b, state.a = red, green, blue, alpha or 1
+    if state.active then paintEui(state) end
+  end)
+  hooksecurefunc(texture, "SetDesaturated", function(_, value)
+    if state.writing or isSecret(value) or type(value) ~= "boolean" then return end
+    state.desaturated = value
+    if state.active then paintEui(state) end
+  end)
+  return state
+end
+
+refreshEuiDimming = function()
+  if not running or type(EllesmereUI) ~= "table" then return end
+  for _, state in pairs(euiDimmed) do state.current = false end
+  local hasTarget = settings.dimIcons and ask(UnitExists, "target") == true
+    and ask(UnitIsDeadOrGhost, "target") ~= true
+  local rangeQuery = C_ActionBar and C_ActionBar.IsActionInRange or IsActionInRange
+  for i = 1, 180 do
+    local button = _G["EABButton" .. i]
+    if type(button) == "table" then
+      local texture = button.icon or button.Icon
+      local state = euiDimmed[button]
+      if state and state.icon ~= texture then
+        state.active = false
+        paintEui(state)
+        euiDimmed[button], state = nil, nil
+      end
+      local out = false
+      if hasTarget and ask(button.IsVisible, button) == true then
+        local slot = ask(button.GetAttribute, button, "action")
+        if type(slot) == "number" and slot > 0 then
+          local inRange = ask(rangeQuery, slot)
+          out = inRange == false or inRange == 0
+        end
+      end
+      if not state and out and type(texture) == "table" then
+        state = euiState(texture)
+        euiDimmed[button] = state
+      end
+      if state then
+        state.current = true
+        if state.active ~= out then state.active = out; paintEui(state) end
+      end
+    end
+  end
+  for button, state in pairs(euiDimmed) do
+    if not state.current then
+      state.active = false
+      paintEui(state)
+      euiDimmed[button] = nil
+    end
+  end
+end
 
 local function dimIcon(button)
   local icon = button.icon
@@ -333,6 +417,8 @@ local function startDimming()
   end
   hooksecurefunc("ActionButton_UpdateRangeIndicator", function(button, checksRange, inRange)
     if type(button) ~= "table" or isSecret(checksRange) or isSecret(inRange) then return end
+    local name = ask(button.GetName, button)
+    if type(name) == "string" and name:match("^EABButton%d+$") and _G[name] == button then return end
     -- Normalize: Blizzard passes booleans, but 1/0 must read the same (0 is truthy in Lua).
     checksRange = (checksRange == true or checksRange == 1)
     inRange = (inRange == true or inRange == 1)
@@ -348,6 +434,7 @@ end
 -- After the setting changes: dim or restore every button now.
 function M.RefreshDimming()
   for button in pairs(seen) do dimIcon(button) end
+  refreshEuiDimming()
 end
 
 ---------------------------------------------------------------------------------------------
@@ -372,8 +459,10 @@ loader:SetScript("OnEvent", function(self, _, name)
   self:UnregisterAllEvents()
   if not BIT.ShouldRun("Range") then return end
   prepareRangeSettings()
+  running = true
   start()
   startDimming()
+  M.RefreshDimming()
 end)
 
 -- A settings-only sample. These are fictitious frames, not live nameplates or

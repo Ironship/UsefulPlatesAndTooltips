@@ -256,9 +256,6 @@ local function overlayFor(healthBar)
   local ok, bar = pcall(function()
     local b = CreateFrame("StatusBar", nil, healthBar)
     b:SetAllPoints(healthBar)
-    local orientation = ask(healthBar.GetOrientation, healthBar) or "HORIZONTAL"
-    b:SetOrientation(orientation)
-    b:SetReverseFill(orientation == "VERTICAL")
     b:SetFrameLevel((healthBar:GetFrameLevel() or 0) + 1)
     styleOverlay(b)
     b:Hide()
@@ -314,6 +311,15 @@ local function updateBar(unit, healthBar, enabled)
   end
   o.current = true
   local ok = pcall(function()
+    -- EUI can change fill direction on the same bar when its profile changes.
+    local orientation = ask(healthBar.GetOrientation, healthBar)
+    if isSecret(orientation) or (orientation ~= "VERTICAL" and orientation ~= "HORIZONTAL") then
+      orientation = "HORIZONTAL"
+    end
+    local reverse = ask(healthBar.GetReverseFill, healthBar)
+    if isSecret(reverse) or type(reverse) ~= "boolean" then reverse = orientation == "VERTICAL" end
+    if o.orientation ~= orientation then o.bar:SetOrientation(orientation); o.orientation = orientation end
+    if o.reverse ~= reverse then o.bar:SetReverseFill(reverse); o.reverse = reverse end
     local dotOn = BIT.Plate and type(BIT.Plate.DotOnUnit) == "function" and BIT.Plate.DotOnUnit(unit)
     applyOverlayMode(o, dotOn == true)
     o.bar:SetMinMaxValues(0, maxHealth)
@@ -509,20 +515,22 @@ local function partyBars()
   local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
   local eui = type(modules) == "table" and modules.EllesmereUIRaidFrames
   local internals = type(eui) == "table" and eui._internals
-  local members = type(internals) == "table" and internals.unitToButton
-  if type(members) == "table" then
+  local function addMembers(members)
+    if type(members) ~= "table" then return end
     for unit, frame in pairs(members) do
       if not isSecret(unit) and type(unit) == "string" and (unit == "player"
           or unit:match("^party%d+$") or unit:match("^raid%d+$")) then
         local data = ask(eui.GetFFD, frame)
         local current = type(frame) == "table" and ask(frame.GetAttribute, frame, "unit")
-        if current == unit and type(data) == "table" and type(data.health) == "table"
+        if not isSecret(current) and current == unit and type(data) == "table" and type(data.health) == "table"
             and ask(frame.IsVisible, frame) == true then
           bars[#bars + 1] = { unit = unit, bar = data.health }
         end
       end
     end
   end
+  addMembers(type(internals) == "table" and internals.unitToButton)
+  addMembers(type(eui) == "table" and eui._partyUnitToButton)
   local seen, out = {}, {}
   for _, b in ipairs(bars) do
     if not seen[b.bar] then
