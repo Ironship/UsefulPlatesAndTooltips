@@ -23,11 +23,13 @@ local MODULE_PREVIEW_BOTTOM = 8 -- OFF-page bottom allowance below a module's pr
 
 local SHORT_LABEL = {
   SpellDamageInfo = "Spells",
+  CastPrediction = "Cast",
   DoTInfo = "DoTs",
   StatsInfo = "Stats",
   ResourceDing = "Points",
   Range = "Range",
   ShieldsInfo = "Shields",
+  HealPrediction = "Heals",
   HunterRangeFinder = "Hunter",
 }
 

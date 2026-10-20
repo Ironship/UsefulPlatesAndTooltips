@@ -173,7 +173,7 @@ BIT.OpenSettings("DoTInfo")
 window = G.UsefulPlatesAndTooltipsSettings
 assert window.template == "ButtonFrameTemplate" and window.portraitHidden and not window.Inset.shown
 tabs = [child for child in window.children.values() if child.template == "PanelTopTabButtonTemplate"]
-assert len(tabs) == 7 and sum(bool(tab.nativeSelected) for tab in tabs) == 1
+assert len(tabs) == 9 and sum(bool(tab.nativeSelected) for tab in tabs) == 1
 spells = next(tab for tab in tabs if tab.name == "SpellDamageInfo")
 spells.scripts.OnEnter(spells)
 assert G.GameTooltip.shown and not spells.nativeSelected
