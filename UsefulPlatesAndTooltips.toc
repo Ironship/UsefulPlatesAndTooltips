@@ -1,0 +1,50 @@
+## Interface: 16001
+## Title: Useful Plates and Tooltips
+## Notes: Useful nameplate and tooltip info for WoW: Forever: DoT marks, shields, hunter range, combo points, stat comparisons and action bar damage numbers. Every part can be switched off. /upt
+## Author: Ironship
+## Version: 0.9.72
+## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
+## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
+
+Core\Init.lua
+Core\PlateLayout.lua
+Core\Appearance.lua
+Core\Settings.lua
+Core\Preview.lua
+
+# SpellDamageInfo, from the addon of that name
+Modules\SpellDamageInfo\Locale.lua
+Modules\SpellDamageInfo\SpellIDs.lua
+Modules\SpellDamageInfo\SpellCoefficients.lua
+Modules\SpellDamageInfo\Parser.lua
+Modules\SpellDamageInfo\Estimate.lua
+Modules\SpellDamageInfo\Core.lua
+Modules\SpellDamageInfo\Options.lua
+
+# DoTInfo: based on a standalone DoT addon by Joe Greive (MIT), via Ironship's German fork (see LICENSE)
+Modules\DoTInfo\Locale.lua
+Modules\DoTInfo\Core.lua
+Modules\DoTInfo\RogueEffects.lua
+Modules\DoTInfo\Options.lua
+Modules\DoTInfo\Nameplates.lua
+
+Modules\StatsInfo\Weights.lua
+Modules\StatsInfo\StatsInfo.lua
+Modules\StatsInfo\BagMarkers.lua
+Modules\StatsInfo\WorldMarkers.lua
+Modules\StatsInfo\QuestMarkers.lua
+
+# ResourceDing, from the addon of that name
+Modules\ResourceDing\Core.lua
+Modules\ResourceDing\Dots.lua
+Modules\ResourceDing\Shards.lua
+Modules\ResourceDing\Mana.lua
+Modules\ResourceDing\Settings.lua
+
+Modules\Range\Range.lua
+
+# Remaining absorbs on unit frames and nameplates (no floating HUD)
+Modules\ShieldsInfo\ShieldsInfo.lua
+
+# Hunter-specific range ladder, beside the existing class range marker
+Modules\HunterRangeFinder\HunterRangeFinder.lua
