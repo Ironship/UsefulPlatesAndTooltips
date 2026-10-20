@@ -19,6 +19,12 @@ Shows the damage your DoTs or Bleeds still have to deal as a marker on the targe
 
 Rip and Rupture use your combo points. Procs from critical hits, such as Ignite and Deep Wounds, are not tracked as they are based on RNG i still think how this can be improved.
 
+### WIP
+Channeling and casting prediction for normal spells.
+
+<img width="1064" height="1009" alt="{3045F908-1D52-4E85-8F2D-19C7AF79044C}" src="https://github.com/user-attachments/assets/8d6dc029-3979-47fb-b450-7cf5a0375956" />
+
+
 ### HunterRange
 
 For hunters only. A range rail sits above the target's nameplate, or at a spot you place on screen: six dots, and a seventh past 35 yd when Hawk Eye is detected or switched on. A sword marks melee range, and a skull marks the dead zone. The bands are approximate, not exact yard measurements.
