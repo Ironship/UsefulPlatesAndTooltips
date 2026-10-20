@@ -227,6 +227,12 @@ local function unitKey(unit)
     return "target"
 end
 
+function ns._selectedEnemyKey()
+    local ok, attackable = pcall(UnitCanAttack, "player", "target")
+    local key = ok and not isSecret(attackable) and attackable == true and unitKey("target")
+    return key or unitKey("softenemy")
+end
+
 local function spellNameAndDescription(spellID)
     local name, desc
     if C_Spell and C_Spell.GetSpellName then
@@ -386,10 +392,10 @@ local function castRecipient(castGUID, spellID)
         -- (DOT-1). Only dynamic targeting -- SENT carried no target name at all, the client
         -- picks the victim itself -- lands on the mob it picked by the time of SUCCEEDED.
         if not sent.dynamic then return end
-        return unitKey("target") or unitKey("softenemy")
+        return ns._selectedEnemyKey()
     end
     if ns.Retail then return end -- No SENT snapshot can prove a delayed event's recipient.
-    return unitKey("target") or unitKey("softenemy")
+    return ns._selectedEnemyKey()
 end
 
 local function outcomeRecipient()
@@ -397,7 +403,7 @@ local function outcomeRecipient()
         if pendingCast.key then return pendingCast.key end
         if not pendingCast.dynamic then return end
     end
-    return unitKey("target") or unitKey("softenemy")
+    return ns._selectedEnemyKey()
 end
 
 -- Cast outcomes. UNIT_COMBAT reports a dodge/parry/miss/resist/immune on the target, but not which attack it
@@ -494,12 +500,12 @@ local function onCastSent(spellID, castGUID, targetName)
     -- DOT-1: remember who the cast is aimed at while the target is still it.
     -- SUCCEEDED only names the spell, so onPlayerCast uses this instead of
     -- the (maybe tabbed-away) current target. Never cleared by target change.
-    -- Action targeting can have only softenemy. Hard targets keep precedence; unitKey only uses
+    -- Only an attackable hard target takes precedence over softenemy; unitKey only uses
     -- a soft target whose own GUID or matching nameplate's GUID can be read safely.
     local recipient, dynamicTargeting
     if ns.Retail then recipient = ns.Retail.Recipient(targetName)
     else
-        recipient = unitKey("target") or unitKey("softenemy")
+        recipient = ns._selectedEnemyKey()
         -- Forever's dynamic targeting: the client picks the victim itself, so SENT names no
         -- target at all. Such a cast may land on the current target at SUCCEEDED; a named but
         -- unreadable recipient must never (DOT-1).
