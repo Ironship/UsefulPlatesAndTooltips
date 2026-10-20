@@ -141,7 +141,7 @@ function R.TargetChanged()
 end
 
 function R.Recipient(sentName)
-    local default = R.UnitKey("target") or R.UnitKey("softenemy")
+    local default = ns._selectedEnemyKey()
     if secret(sentName) or type(sentName) ~= "string" or sentName == "" then
         -- A hidden SENT name cannot distinguish a selected-target cast from a focus/mouseover macro.
         for _, unit in ipairs({ "mouseover", "focus" }) do
@@ -155,7 +155,8 @@ function R.Recipient(sentName)
     -- A readable SENT name can identify a focus/mouseover cast, but identical NPC names are ambiguous.
     local recipient
     for _, unit in ipairs({ "target", "softenemy", "mouseover", "focus" }) do
-        if ask(UnitExists, unit) == true and ask(UnitName, unit) == sentName then
+        if ask(UnitExists, unit) == true and ask(UnitCanAttack, "player", unit) == true
+            and ask(UnitName, unit) == sentName then
             local key = R.UnitKey(unit)
             if not key then return end
             if recipient and key ~= recipient then return end

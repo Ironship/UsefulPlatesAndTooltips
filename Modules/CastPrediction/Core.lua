@@ -422,7 +422,7 @@ local function hostileTarget(unit)
 end
 
 local function selectedEnemy()
-    if read(UnitExists, "target") == true then return hostileTarget("target") and "target" or nil end
+    if hostileTarget("target") then return "target" end
     return hostileTarget("softenemy") and "softenemy" or nil
 end
 
