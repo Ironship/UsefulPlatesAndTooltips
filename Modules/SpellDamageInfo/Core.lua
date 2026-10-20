@@ -862,6 +862,7 @@ local BAR_PREFIXES = {
 
 local buttons = {} -- list of Blizzard action buttons
 local euiButtons = {} -- EUI's action slot lives in a secure attribute; never read its .action field.
+local gamepadButtons, gamepadHosts = {}, {}
 local labels = {}  -- [button] = our FontString for the main number
 local sideLabels = {} -- [button] = our smaller FontString for a reduction next to a damage number
 
@@ -895,6 +896,28 @@ local function collectButtons()
     for i = 1, 180 do
       local b = _G["EABButton" .. i]
       if type(b) == "table" then euiButtons[b] = true; add(b) end
+    end
+  end
+  -- Forever's native crossbar stores its buttons in page units, outside ActionButton1..12.
+  local host = GamepadMainActionBarFrame
+  local page = type(host) == "table" and host.PageUnit
+  local bars = type(page) == "table" and page.actionBars
+  if type(bars) == "table" then
+    for _, bar in pairs(bars) do
+      if type(bar) == "table" and type(bar.actionButtons) == "table" then
+        for _, b in ipairs(bar.actionButtons) do
+          if type(b) == "table" and type(b.CalculateAction) == "function" then
+            gamepadButtons[b] = true
+            add(b)
+          end
+        end
+      end
+    end
+    if not gamepadHosts[host] then
+      local function refresh() if ns.Refresh then ns.Refresh() end end
+      if type(page.AddPageChangeCallback) == "function" then pcall(page.AddPageChangeCallback, page, refresh) end
+      if type(host.HookScript) == "function" then pcall(host.HookScript, host, "OnShow", refresh) end
+      gamepadHosts[host] = true
     end
   end
 end
@@ -1458,7 +1481,10 @@ local function updateButton(button, pet)
   local view, reduction
   local slot
   if not pet then
-    if euiButtons[button] then
+    if gamepadButtons[button] then
+      local ok, value = pcall(button.CalculateAction, button)
+      if ok and not isSecret(value) then slot = value end
+    elseif euiButtons[button] then
       local ok, value = pcall(button.GetAttribute, button, "action")
       if ok and not isSecret(value) and type(value) == "number" and value > 0 then slot = value end
     else slot = button.action end
@@ -1501,7 +1527,8 @@ local function requestUpdate()
   local function run()
     pending = false
     -- EUI can create additional bars after login or defer them until combat ends.
-    if type(EllesmereUI) == "table" or type(EABButton1) == "table" then collectButtons() end
+    if type(EllesmereUI) == "table" or type(EABButton1) == "table"
+      or type(GamepadMainActionBarFrame) == "table" then collectButtons() end
     readBonus()
     readWeapon()
     parseBudget, parseDeferred = PARSE_BUDGET, false
@@ -2023,6 +2050,8 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
       ns.DecideLangsAtLoad()
       loadSettings()
       ns.InitInterfaceL(db.interfaceLang)
+    elseif arg1 == "Blizzard_GamepadActionBars" then
+      requestUpdate()
     end
   elseif event == "PLAYER_LOGIN" then
     collectButtons()

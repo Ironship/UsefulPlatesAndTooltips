@@ -8,7 +8,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 PREFIX = "UsefulPlatesAndTooltips/"
-RETAIL_MODULES = {"DoTInfo", "ResourceDing", "ShieldsInfo", "SpellDamageInfo"}
+RETAIL_MODULES = {"DoTInfo", "ResourceDing", "ShieldsInfo", "SpellDamageInfo", "CastPrediction", "HealPrediction"}
 
 RETAIL_CLIENT = r'''
   function GetBuildInfo() return "12.1.0", "69933", "Oct 8 2026", 120100 end
@@ -218,7 +218,7 @@ def check_retail_lifecycle(path):
     rt.execute('playerClass = "DRUID"; function GetShapeshiftFormID() return hidden end')
     rows = addon.Plate.Rows()
     assert not rows.dots.on, "An unreadable druid form must not show inactive combo dots"
-    print("ok Retail ZIP integration: four module tabs, settings, placement and masked readings")
+    print("ok Retail ZIP integration: six module tabs, settings, placement and masked readings")
 
     disabled = ", ".join(f'{name} = {{ enabled = false }}' for name in sorted(RETAIL_MODULES))
     _, off_globals, off_addon = load_retail_archive(path, "UsefulPlatesAndTooltipsDB = { modules = { " + disabled + " } }")
@@ -231,7 +231,7 @@ def check_retail_lifecycle(path):
     assert off_globals.UsefulPlatesAndTooltips_ResourceDingDB is None
     assert len(off_addon.modules.SpellDamageInfo._buttons) == 0
     assert off_addon.modules.ShieldsInfo._driver() is None
-    print("ok Retail ZIP module switches: all four remain silent when switched off")
+    print("ok Retail ZIP module switches: all six remain silent when switched off")
 
     _, rogue_globals, rogue_addon = load_retail_archive(path, player_class="ROGUE")
     assert rogue_globals.C_XMLUtil is None, "The package fixture deliberately lacks the native aura template API"
@@ -246,7 +246,7 @@ def check_retail_lifecycle(path):
         rogue_addon.OpenSettings(name)
         assert rogue_addon._pages[name].offNote is None, name
     assert not any("could not be built" in str(message) for message in rogue_globals.chat.values())
-    print("ok Retail rogue startup: missing native aura API leaves all four modules and settings available")
+    print("ok Retail rogue startup: missing native aura API leaves all six modules and settings available")
 
 
 if __name__ == "__main__":

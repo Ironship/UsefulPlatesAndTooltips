@@ -24,6 +24,17 @@ Channeling and casting prediction for normal spells.
 
 <img width="1064" height="1009" alt="{3045F908-1D52-4E85-8F2D-19C7AF79044C}" src="https://github.com/user-attachments/assets/8d6dc029-3979-47fb-b450-7cf5a0375956" />
 
+### CastPrediction
+
+Shows the damage of the spell you are casting on the enemy's health bar and nameplate. Direct hits use a solid translucent fill; channels use vertical bands for the damage remaining. Colors follow the spell's school, matching DoTInfo.
+
+The fill covers health backwards from its current edge: 20 damage at 60/100 HP covers 60 down to 40. It follows health changes and clips overkill inside the bar. Action targeting works without clicking a target, and the prediction stays on the original enemy if the reticle moves.
+
+The direct hit is separate from DoTInfo's damage-over-time marker. For rank-1 Fireball, the unmodified average is 18 damage on impact plus 2 over time. Critical strikes, procs and resists can change the result. `/upt cast` opens the settings and preview.
+
+### HealPrediction
+
+Incoming healing on target, party and raid frames, drawn from the current health edge. It uses the client's `UnitGetIncomingHeals` reading. The "All healers" option shows the client's total instead of only your heals. `/upt heals` opens the settings.
 
 ### HunterRange
 
@@ -46,6 +57,8 @@ Casters get a sound when mana climbs to a set level: 100% by default, 80% for wa
 
 Damage and healing numbers on your action buttons and in spell tooltips.
 
+Forever's native gamepad crossbar also gets the numbers, including after changing pages. Total mode includes the direct hit and DoT; Direct mode shows only the hit.
+
 Bars built on LibActionButton (Bartender4, ElvUI and others) get no numbers. Blizzard's action bars do.
 
 ![damage prediction](https://i.imgur.com/ySumj4S.png) ![healing prediction](https://i.imgur.com/xvGpoTg.png)
@@ -66,10 +79,13 @@ Tooltips are one line. Hold Shift to see the full version. Upgrade arrows also a
 *   Platynator
 *   EllesmereUI
 
-## Credits and licence
+## Licence
 
-GPL-3.0-or-later, see [LICENSE](LICENSE). Third-party parts keep their own notices:
+GPL-3.0-or-later, see [LICENSE](LICENSE).
 
-*   **DoTInfo** is based on [Does It Die](https://www.curseforge.com/wow/addons/does-it-die) by Joe Greive (MIT) (but with fixes. Also i thought i want to have healing prediction, shield prediction, channeling spells prediction, bleeds etc)
-*   **SpellDamageInfo** and **ResourceDing** come from the standalone addons of the same names made by me.
-*   **StatsInfo** is written after the idea of RatingBuster (Whitetooth, GPL), with none of its code or tables. Stat weights come from [ForeverSim](https://github.com/laurencestokes/foreversim), built on WoWSims and Elliot Wood's Forever sim.
+Third-party parts keep their own MIT notices:
+
+*   **DoTInfo** is based on [Does It Die](https://www.curseforge.com/wow/addons/does-it-die) by Joe Greive; see `Modules/DoTInfo/LICENSE-DoesItDie.txt`.
+*   **ShieldsInfo** is adapted from [Shield Aura Forever](https://github.com/JasonEcks/ShieldAuraForever) by JasonEcks and contributors; see `Modules/ShieldsInfo/LICENSE-ShieldAuraForever.txt`.
+*   **SpellDamageInfo's options window** is adapted from Does It Die by Joe Greive; see `Modules/SpellDamageInfo/LICENSE-SpellDamageInfo.txt`.
+*   **Stat weights** come from [ForeverSim](https://github.com/laurencestokes/foreversim) (MIT), built on [WoWSims](https://github.com/wowsims/forever) and Elliot Wood's Forever sim; see `Modules/StatsInfo/LICENSE-ForeverSim.txt`.

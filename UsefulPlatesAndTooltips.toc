@@ -21,6 +21,12 @@ Modules\SpellDamageInfo\Estimate.lua
 Modules\SpellDamageInfo\Core.lua
 Modules\SpellDamageInfo\Options.lua
 
+# CastPrediction: the damage a cast in flight should deal, on the target's bar and plates
+Modules\CastPrediction\Auras.lua
+Modules\CastPrediction\Talents.lua
+Modules\CastPrediction\Core.lua
+Modules\CastPrediction\Options.lua
+
 # DoTInfo: based on a standalone DoT addon by Joe Greive (MIT), via Ironship's German fork (see LICENSE)
 Modules\DoTInfo\Locale.lua
 Modules\DoTInfo\Core.lua
@@ -45,6 +51,10 @@ Modules\Range\Range.lua
 
 # Remaining absorbs on unit frames and nameplates (no floating HUD)
 Modules\ShieldsInfo\ShieldsInfo.lua
+
+# Incoming-heal projection (the client's own UnitGetIncomingHeals), redrawn on Blizzard's frames
+Modules\HealPrediction\Core.lua
+Modules\HealPrediction\Options.lua
 
 # Hunter-specific range ladder, beside the existing class range marker
 Modules\HunterRangeFinder\HunterRangeFinder.lua

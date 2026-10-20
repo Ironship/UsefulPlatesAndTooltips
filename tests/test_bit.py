@@ -318,12 +318,12 @@ def chat(G):
 # ---------------------------------------------------------------------------------------------
 print("-- every module on")
 rt, G, BIT, files = load()
-check("the .toc lists the core and seven modules' files", len(files), 30)
+check("the .toc lists the core and nine modules' files", len(files), 36)
 check("the tabs are in the order the files load", list(BIT.order.values()),
-      ["SpellDamageInfo", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HunterRangeFinder"])
+      ["SpellDamageInfo", "CastPrediction", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HealPrediction", "HunterRangeFinder"])
 G.Fire("ADDON_LOADED", "UsefulPlatesAndTooltips")
 G.Fire("PLAYER_LOGIN")
-for name in ("SpellDamageInfo", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HunterRangeFinder"):
+for name in ("SpellDamageInfo", "CastPrediction", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HealPrediction", "HunterRangeFinder"):
     check(f"{name} runs", BIT.state[name], "on")
 check("each ported module keeps its SavedVariables apart",
       all(isinstance(G[n], object) and G[n] is not None for n in
@@ -344,7 +344,7 @@ check("ResourceDing's combo point dots started", BIT.modules["ResourceDing"]._do
 G.SlashCmdList.USEFULPLATESANDTOOLTIPS("")
 window = G.UsefulPlatesAndTooltipsSettings
 check("/upt opens the window", window is not None and window.shown, True)
-for name in ("SpellDamageInfo", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HunterRangeFinder"):
+for name in ("SpellDamageInfo", "CastPrediction", "DoTInfo", "StatsInfo", "ResourceDing", "Range", "ShieldsInfo", "HealPrediction", "HunterRangeFinder"):
     BIT.OpenSettings(name)
     page = BIT._pages[name]
     check(f"the {name} tab is built and shown", page is not None and page.shown, True)
@@ -2453,8 +2453,9 @@ for i in range(1, len(winU.children) + 1):
     if getattr(child, "kind", None) == "Button" and isinstance(getattr(child, "name", None), str) and font is not None:
         labelsU[child.name] = font.text
 check("the tabs use short names", labelsU, {
-    "SpellDamageInfo": "Spells", "DoTInfo": "DoTs", "StatsInfo": "Stats",
-    "ResourceDing": "Points", "Range": "Range", "ShieldsInfo": "Shields", "HunterRangeFinder": "Hunter",
+    "SpellDamageInfo": "Spells", "CastPrediction": "Cast", "DoTInfo": "DoTs", "StatsInfo": "Stats",
+    "ResourceDing": "Points", "Range": "Range", "ShieldsInfo": "Shields", "HealPrediction": "Heals",
+    "HunterRangeFinder": "Hunter",
 })
 spells = BITU._pages["SpellDamageInfo"]
 check("/upt starts on Spells", spells is not None and spells.shown, True)
