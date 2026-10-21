@@ -24,6 +24,13 @@ local DEFAULT_TICK_INTERVAL = 3
 local TICK_MATCH_WINDOW = 0.45
 local TICK_MATCH_WINDOW_ANCHORED = 0.25
 local MISSED_TICKS_BEFORE_DROP = 2  -- a DoT that never ticks was resisted/immune
+-- Projectile DoTs start when the projectile lands, not on the cast event: Serpent Sting's first tick came
+-- 3.6-3.9s after the cast instead of 3s (DoesItDie log 253548.7, 12 casts). Their first tick may be this much
+-- later; the same allowance keeps housekeep from counting a missed tick before the projectile has landed.
+local PROJECTILE_DOTS = {
+    travel = 1.5,
+    ["Serpent Sting"] = true, ["Fireball"] = true, ["Pyroblast"] = true, ["Frostfire Bolt"] = true,
+}
 -- Once a DoT's tick size is known, same-school hits further off than this are someone else's (the Imp's
 -- Firebolt next to Immolate, white hits next to Rip). Ticks within one cast barely vary (15,15,15,16);
 -- the minimum slack of 1 covers rounding (3 vs 4).
@@ -48,11 +55,12 @@ local KNOWN_TICK_INTERVALS = {
 -- DoTs whose ticks aren't even: each tick is the average tick times its factor (factors average 1, so the
 -- tooltip total still holds). Agony is back-loaded; seen in-game on Forever (log 166015.8, 72 over 24s):
 -- ticks 3,3,3,3 then 6,6,... then 9s. Everything else ticks evenly.
-local AGONY_SHAPE = { 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1, 1.5, 1.5, 1.5, 1.5 }
-local TICK_SHAPES = {
-    ["Bane of Agony"] = AGONY_SHAPE, -- Forever's name
-    ["Curse of Agony"] = AGONY_SHAPE,
-}
+local TICK_SHAPES = {}
+do
+    local agony = { 0.5, 0.5, 0.5, 0.5, 1, 1, 1, 1, 1.5, 1.5, 1.5, 1.5 }
+    TICK_SHAPES["Bane of Agony"] = agony -- Forever's name
+    TICK_SHAPES["Curse of Agony"] = agony
+end
 
 -- Descriptions that don't name their school.
 local SCHOOL_BY_NAME = {
@@ -80,7 +88,7 @@ ns.refreshNames = {
     ["Verderbnis"] = true, ["Schattenwort: Schmerz"] = true,
 }
 
-local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, ns.refreshNames }
+local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames }
 ns.locale.addGermanNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -336,7 +344,8 @@ end
 local function isWaiting(dot)
     if dot.predictionOnly then return false end
     if dot.ticksSeen > 0 then return false end
-    if db.waitFirstTick == "always" then return true end
+    -- An avoid right after the cast that may not have been its own: always wait for the first tick.
+    if dot.doubtful or db.waitFirstTick == "always" then return true end
     return db.waitFirstTick == "unsure" and dot.unsure
 end
 
@@ -427,8 +436,8 @@ local AVOIDED_ACTIONS = {
     IMMUNE = { 0.4, 0.25 }, DEFLECT = { 0.4, 0.25 }, RESIST = { 0.4, 0.25 }, REFLECT = { 0.4, 0.25 },
 }
 local lastBuilder    -- { key, points, at }: builder whose outcome isn't known yet
-local lastDotCast    -- { key, name, dot, previous, at }: DoT cast whose outcome isn't known yet
-local lastOutcome    -- { key, avoided, action, at }: most recent outcome on a tracked unit
+local lastDotCast    -- { key, name, dot, previous, at, landedAt }: DoT cast whose outcome isn't known yet
+local lastOutcome    -- { key, avoided, action, school, at, immune }: most recent outcome on a tracked unit
 
 local function describeReading(ok, value)
     if not ok then return "error" end
@@ -537,10 +546,14 @@ local function onCastSent(spellID, castGUID, targetName)
 end
 
 -- An avoid that arrived just before the cast event (see AVOIDED_ACTIONS' look-back), or nil.
-local function avoidJustBefore(key)
-    if lastOutcome and lastOutcome.key == key and lastOutcome.avoided then
-        local windows = AVOIDED_ACTIONS[lastOutcome.action]
-        if windows and GetTime() - lastOutcome.at <= windows[2] then return lastOutcome.action end
+local function avoidJustBefore(key, includeImmune)
+    if not lastOutcome or lastOutcome.key ~= key then return end
+    local outcome = lastOutcome.avoided and lastOutcome or (includeImmune and lastOutcome.immune)
+    if outcome then
+        local windows = AVOIDED_ACTIONS[outcome.action]
+        if windows and GetTime() - outcome.at <= windows[2] then
+            return outcome.action, outcome.school
+        end
     end
 end
 
@@ -558,9 +571,29 @@ end
 -- A DoT cast whose result was avoided isn't on the target: drop it. (Waiting for a first tick to prove it
 -- instead doesn't work for bleeds: melee white hits look just like ticks.) A recast replaced a DoT that is
 -- still ticking, so that one is put back.
-local function removeAvoidedDot(cast, action)
+-- Spell DoTs are different: the pet and other players' melee miss all the time, and their ticks are told apart
+-- from melee by school. So an avoid that can't be the spell's is ignored, and one that might not be (not
+-- reported in the spell's school) makes a new DoT wait for its first tick instead of dropping it.
+-- Returns false when the avoid was ignored, so the cast's own outcome may still come.
+local function removeAvoidedDot(cast, action, school)
+    local dot = cast.dot
     local dots = dotsByTarget[cast.key]
-    if not dots or dots[cast.name] ~= cast.dot then return end
+    if not dots or dots[cast.name] ~= dot then return true end
+    local spellSchool = type(school) == "number" and not isSecret(school) and school == dot.school
+    if dot.school ~= SCHOOL_MASKS.Physical and not spellSchool then
+        -- Spells can't be dodged, parried or deflected: next to a spell DoT, these were someone's melee.
+        if action == "DODGE" or action == "PARRY" or action == "DEFLECT" then
+            trace(string.format("AVOID %s (school %s) right after %s: not the spell, ignored", action,
+                tostring(school), cast.name))
+            return false
+        end
+        if not cast.previous then
+            dot.doubtful = true
+            trace(string.format("AVOID %s (school %s) right after %s: may be someone else's, waiting for its first tick",
+                action, tostring(school), cast.name))
+            return true
+        end
+    end
     if cast.previous then
         dots[cast.name] = cast.previous
         trace("AVOID " .. action .. " right after " .. cast.name .. " recast; keeping the earlier one")
@@ -568,13 +601,14 @@ local function removeAvoidedDot(cast, action)
         dots[cast.name] = nil
         trace("AVOID " .. action .. " right after " .. cast.name .. "; dropped")
     end
+    return true
 end
 
-local function onTargetAvoided(action, key)
+local function onTargetAvoided(action, key, school)
     local now = GetTime()
     local window = (AVOIDED_ACTIONS[action] or AVOIDED_ACTIONS.RESIST)[1]
     if key == outcomeRecipient() then
-        lastOutcome = { key = key, avoided = true, action = action, at = now }
+        lastOutcome = { key = key, avoided = true, action = action, school = school, at = now }
     end
     if lastBuilder and lastBuilder.key == key then
         if now - lastBuilder.at <= window then
@@ -584,18 +618,31 @@ local function onTargetAvoided(action, key)
         lastBuilder = nil
     end
     if lastDotCast and lastDotCast.key == key then
-        if now - lastDotCast.at <= window then removeAvoidedDot(lastDotCast, action) end
-        lastDotCast = nil
+        if now - lastDotCast.at > window then
+            lastDotCast = nil
+        elseif not lastDotCast.landedAt or action == "IMMUNE" then
+            if removeAvoidedDot(lastDotCast, action, school) then lastDotCast = nil end
+        end
     end
 end
 
--- A hit on the cast's recipient proves it landed; a hit on another mob proves nothing about it.
-local function onTargetHit(key)
+-- A matching direct hit leaves the DoT pending for a possible IMMUNE on its periodic part.
+local function onTargetHit(key, school)
+    local now = GetTime()
     if key == outcomeRecipient() then
-        lastOutcome = { key = key, avoided = false, at = GetTime() }
+        local prior = lastOutcome
+        lastOutcome = { key = key, avoided = false, at = now }
+        local immune = prior and (prior.action == "IMMUNE" and prior or prior.immune)
+        if immune and immune.key == key and now - immune.at <= AVOIDED_ACTIONS.IMMUNE[2] then
+            lastOutcome.immune = immune
+        end
     end
     if lastBuilder and lastBuilder.key == key then lastBuilder = nil end
-    if lastDotCast and lastDotCast.key == key then lastDotCast = nil end
+    if lastDotCast and lastDotCast.key == key and not lastDotCast.landedAt
+        and (lastDotCast.dot.school == SCHOOL_MASKS.Physical
+            or (not isSecret(school) and lastDotCast.dot.school == school)) then
+        lastDotCast.landedAt = now
+    end
 end
 
 local function resetComboCount()
@@ -642,6 +689,7 @@ local function newDot(spellID, tickKey, name, total, school, duration, statedInt
         interval = interval,
         totalTicks = math.max(1, math.floor(duration / interval + 0.5)),
         shape = TICK_SHAPES[name],
+        travel = PROJECTILE_DOTS[name] and PROJECTILE_DOTS.travel or nil,
         appliedAt = now,
         expiresAt = now + duration,
         nextTickAt = now + interval,
@@ -803,9 +851,9 @@ local function onPlayerCast(spellID, castGUID)
         isFinisher and string.format(" %s combo points (%s)", comboPoints or "?", comboSource) or "",
         total, duration, dot.school, dot.interval, learned and ("learned " .. learned) or "from description",
         isWaiting(dot) and ", waiting for first tick" or ""))
-    local avoided = not ns.Retail and avoidJustBefore(key)
-    if avoided then
-        removeAvoidedDot(lastDotCast, avoided)
+    local avoided, avoidedSchool
+    if not ns.Retail then avoided, avoidedSchool = avoidJustBefore(key, true) end
+    if avoided and removeAvoidedDot(lastDotCast, avoided, avoidedSchool) then
         lastDotCast = nil
         return nil
     end
@@ -890,6 +938,11 @@ end
 -- Using the nearest multiple of the interval means one missed tick doesn't lose the DoT.
 local function distanceToExpectedTick(dot, now)
     local anchor = dot.firstTickAt or dot.appliedAt
+    if not dot.firstTickAt and dot.travel then
+        -- Still in flight: the DoT started anywhere up to `travel` seconds after the cast.
+        local late = now - (anchor + dot.interval)
+        if late > 0 then anchor = anchor + math.min(late, dot.travel) end
+    end
     local k = math.max(1, math.floor((now - anchor) / dot.interval + 0.5))
     return math.abs(now - (anchor + k * dot.interval)), k
 end
@@ -946,6 +999,8 @@ local function anchorTick(dot, index, now)
         dot.lastTickIndex = index
     else
         dot.firstTickAt, dot.lastTickIndex = now, 0
+        -- A projectile DoT started when it landed: count its ticks from there.
+        if dot.travel then dot.appliedAt = now - index * dot.interval end
     end
     dot.lastTickAt = now
     dot.nextTickAt = now + dot.interval
@@ -1040,8 +1095,8 @@ local function onUnitCombat(unit, action, flag, amount, school)
     -- so it proves the DoT is alive and keeps its rhythm. Treat ABSORB like
     -- WOUND for matching, but never let a 0 feed tickSum/learned sizes.
     local absorbed = action == "ABSORB"
-    if AVOIDED_ACTIONS[action] then return onTargetAvoided(action, key) end
-    if action == "WOUND" or absorbed then onTargetHit(key) end
+    if AVOIDED_ACTIONS[action] then return onTargetAvoided(action, key, school) end
+    if action == "WOUND" or absorbed then onTargetHit(key, school) end
     if action ~= "WOUND" and not absorbed then return end
     if isSecret(amount) or isSecret(school) or type(amount) ~= "number" then return end
     local isCrit = not isSecret(flag) and flag == "CRITICAL"
@@ -1127,7 +1182,9 @@ local function housekeep(now)
     end
     for key, dots in pairs(dotsByTarget) do
         for name, dot in pairs(dots) do
-            while not dot.predictionOnly and dot.nextTickAt < now - TICK_MATCH_WINDOW and dot.nextTickAt <= dot.expiresAt do
+            local late = (dot.ticksSeen == 0 and dot.travel) or 0
+            while not dot.predictionOnly and dot.nextTickAt < now - TICK_MATCH_WINDOW - late
+                and dot.nextTickAt <= dot.expiresAt do
                 dot.nextTickAt = dot.nextTickAt + dot.interval
                 dot.missed = dot.missed + 1
             end
