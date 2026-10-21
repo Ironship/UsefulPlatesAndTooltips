@@ -1,8 +1,0 @@
-## Interface: 16001
-## Title: UPT Hover Probe
-## Notes: Diagnostic build: attributes item tooltip work to addons while hovering. /hp captures 10 seconds, then /reload saves UPT_HoverProbeDB.
-## Author: Ironship
-## Version: 1.0
-## SavedVariables: UPT_HoverProbeDB
-
-UPT_HoverProbe.lua

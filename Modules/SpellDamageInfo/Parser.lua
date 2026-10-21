@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module SpellDamageInfo: ported by tools/port.py from SpellDamageInfo/Parser.lua at 8269edd.
--- Change it there, or in tools/port.py; an edit made here is lost at the next port.
+-- UsefulPlatesAndTooltips module SpellDamageInfo: adapted from SpellDamageInfo/Parser.lua at 8269edd.
+-- Maintained directly in this module.
 -- SpellDamageInfo: reads a spell's damage and healing out of its description text.
 -- Copyright (c) 2026 Ironship. MIT licence, see LICENSE.
 --
@@ -1597,9 +1597,5 @@ function Parser.Read(text, lang, noWeapon)
   end
   return e
 end
-
--- Exposed for the tests.
-Parser._evalArithmetic = evalArithmetic
-Parser._englishNumbers = englishNumbers
 
 return Parser

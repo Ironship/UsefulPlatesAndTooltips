@@ -1015,8 +1015,3 @@ BIT.RegisterTab("Range", {
   end,
 })
 BIT.tabWords.range = "Range"
-
--- For the tests.
-M._icon = function() return icon end
-M._driver = function() return driver end
-M.CLASS_SPELLS = CLASS_SPELLS

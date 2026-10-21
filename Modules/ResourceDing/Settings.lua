@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module ResourceDing: ported by tools/port.py from ResourceDing/Settings.lua at 540b462.
--- Change it there, or in tools/port.py; an edit made here is lost at the next port.
+-- UsefulPlatesAndTooltips module ResourceDing: adapted from ResourceDing/Settings.lua at 540b462.
+-- Maintained directly in this module.
 local _, BIT = ...
 local Addon = BIT.Module("ResourceDing")
 

@@ -790,7 +790,3 @@ loader:SetScript("OnEvent", function(self)
   if not ok then BIT.Say("Options > AddOns page not added (" .. tostring(err) .. "); /upt still opens the settings.") end
   self:UnregisterAllEvents()
 end)
-
--- For the tests.
-BIT._window = function() return window end
-BIT._pages = pages

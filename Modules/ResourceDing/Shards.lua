@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module ResourceDing: ported by tools/port.py from ResourceDing/Shards.lua at 540b462.
--- Retail resource behavior is maintained here; review it before running tools/port.py.
+-- UsefulPlatesAndTooltips module ResourceDing: adapted from ResourceDing/Shards.lua at 540b462.
+-- Maintained directly in this module.
 -- Classic/Forever Soul Shards are bag items; Retail Soul Shards are player power.
 --
 -- One sound when the readable whole-shard count rises, and purple diamonds
@@ -176,8 +176,3 @@ end
 
 Addon.starters = Addon.starters or {}
 table.insert(Addon.starters, start)
-
--- For the tests.
-Addon._shardRow = function() return row end
-Addon._diamonds = diamonds
-Addon._shardMore = function() return more end

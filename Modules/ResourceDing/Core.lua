@@ -1,5 +1,5 @@
 -- UsefulPlatesAndTooltips ResourceDing: originally ported from ResourceDing/Core.lua at 540b462.
--- Frozen in BIT: edit this module directly; tools/port.py protects its local gameplay fixes.
+-- Maintained directly in this module.
 local addonName, BIT = ...
 -- Inside UsefulPlatesAndTooltips its own namespace; loaded on its own, the addon's table as before.
 local Addon = BIT.Module and BIT.Module("ResourceDing") or BIT

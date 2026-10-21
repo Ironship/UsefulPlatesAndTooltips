@@ -303,6 +303,3 @@ end
 ns.openOptions = function()
     if BIT.OpenSettings then BIT.OpenSettings("HealPrediction") end
 end
-
--- For the tests: the sample pane while the tab is built.
-ns._panel = function() return panel end

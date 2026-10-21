@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module SpellDamageInfo: ported by tools/port.py from SpellDamageInfo/Options.lua at 8269edd.
--- Change it there, or in tools/port.py; an edit made here is lost at the next port.
+-- UsefulPlatesAndTooltips module SpellDamageInfo: adapted from SpellDamageInfo/Options.lua at 8269edd.
+-- Maintained directly in this module.
 -- SpellDamageInfo: the settings window (/sdi) and its page in Options > AddOns.
 -- Options window adapted from a standalone DoT addon by Joe Greive (MIT).
 -- Copyright (c) 2026 Ironship. MIT licence, see LICENSE.
@@ -561,9 +561,7 @@ end)
 
 -- BIT Minimal OFF-scene sample: static Immolate numbers (279 direct, 510
 -- over 15 sec) as plain text, never live Estimate/DrawNumber output and
--- never real action buttons. This seam is a BIT-only edit replayed by
--- tools/port.py from tools/sdi_bit_edits.json on every regeneration;
--- tools/port.py itself is untouched.
+-- never real action buttons.
 local function buildSDIPreview(parent)
   -- OFF previews can be opened before ADDON_LOADED wakes this module's locale.
   if not L.OVER then
@@ -621,7 +619,3 @@ if BIT.RegisterTab then
   })
   BIT.tabWords.sdi = "SpellDamageInfo"
 end
-
--- For the tests.
-ns._optionsWindow = function() return window end
-ns._optionsMenu = function() return menu end

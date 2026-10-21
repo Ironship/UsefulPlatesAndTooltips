@@ -646,7 +646,3 @@ end
 ns.openOptions = function()
     if BIT.OpenSettings then BIT.OpenSettings("CastPrediction") end
 end
-
--- For the tests: the live preview pane and whether the preview holds the display right now.
-ns._previewPane = function() return panel end
-ns._previewHostsSet = function() return hostsSet end
