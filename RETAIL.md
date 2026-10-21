@@ -1,6 +1,8 @@
 # Useful Plates and Tooltips — Retail
 
-Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo, SpellDamageInfo, CastPrediction i HealPrediction**, ich ustawienia oraz wspólny wygląd. Nie ładuje Range, HunterRangeFinder ani StatsInfo. Manifest Mainline jest przeznaczony dla Retail 12.1.0 (`Interface: 120100`). Build 12.1.0.69933 został potwierdzony 8 października 2026 w [serwisie wersji Blizzarda](https://us.version.battle.net/v2/products/wow/versions).
+Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo, SpellDamageInfo, CastPrediction i HealPrediction**, ich ustawienia oraz wspólny wygląd. Nie ładuje Range, HunterRangeFinder ani StatsInfo. Manifest Mainline obejmuje Retail 12.1.0 (`120100`), 12.1.5 (`120105`) oraz 12.1.7 PTR (`120107`).
+
+21 października 2026 porównano źródła API klienta live [12.1.5.70448](https://github.com/Gethe/wow-ui-source/tree/b9be9379719047977fca4dba1bb1d9988e8840b3) i PTR [12.1.7.70424](https://github.com/Gethe/wow-ui-source/tree/b87363e0770c2f15b1e2f154de8ad3b0cf3ea90a). Rysowanie predykcji już pomija sekretne wartości warstw ramek; identyfikatory GUID są kluczami bieżącej sesji. Dopisanie interfejsu PTR opiera się na przeglądzie źródeł, bez potwierdzenia działania w grze. 12.1.7 pozostaje wersją PTR według [notatek Blizzarda](https://us.forums.blizzard.com/en/wow/t/midnight-echoes-of-the-worldcore-ptr-development-notes/2383391).
 
 ## Instalacja
 
