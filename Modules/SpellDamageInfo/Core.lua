@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module SpellDamageInfo: ported by tools/port.py from SpellDamageInfo/Core.lua at 8269edd.
--- Change it there, or in tools/port.py; an edit made here is lost at the next port.
+-- UsefulPlatesAndTooltips module SpellDamageInfo: adapted from SpellDamageInfo/Core.lua at 8269edd.
+-- Maintained directly in this module.
 -- SpellDamageInfo: action button numbers, tooltip lines, settings and /sdi.
 -- Copyright (c) 2026 Ironship. MIT licence, see LICENSE.
 --
@@ -2130,11 +2130,3 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     requestUpdate()
   end
 end)
-
--- For the tests.
-ns._buttons, ns._labels, ns._sideLabels, ns._bonus = buttons, labels, sideLabels, bonus
-ns._petButtons, ns._petSlots = petButtons, petSlots
-ns._eventFrame = frame
-ns._settings = function() return db end
-ns._weaponStats, ns._readWeapon = weaponStats, readWeapon
-ns._noteMiss, ns._parsedCache = noteMiss, parsedCache

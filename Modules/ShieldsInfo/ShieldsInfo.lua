@@ -1630,17 +1630,3 @@ BIT.RegisterTab("ShieldsInfo", {
   end,
 })
 BIT.tabWords.shields = "ShieldsInfo"
-
--- For the tests.
-M._driver = function() return driver end
-M._tabs = tabs
-M._previewState = preview
-M._refreshPreview = function() if refreshPreview then refreshPreview() end end
-M._overlay = function(bar) return overlays[bar] end
-M._overlayCount = function()
-  local n = 0
-  for _ in pairs(overlays) do n = n + 1 end
-  return n
-end
-M._attachCompactHooks = attachCompactHooks
-M._hooksAttached = function() return hookedUpdateAll, hookedHealPrediction end

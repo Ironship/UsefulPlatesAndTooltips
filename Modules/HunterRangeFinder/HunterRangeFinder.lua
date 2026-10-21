@@ -1717,22 +1717,3 @@ function M.Probe()
     return message
 end
 BIT.RegisterCommand("hunterprobe", function() M.Probe() end)
-
-----------------------------------------------------------------------------------------------
--- For the tests.
-----------------------------------------------------------------------------------------------
-
-function M.CurrentBand() return currentBand() end
-M._hud = function() return hud end
-M._driver = function() return driver end
-M._loader = function() return loader end
-M._settings = function() return settings end
--- The settings tab: the retained preview scene, the TRY IT band switch and the tab strip.
-M._previewScene = function() return sample end
-M._previewBand = function(name)
-    if name == nil then return previewBand end
-    setPreviewBand(name)
-    return previewBand
-end
-M._activeTab = function() return activeTab and activeTab.name end
-M._tabs = function() return tabs end

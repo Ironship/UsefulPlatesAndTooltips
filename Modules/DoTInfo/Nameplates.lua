@@ -20,8 +20,7 @@ local MAX_PLATES = 40
 -- The 40 slots are polled on this beat so the marker follows DoT ticks and health.
 -- A tick lands once a second or slower, and the death check hides within one beat
 -- (L11-3): 5 Hz keeps that late by at most a fifth of a second and cuts the 40
--- UnitExists per beat -- 400/s at 10 Hz -- to 200/s. (0.25 broke the standalone
--- test_load rhythm, which draws within a single 0.2 s frame after SUCCEEDED.)
+-- UnitExists per beat -- 400/s at 10 Hz -- to 200/s.
 local UPDATE_INTERVAL = 0.2
 local MAX_SEGMENTS = 8 -- same per-DoT capacity as the target marker
 local OUTLINE_THICKNESS = 1

@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module ResourceDing: ported by tools/port.py from ResourceDing/Mana.lua at 540b462.
--- Change it there, or in tools/port.py; an edit made here is lost at the next port.
+-- UsefulPlatesAndTooltips module ResourceDing: adapted from ResourceDing/Mana.lua at 540b462.
+-- Maintained directly in this module.
 -- A sound when mana climbs to a level: a caster drinking need not watch the bar. 100% by default,
 -- 80% for a warlock, who takes the rest with Life Tap.
 --

@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module SpellDamageInfo: ported by tools/port.py from SpellDamageInfo/Locale.lua at 8269edd.
--- Change it there, or in tools/port.py; an edit made here is lost at the next port.
+-- UsefulPlatesAndTooltips module SpellDamageInfo: adapted from SpellDamageInfo/Locale.lua at 8269edd.
+-- Maintained directly in this module.
 -- SpellDamageInfo: English and German strings, and number formatting.
 -- Copyright (c) 2026 Ironship. MIT licence, see LICENSE.
 

@@ -1,5 +1,5 @@
--- UsefulPlatesAndTooltips module SpellDamageInfo: ported by tools/port.py from SpellDamageInfo/Estimate.lua at 8269edd.
--- Change it there, or in tools/port.py; an edit made here is lost at the next port.
+-- UsefulPlatesAndTooltips module SpellDamageInfo: adapted from SpellDamageInfo/Estimate.lua at 8269edd.
+-- Maintained directly in this module.
 -- SpellDamageInfo: the optional spell-power estimate (the client's own shares, Classic's rules
 -- where it has none) and the button value.
 -- Copyright (c) 2026 Ironship. MIT licence, see LICENSE.

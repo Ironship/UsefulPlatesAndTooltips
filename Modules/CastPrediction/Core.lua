@@ -1550,24 +1550,7 @@ if BIT.RegisterCommand then
     end)
 end
 
----------------------------------------------------------------------------------------------
--- For the tests
----------------------------------------------------------------------------------------------
-
+-- Shared with the options, aura and talent modules.
 ns._settings = function() return settings end
-ns._cast = function() return castInProgress end
 ns._colorList = function() return COLOR_LIST end
-ns._startCast = onCastStart
-ns._succeedCast = onCastSucceeded
-ns._endCast = onCastEnded
-ns._combat = onUnitCombat
-ns._housekeep = housekeep
 ns._refresh = safeRefresh
-ns._marker = function() return marker end
-ns._fill = function() return fillTex end
-ns._plateWidgets = function(plate) return widgetsByPlate[plate] end
-ns._killWindow = function() return killWindow end
-ns._killBar = function() return killBar end
-ns._label = function() return label end
-ns._viewCache = function() return viewCache end
-ns._learned = function() return settings and settings.learned or {} end

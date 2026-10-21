@@ -1054,8 +1054,7 @@ end
 
 -- Inside UsefulPlatesAndTooltips: the window's content in its tab, with the presets at the tab's top right.
 -- BIT Minimal OFF-scene sample: a static mock bar with a fixed tick label, never
--- live ticks and never real nameplates. DoTInfo is port-frozen, so this seam is
--- edited directly here (see tools/port.py).
+-- live ticks and never real nameplates.
 local function buildDoTPreview(parent)
   local scene = CreateFrame("Frame", nil, parent)
   scene:SetSize(560, 120)

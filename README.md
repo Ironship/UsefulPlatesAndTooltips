@@ -2,6 +2,10 @@
 
 It shows DoT marks, shields and range on nameplates, damage and healing numbers on action buttons, and item comparisons in tooltips. Every part can be switched off.
 
+Build the Forever ZIP with `python tools/build_zip.py`, or the Retail ZIP with `python tools/build_zip.py --retail`. Packages are written to `dist/` and checked against the source files.
+
+Modules are maintained directly in `Modules/`. The remaining tools regenerate stat weights (`make_weights.py`, using `tools/data/`) and textures (`make_resource_textures.py`, `make_ui_textures.py`).
+
 ### DoTInfo
 
 Shows the damage your DoTs or Bleeds still have to deal as a marker on the target's health bar. If the target's health ends inside the marker, a skull on the portrait says the DoTs will kill it. When you cast spell then it shows during cast time estimation how much it might do on target.

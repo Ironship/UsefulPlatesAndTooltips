@@ -479,11 +479,9 @@ function ns.HideSample(healthBar)
     if o then hideOverlay(o) end
 end
 
--- For the tests.
+-- Shared with the options module.
 ns._settings = function() return settings end
-ns._overlays = function() return overlays end
 ns._updateAll = updateAll
-ns._read = readIncoming
 ns.DEFAULTS = DEFAULTS
 
 if BIT.RegisterWaker then

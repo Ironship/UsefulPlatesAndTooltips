@@ -1,5 +1,5 @@
 -- UsefulPlatesAndTooltips ResourceDing: originally ported from ResourceDing/Dots.lua at 540b462.
--- Frozen in BIT: edit this module directly; tools/port.py protects its local gameplay fixes.
+-- Maintained directly in this module.
 -- Combo points as dots under the target's nameplate: a rogue or a cat druid sees at a glance
 -- how many are built, where the eyes already are.
 --
@@ -406,7 +406,3 @@ end
 
 Addon.starters = Addon.starters or {}
 table.insert(Addon.starters, Addon.StartDots)
-
--- For the tests.
-Addon._dotsRow = function() return row end
-Addon._dots = dots

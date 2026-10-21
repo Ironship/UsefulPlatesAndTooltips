@@ -427,9 +427,8 @@ end
 -- in "Rake hit, then an auto-attack dodged"), so the wide window dropped a large share of them the moment they
 -- landed. Resists and immunities can only belong to the cast (a white swing is never resisted), so those keep
 -- the wide window; the auto-attack class only decides close to the cast, where the code's own notes place the
--- cast's own result ("same frame in the logs"). It can't be narrower: test_bit's F5 locks that a MISS right
--- after a cast still drops the DoT (safe direction: never a false kill), which keeps the rare dropped bleed
--- instead of a phantom one.
+-- cast's own result ("same frame in the logs"). A MISS immediately after a cast still drops the DoT,
+-- preferring a rare dropped bleed over a phantom one.
 -- Each entry is { window after the cast, look-back before it }.
 local AVOIDED_ACTIONS = {
     MISS = { 0.15, 0.15 }, DODGE = { 0.15, 0.15 }, PARRY = { 0.15, 0.15 }, EVADE = { 0.15, 0.15 },
@@ -978,7 +977,7 @@ end
 -- description's share is what a collision corrupts toward, so judging against it lets a white hit swap out a
 -- real tick. The learned size is the one from BEFORE this DoT (newDot's snapshot): saveLearnedTick runs the
 -- moment a hit is matched, so a fresh lookup would return the disputed tick's own size, block every swap, and
--- keep a white hit that landed in the tick slot (test_tracking's Shadow Bolt + tick replay).
+-- keep a white hit that landed in the tick slot.
 local function referenceTickSize(dot)
     if dot.normalTicks > 1 then
         return (dot.tickSum - dot.lastTickAmount / dot.lastTickShape) / (dot.normalTicks - 1)
