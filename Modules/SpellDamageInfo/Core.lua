@@ -915,7 +915,10 @@ local function collectButtons()
     end
     if not gamepadHosts[host] then
       local function refresh() if ns.Refresh then ns.Refresh() end end
-      if type(page.AddPageChangeCallback) == "function" then pcall(page.AddPageChangeCallback, page, refresh) end
+      -- Keep addon callbacks out of Blizzard's page-change table used by secure gamepad code.
+      if type(hooksecurefunc) == "function" and type(page.OnPageChange) == "function" then
+        pcall(hooksecurefunc, page, "OnPageChange", refresh)
+      end
       if type(host.HookScript) == "function" then pcall(host.HookScript, host, "OnShow", refresh) end
       gamepadHosts[host] = true
     end
