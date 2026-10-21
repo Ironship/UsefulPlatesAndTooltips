@@ -1,4 +1,4 @@
-## Interface: 120100
+## Interface: 120100, 120105, 120107
 ## Title: Useful Plates and Tooltips (Retail)
 ## Notes: Retail test build: cast/channel damage, DoT estimates, incoming heals, rogue aura icons/timers, resource sounds/markers, absorb overlays and spell damage numbers. /upt
 ## Author: Ironship
