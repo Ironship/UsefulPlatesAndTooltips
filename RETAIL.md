@@ -1,11 +1,11 @@
 # Useful Plates and Tooltips — Retail
 
-Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo i SpellDamageInfo**, ich ustawienia oraz wspólny wygląd. Nie ładuje pozostałych modułów. Manifest Mainline jest przeznaczony dla Retail 12.1.0 (`Interface: 120100`). Build 12.1.0.69933 został potwierdzony 8 października 2026 w [serwisie wersji Blizzarda](https://us.version.battle.net/v2/products/wow/versions).
+Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo, SpellDamageInfo, CastPrediction i HealPrediction**, ich ustawienia oraz wspólny wygląd. Nie ładuje Range, HunterRangeFinder ani StatsInfo. Manifest Mainline jest przeznaczony dla Retail 12.1.0 (`Interface: 120100`). Build 12.1.0.69933 został potwierdzony 8 października 2026 w [serwisie wersji Blizzarda](https://us.version.battle.net/v2/products/wow/versions).
 
 ## Instalacja
 
 1. Zbuduj paczkę: `python tools/build_zip.py --retail`.
-2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.85-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
+2. Wypakuj folder `UsefulPlatesAndTooltips` z `dist/UsefulPlatesAndTooltips-0.9.86-retail.zip` do `_retail_/Interface/AddOns/`. Przy zastępowaniu starszej paczki usuń jej folder po wykonaniu kopii; nie nakładaj ZIP na stare pliki.
 3. Włącz addon w grze. `/upt` otwiera ustawienia; `/reload` stosuje zmianę włączenia modułu. Włącz wyświetlanie wrogich nameplate klawiszem `V`.
 
 ZIP Retail ma własny `UsefulPlatesAndTooltips_Mainline.toc`; nie zawiera manifestu Forever ani pozostałych modułów. Zwykłe `python tools/build_zip.py` nadal buduje dotychczasową paczkę Forever.
@@ -58,7 +58,7 @@ CastPrediction pokazuje przewidywane obrażenia czaru, który jest właśnie rzu
 
 Kanały obrażeń (np. Arcane Missiles, Mind Flay) używają tych samych znaczników na HP wybranego przeciwnika i jego nameplate. Szacunek maleje proporcjonalnie do pozostałego czasu kanału; przerwanie, koniec i zmiana celu usuwają znacznik. Ticki kanału nie kalibrują pełnego trafienia. Potrzebne są czytelne czasy klienta i rozpoznany opis obrażeń; moduł nie ustala odbiorców AoE ani stopnia naładowania empowered spells.
 
-Przy action targeting cast może użyć `softenemy`, gdy nie wybrano zwykłego celu. Znacznik pozostaje na nameplate pierwotnego odbiorcy. Liczby na natywnym krzyżowym pasku gamepada Forever obsługuje SpellDamageInfo; ta integracja działa tylko tam, gdzie klient udostępnia ten interfejs.
+Przy action targeting cast i DoTy mogą użyć `softenemy`, gdy nie wybrano zwykłego wrogiego celu, również przy zaznaczonym przyjaznym pecie. Znacznik pozostaje na nameplate pierwotnego odbiorcy. Liczby na natywnym krzyżowym pasku gamepada Forever obsługuje SpellDamageInfo; ta integracja działa tylko tam, gdzie klient udostępnia ten interfejs.
 
 Wygląd predykcji: jednolita półprzezroczysta powierzchnia dla trafienia bezpośredniego, pionowe prążki dla channelingu, domyślnie kolory szkół zgodne z DoTInfo. Nakładka cofa się od aktualnej krawędzi HP i jest przycięta do paska: 20 obrażeń przy 60/100 HP zakrywa przedział 60–40. Skala pozostaje oparta na maksymalnym HP, a kotwica podąża za natywną teksturą zdrowia.
 
