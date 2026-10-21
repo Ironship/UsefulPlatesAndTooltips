@@ -62,6 +62,9 @@ L.GERMAN_NAMES = {
     ["Curse of Agony"] = { "Fluch der Pein" },
     ["Bane of Agony"] = { "Omen der Pein" }, -- Cataclysm's German name; Forever's is unverified
     ["Fireball"] = { "Feuerball" },
+    ["Pyroblast"] = { "Pyroschlag" },
+    ["Frostfire Bolt"] = { "Frostfeuerblitz" },
+    ["Serpent Sting"] = { "Schlangengift", "Schlangenbiss" },
     ["Holy Fire"] = { "Heiliges Feuer" },
     ["Rip"] = { "Zerfetzen" },
     ["Rupture"] = { "Blutung" },
@@ -97,9 +100,11 @@ L.GERMAN_NAMES = {
 
 -- One spell ID per entry (Classic Era rank 1; all ranks share the name). At load the tables also get the name the
 -- client itself reports for it, whatever the language, and Forever's own renames (980 is its Bane of Agony).
+-- Frostfire Bolt is Forever's own spell with no known ID: it relies on the name-keyed tables above.
 L.SPELL_IDS = {
     ["Corruption"] = 172, ["Shadow Word: Pain"] = 589,
-    ["Insect Swarm"] = 5570, ["Curse of Agony"] = 980, ["Fireball"] = 133, ["Holy Fire"] = 14914,
+    ["Insect Swarm"] = 5570, ["Curse of Agony"] = 980, ["Fireball"] = 133, ["Pyroblast"] = 11366,
+    ["Serpent Sting"] = 1978, ["Holy Fire"] = 14914,
     ["Rip"] = 1079, ["Rupture"] = 1943, ["Siphon Life"] = 18265,
     -- The rogue/druid bleed and poison family (Classic Era rank 1; Lacerate is Forever's own, ids 24118-24120):
     -- without these the name-keyed tables in Core.lua never learn what this client calls Garrote and friends,
