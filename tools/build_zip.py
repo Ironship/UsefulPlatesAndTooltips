@@ -1,7 +1,7 @@
 """Build one installable ZIP and check every member against the source.
 
     python tools/build_zip.py           # existing WoW Forever package
-    python tools/build_zip.py --retail  # four Retail modules, Mainline TOC
+    python tools/build_zip.py --retail  # six Retail modules, Mainline TOC
 
 Each package has one UsefulPlatesAndTooltips folder and its own TOC.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--retail", action="store_true", help="build the Retail DoTInfo, ResourceDing, ShieldsInfo and SpellDamageInfo package")
+parser.add_argument("--retail", action="store_true", help="build the Retail package, including cast/channel and incoming-heal predictions")
 args = parser.parse_args()
 toc_name = "UsefulPlatesAndTooltips_Mainline.toc" if args.retail else "UsefulPlatesAndTooltips.toc"
 toc = (root / toc_name).read_text(encoding="utf-8")
