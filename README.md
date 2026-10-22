@@ -12,6 +12,8 @@ Modules are maintained directly in `Modules/`. The remaining tools regenerate st
 
 Shows the damage your DoTs or Bleeds still have to deal as a marker on the target's health bar. If the target's health ends inside the marker, a skull on the portrait says the DoTs will kill it. When you cast spell then it shows during cast time estimation how much it might do on target.
 
+Nameplate marks use the visible health bar, with dedicated support for EllesmereUI and Platynator and a cached automatic search for other nameplate addons. If no visible bar is found, DoTInfo can still show the kill icon beside the nameplate when "Marker and kill icon" is enabled.
+
 ![simulation](https://i.imgur.com/rI5Kdyv.gif)
 
 <img width="465" height="407" alt="WowB_Bx6Sgl1bvb-ezgif com-optimize (1)" src="https://github.com/user-attachments/assets/7cf3fe30-5752-4cec-9bb4-2e4ece2af2c9" />

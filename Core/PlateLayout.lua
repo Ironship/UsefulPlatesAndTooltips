@@ -57,9 +57,101 @@ function Plate.UnitFrame(unit)
   return frame, bar, portrait
 end
 
--- Platynator reparents Blizzard's UnitFrame to a hidden host; use its active health widget.
+local function visibleHealthBar(bar)
+  local ok, visible = pcall(function()
+    if type(bar) ~= "table" or read(bar.IsForbidden, bar) == true
+      or read(bar.IsVisible, bar) == false then return false end
+    local alpha = read(bar.GetEffectiveAlpha, bar)
+    return type(alpha) ~= "number" or alpha > 0
+  end)
+  return ok and visible == true
+end
+
+local function isUnder(frame, plate)
+  for _ = 1, 12 do
+    frame = read(function() return frame:GetParent() end)
+    if type(frame) ~= "table" then return false end
+    if frame == plate then return true end
+  end
+  return false
+end
+
+-- Adapted from Does It Die (Joe Greive, MIT); see Modules/DoTInfo/LICENSE-DoesItDie.txt.
+local SEARCH_DEPTH, MAX_TABLE_ENTRIES, SEARCH_INTERVAL = 4, 200, 1
+local searchCache = setmetatable({}, { __mode = "k" })
+
+local function tableFields(container, plain)
+  local ok, fields = pcall(function()
+    local found, count = {}, 0
+    for key, value in pairs(container) do
+      count = count + 1
+      if plain and count > MAX_TABLE_ENTRIES then return end
+      if type(key) == "string" and type(value) == "table" then
+        found[#found + 1] = { key, value }
+      end
+    end
+    table.sort(found, function(a, b) return a[1] < b[1] end)
+    return found
+  end)
+  if ok then return fields end
+end
+
+local function searchHealthBar(plate)
+  local unitFrame = read(function() return plate.UnitFrame end)
+  local queue = { { node = plate, path = "", depth = 0, plain = false } }
+  local seen, head = { [plate] = true }, 1
+  while queue[head] do
+    local item = queue[head]
+    head = head + 1
+    local fields = tableFields(item.node, item.plain)
+    if fields then
+      for _, field in ipairs(fields) do
+        local key, value = field[1], field[2]
+        local ok, found = pcall(function()
+          return key:lower():find("health", 1, true) and read(value.GetObjectType, value) == "StatusBar"
+            and visibleHealthBar(value) and isUnder(value, plate)
+        end)
+        if ok and found then return value, "auto " .. item.path .. key end
+      end
+      if item.depth < SEARCH_DEPTH then
+        for _, field in ipairs(fields) do
+          local key, value = field[1], field[2]
+          if not seen[value] and value ~= unitFrame then
+            seen[value] = true
+            -- A broken framework object must not stop the other branches.
+            local ok, frame = pcall(function() return value:GetObjectType() end)
+            frame = ok and type(frame) == "string"
+            local visit = not frame or read(function()
+              return read(value.IsForbidden, value) == false
+                and read(value.GetObjectType, value) ~= "StatusBar" and isUnder(value, plate)
+            end)
+            if visit then
+              queue[#queue + 1] = { node = value, path = item.path .. key .. ".",
+                depth = item.depth + 1, plain = not frame }
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+local function autoHealthBar(plate)
+  local cached, now = searchCache[plate], GetTime()
+  if cached and cached.bar and visibleHealthBar(cached.bar) and isUnder(cached.bar, plate) then
+    return cached.bar, cached.path
+  end
+  if cached and now - cached.at < SEARCH_INTERVAL then return nil, "health bar search pending" end
+  local ok, bar, path = pcall(searchHealthBar, plate)
+  if not ok then bar, path = nil, "health bar search unavailable" end
+  searchCache[plate] = { bar = bar, path = path, at = now }
+  return bar, path or "no visible health bar found"
+end
+
+-- Prefer known integrations, then visible Blizzard bars, then a cached search of addon fields.
 function Plate.HealthBar(plate)
   if type(plate) ~= "table" then return nil, "no nameplate" end
+  if read(plate.IsForbidden, plate) == true then return nil, "forbidden nameplate" end
   if type(EllesmereNameplates_NS) == "table" then
     local children = { pcall(plate.GetChildren, plate) }
     if children[1] then
@@ -67,7 +159,7 @@ function Plate.HealthBar(plate)
         local ok, bar = pcall(function()
           local child = children[i]
           if child.nameplate == plate and type(child.health) == "table" and child:IsVisible()
-            and child.health:IsVisible() and not child.health:IsForbidden() then return child.health end
+            and visibleHealthBar(child.health) then return child.health end
         end)
         if ok and type(bar) == "table" then return bar, "EllesmereUINameplates.health" end
       end
@@ -82,7 +174,7 @@ function Plate.HealthBar(plate)
           if type(child.widgets) ~= "table" or not child:IsVisible() then return end
           for _, widget in ipairs(child.widgets) do
             if type(widget.details) == "table" and widget.details.kind == "health"
-              and type(widget.statusBar) == "table" and widget.statusBar:IsVisible() then
+              and visibleHealthBar(widget.statusBar) then
               return widget.statusBar
             end
           end
@@ -90,23 +182,20 @@ function Plate.HealthBar(plate)
         if ok and type(bar) == "table" then return bar, "Platynator.widgets.health.statusBar" end
       end
     end
-    return nil, "Platynator: no visible health bar"
   end
-  local unitFrame = plate.UnitFrame
-  if type(unitFrame) ~= "table" then return nil, "no UnitFrame" end
-  local container = unitFrame.HealthBarsContainer
-  if type(EllesmereNameplates_NS) == "table" then
-    local bar = (type(container) == "table" and (container.healthBar or container.HealthBar))
-      or unitFrame.healthBar or unitFrame.HealthBar
-    if type(bar) ~= "table" or read(bar.IsVisible, bar) ~= true then return nil, "EllesmereUI: no visible health bar" end
-  end
-  if type(container) == "table" then
-    if type(container.healthBar) == "table" then return container.healthBar, "UnitFrame.HealthBarsContainer.healthBar" end
-    if type(container.HealthBar) == "table" then return container.HealthBar, "UnitFrame.HealthBarsContainer.HealthBar" end
-  end
-  if type(unitFrame.healthBar) == "table" then return unitFrame.healthBar, "UnitFrame.healthBar" end
-  if type(unitFrame.HealthBar) == "table" then return unitFrame.HealthBar, "UnitFrame.HealthBar" end
-  return nil, "no health bar found"
+  local ok, bar, path = pcall(function()
+    local unitFrame = plate.UnitFrame
+    if type(unitFrame) ~= "table" then return end
+    local container = unitFrame.HealthBarsContainer
+    if type(container) == "table" then
+      if visibleHealthBar(container.healthBar) then return container.healthBar, "UnitFrame.HealthBarsContainer.healthBar" end
+      if visibleHealthBar(container.HealthBar) then return container.HealthBar, "UnitFrame.HealthBarsContainer.HealthBar" end
+    end
+    if visibleHealthBar(unitFrame.healthBar) then return unitFrame.healthBar, "UnitFrame.healthBar" end
+    if visibleHealthBar(unitFrame.HealthBar) then return unitFrame.HealthBar, "UnitFrame.HealthBar" end
+  end)
+  if ok and bar then return bar, path end
+  return autoHealthBar(plate)
 end
 
 -- Bottom and top of a widget seated with the live formula, positive y up.
