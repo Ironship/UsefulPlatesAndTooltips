@@ -479,16 +479,25 @@ local function readComboPoints()
     local best, parts = nil, {}
     local function consider(label, ok, points)
         table.insert(parts, label .. "=" .. describeReading(ok, points))
-        if ok and type(points) == "number" and not isSecret(points) then best = math.max(best or 0, points) end
+        -- A plain 0 is a reading. Maxing it with a stale UnitPower or with fading
+        -- highlights would spend a finisher as if the bar were still full.
+        if best == nil and ok and type(points) == "number" and not isSecret(points) then
+            best = points
+        end
     end
+    -- Forever points belong to the selected target. GetComboPoints wins over UnitPower,
+    -- which can still show the previous target's points (same order as ResourceDing).
     if GetComboPoints then consider("GetComboPoints", pcall(GetComboPoints, "player", "target")) end
     if UnitPower and Enum and Enum.PowerType and Enum.PowerType.ComboPoints then
         consider("UnitPower", pcall(UnitPower, "player", Enum.PowerType.ComboPoints))
     end
-    -- L11-1: the APIs above go secret in combat while the display stays
-    -- readable; without this a finisher parses the 1-point entry (243)
-    -- while ResourceDing shows 5/5 (855).
-    consider("display", true, displayedComboPoints())
+    -- The display is only a fallback for when both APIs are secret. It is read by
+    -- appearance, so it must never raise a number the API already gave.
+    if best == nil then
+        consider("display", true, displayedComboPoints())
+    else
+        table.insert(parts, "display=not needed")
+    end
     return best, table.concat(parts, " ")
 end
 
@@ -503,6 +512,28 @@ local function isFinisherDescription(desc)
         and (desc:find("Finishing move") ~= nil or ns.locale.isFinisher(desc))
 end
 
+-- Readable SENT name, Forever. Same rule as Retail.Recipient: the name must pick one
+-- attackable unit among target, softenemy, mouseover and focus. Two keys, or a match
+-- whose key can't be read, is unknown. A field on ns: this chunk is at Lua 5.1's
+-- 200-local limit, so it cannot gain another local function.
+function ns._namedEnemyKey(sentName)
+    local matched
+    for _, unit in ipairs({ "target", "softenemy", "mouseover", "focus" }) do
+        local existsOK, exists = pcall(UnitExists, unit)
+        if existsOK and not isSecret(exists) and exists == true then
+            local attackOK, canAttack = pcall(UnitCanAttack, "player", unit)
+            local nameOK, unitName = pcall(UnitName, unit)
+            if attackOK and not isSecret(canAttack) and canAttack == true
+                and nameOK and not isSecret(unitName) and unitName == sentName then
+                local key = unitKey(unit)
+                if not key or (matched and matched ~= key) then return nil end
+                matched = key
+            end
+        end
+    end
+    return matched
+end
+
 local function onCastSent(spellID, castGUID, targetName)
     if isSecret(spellID) or type(spellID) ~= "number" then return end
     -- DOT-1: remember who the cast is aimed at while the target is still it.
@@ -513,16 +544,21 @@ local function onCastSent(spellID, castGUID, targetName)
     local recipient, dynamicTargeting
     if ns.Retail then recipient = ns.Retail.Recipient(targetName)
     else
-        recipient = ns._selectedEnemyKey()
         -- Forever's dynamic targeting: the client picks the victim itself, so SENT names no
-        -- target at all. Such a cast may land on the current target at SUCCEEDED; a named but
-        -- unreadable recipient must never (DOT-1).
+        -- target at all. Such a cast may land on the current target at SUCCEEDED. A readable
+        -- name that is not exactly one known enemy stays unknown and must not move there (DOT-1).
         dynamicTargeting = targetName == nil or (not isSecret(targetName) and targetName == "")
+        if not dynamicTargeting and not isSecret(targetName) and type(targetName) == "string" then
+            recipient = ns._namedEnemyKey(targetName)
+        else
+            recipient = ns._selectedEnemyKey()
+        end
         local shown = targetName
         if isSecret(targetName) then shown = "<secret>"
         elseif shown == nil then shown = "nil"
         elseif type(shown) ~= "string" then shown = "<" .. type(shown) .. ">" end
-        trace("SENT id " .. tostring(spellID) .. " target=" .. tostring(shown) .. " dynamic=" .. tostring(dynamicTargeting))
+        trace("SENT id " .. tostring(spellID) .. " target=" .. tostring(shown) .. " dynamic=" .. tostring(dynamicTargeting)
+            .. " key=" .. tostring(recipient or "none"))
     end
     pendingCast = { key = recipient, dynamic = dynamicTargeting, spellID = spellID,
         castGUID = not isSecret(castGUID) and castGUID or nil, sentAt = GetTime() }
@@ -1124,17 +1160,28 @@ local function onUnitCombat(unit, action, flag, amount, school)
     local lastCombatFed = hit.fed
 
     local best, bestName, bestDistance, bestIndex
+    -- A shield that ate the whole tick reports ABSORB with amount 0. Zero matches no learned
+    -- size, so it used to miss the DoT's slot. Keep the rhythm only when exactly one DoT of
+    -- this school is due; zero never reaches tickSum below.
+    local zeroAbsorb = absorbed and amount == 0
+    local candidates = 0
     for name, dot in pairs(dots) do
-        if not dot.predictionOnly and not lastCombatFed[name] and dot.school == school and plausibleTickAmount(dot, amount, isCrit, tickNumberAt(dot, now)) then
+        if not dot.predictionOnly and not lastCombatFed[name] and dot.school == school
+            and (zeroAbsorb or plausibleTickAmount(dot, amount, isCrit, tickNumberAt(dot, now))) then
             local distance, index = distanceToExpectedTick(dot, now)
             local window = dot.firstTickAt and TICK_MATCH_WINDOW_ANCHORED or TICK_MATCH_WINDOW
             -- Each tick slot takes one hit: a second hit near an already-matched tick is someone else's.
             local freshSlot = not dot.firstTickAt or index > dot.lastTickIndex
-            if freshSlot and distance <= window and (not bestDistance or distance < bestDistance) then
-                best, bestName, bestDistance, bestIndex = dot, name, distance, index
+            if freshSlot and distance <= window then
+                candidates = candidates + 1
+                if not bestDistance or distance < bestDistance then
+                    best, bestName, bestDistance, bestIndex = dot, name, distance, index
+                end
             end
         end
     end
+    -- No size to tell two same-school DoTs apart, and no candidate to anchor.
+    if zeroAbsorb and candidates ~= 1 then return end
     if not best then
         -- Not a tick as things stand; it may still correct one (same-slot swap, or a wrong learned size).
         for name, dot in pairs(dots) do
