@@ -620,8 +620,10 @@ selectTab = function(name)
     button.text:SetTextColor(r, g, b)
   end
   current = name
+  if BIT.GamePadUI then BIT.GamePadUI.Clear() end
   local page = pages[name]
   refreshSwitch(page)
+  if type(window.refreshGamePadHints) == "function" then window.refreshGamePadHints() end
 end
 
 local function addTabButton(name, label, tipTitle, tipBody, extraTip)
@@ -702,6 +704,40 @@ local function createWindow()
   layoutTabs()
   window:SetHeight(HEADER_HEIGHT + TAB_HEIGHT * tabRows + SWITCH_HEIGHT + h + MARGIN)
 
+  if BIT.GamePadUI then
+    local pad = BIT.GamePadUI
+    local hint = window:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hint:SetPoint("BOTTOMLEFT", 12, 3)
+    hint:SetPoint("BOTTOMRIGHT", -12, 3)
+    hint:SetJustifyH("LEFT")
+    local function refreshHints()
+      local enabled = C_GamePad and C_GamePad.IsEnabled and C_GamePad.IsEnabled()
+        or GetCVarBool and GetCVarBool("GamePadEnable")
+      hint:SetText(enabled and (pad.Hint() .. " · " .. pad.Key("PADLSHOULDER")
+        .. "/" .. pad.Key("PADRSHOULDER") .. ": tabs") or "")
+      hint:SetWordWrap(true)
+      local padding = enabled and math.max(32, hint:GetStringHeight() + 8) or 0
+      for _, page in pairs(pages) do page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + padding) end
+    end
+    window.refreshGamePadHints = refreshHints
+    local events = CreateFrame("Frame", nil, window)
+    for _, event in ipairs({ "UPDATE_BINDINGS", "CVAR_UPDATE", "GAME_PAD_ACTIVE_CHANGED", "GAME_PAD_CONFIGS_CHANGED" }) do
+      pcall(events.RegisterEvent, events, event)
+    end
+    events:SetScript("OnEvent", refreshHints)
+    window:HookScript("OnShow", refreshHints)
+    pad.Attach(window, function(self, key)
+      if key == "PAD2" then self:Hide(); return true end
+      if key == "PADLSHOULDER" or key == "PADRSHOULDER" then
+        local index = 1
+        for i, name in ipairs(BIT.order) do if name == current then index = i end end
+        selectTab(BIT.order[(index - 1 + (key == "PADLSHOULDER" and -1 or 1)) % #BIT.order + 1])
+        return true
+      end
+      return pad.Navigate(self, key)
+    end)
+  end
+
   window:SetScript("OnShow", function()
     if current and pages[current] then
       refreshSwitch(pages[current])
@@ -737,6 +773,10 @@ end
 BIT.commands = {} -- word -> function(rest), from the modules (/upt probe)
 
 function BIT.RegisterCommand(word, fn) BIT.commands[word] = fn end
+
+BINDING_HEADER_USEFULPLATESANDTOOLTIPS = "Useful Plates and Tooltips"
+BINDING_NAME_USEFULPLATESANDTOOLTIPS_SETTINGS = "Open settings"
+function UsefulPlatesAndTooltips_ToggleSettings() BIT.OpenSettings() end
 
 -- Short names for the tabs: /upt sdi, /upt did, /upt stats, /upt ding, /upt range
 BIT.tabWords = {}

@@ -1,5 +1,7 @@
 # Useful Plates and Tooltips
 
+Settings support native gamepads and ConsolePort. Assign Open settings under Options → Key Bindings → AddOns → Useful Plates and Tooltips. LB/RB switches module tabs, the D-pad selects controls, A / Cross activates the selected control, left/right adjusts sliders and B / Circle closes the window. The gold outline shows focus and scrolls into view. With ConsolePort active, its interface cursor and configured hints handle navigation.
+
 It shows DoT marks, shields and range on nameplates, damage and healing numbers on action buttons, and item comparisons in tooltips. Every part can be switched off.
 
 Build the Forever ZIP with `python tools/build_zip.py`, or the Retail ZIP with `python tools/build_zip.py --retail`. Packages are written to `dist/` and checked against the source files.
