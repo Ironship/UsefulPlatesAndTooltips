@@ -23,7 +23,7 @@ files = [toc_name] + [l.strip().replace("\\", "/") for l in toc.splitlines()
 asset_roots = ([root / "Modules" / module for module in ("DoTInfo", "ResourceDing", "ShieldsInfo", "SpellDamageInfo", "CastPrediction", "HealPrediction")] if args.retail else [root / "Modules"]) + [root / "Core"]
 files += sorted(p.relative_to(root).as_posix() for directory in asset_roots for p in directory.rglob("*.tga"))
 files += sorted(p.relative_to(root).as_posix() for directory in asset_roots for p in directory.rglob("LICENSE*.txt"))
-files.append("LICENSE")
+files += ["LICENSE", "Bindings.xml"]
 if args.retail:
     files.append("RETAIL.md")
 
