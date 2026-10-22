@@ -296,7 +296,7 @@ end
 
 -- Draws one plate's widgets. maxHealth and health may be secret (real plates) or plain (the options preview):
 -- they only ever go into StatusBar min/max, never into Lua math. Returns false if drawing failed.
-local function drawPlate(w, entries, total, maxHealth, health, db)
+local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly)
     keepAbove(w)
     applyStyle(w, db)
     local perDot = db.plateDotColors ~= "single"
@@ -336,8 +336,8 @@ local function drawPlate(w, entries, total, maxHealth, health, db)
         hideWidgets(w)
         return false
     end
-    w.marker:SetShown(db.showMarkers)
-    w.displayDamage = db.showMarkers and total or 0
+    w.marker:SetShown(db.showMarkers and not iconOnly)
+    w.displayDamage = db.showMarkers and not iconOnly and total or 0
     if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
     -- UI-3: the kill icon is part of the marker set: with showMarkers off it
     -- must hide too, not linger alone on the plate.
@@ -385,11 +385,14 @@ local function updatePlate(unit, plate, db)
         return
     end
     local healthBar = findHealthBar(plate)
-    if not healthBar then
+    local iconOnly = not healthBar
+    if iconOnly and db.nameplateMode ~= "markerIcon" then
         if w0 then hideWidgets(w0) end
         return
     end
-    drawPlate(widgetsFor(plate, healthBar), entries, total, UnitHealthMax(unit), UnitHealth(unit), db)
+    -- Without a visible bar, seat only the native health-clipped kill icon beside the plate.
+    drawPlate(widgetsFor(plate, healthBar or plate), entries, total,
+        UnitHealthMax(unit), UnitHealth(unit), db, iconOnly)
 end
 
 function ns.nameplateDamageBase(plate, bar)
