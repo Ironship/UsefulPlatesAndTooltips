@@ -13,13 +13,11 @@ local _, BIT = ...
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local HEADER_HEIGHT = 40
 local TAB_HEIGHT = 26
-local SWITCH_HEIGHT = 36
+local SWITCH_HEIGHT = 54
 local MARGIN = 10
 local SCROLL_BAR_WIDTH = 16
 local DEFAULT_TAB = { width = 640, height = 360 }
 local MAX_CONTENT_HEIGHT = 470 -- the window stays bounded; taller tabs scroll inside it
-local MODULE_PREVIEW_GAP = 12 -- OFF-page gap between the appearance editor and a module's own preview scene
-local MODULE_PREVIEW_BOTTOM = 8 -- OFF-page bottom allowance below a module's preview scene
 
 local SHORT_LABEL = {
   SpellDamageInfo = "Spells",
@@ -531,8 +529,9 @@ local function buildPage(name)
     end, tab.summary)
   page.switch:SetPoint("TOPLEFT", 4, -6)
   page.stateLine = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  page.stateLine:SetPoint("LEFT", page.switch.label, "RIGHT", 14, 0)
-  page.stateLine:SetPoint("RIGHT", page, "RIGHT", -120, 0)
+  page.stateLine:SetPoint("TOPLEFT", 32, -30)
+  page.stateLine:SetPoint("TOPRIGHT", -120, -30)
+  page.stateLine:SetHeight(16)
   page.stateLine:SetJustifyH("LEFT")
   page.reload = UI.Button(page, "Reload UI", 100, function()
     if type(ReloadUI) == "function" then ReloadUI() end
@@ -541,15 +540,11 @@ local function buildPage(name)
 
   local content = attachScroll(page, SWITCH_HEIGHT)
 
-  local viewport = window:GetHeight() - headerBottom() - SWITCH_HEIGHT - 2 * MARGIN
+  local viewport = page.scroll:GetHeight()
   local function layoutContent()
     local needed = math.max(tab.height or DEFAULT_TAB.height, page.offNote and 0 or content:GetHeight())
     if page.appearance then
       needed = math.max(needed, 74 + page.appearance:GetHeight())
-      if page.modulePreview then
-        needed = math.max(needed, 74 + page.appearance:GetHeight() + MODULE_PREVIEW_GAP
-          + page.modulePreview:GetHeight() + MODULE_PREVIEW_BOTTOM)
-      end
     end
     content:SetHeight(math.max(needed, viewport))
     if page.syncScroll then page.syncScroll() end
@@ -557,6 +552,7 @@ local function buildPage(name)
 
   local showLive = (BIT.IsRunning(name) or (BIT.woke and BIT.woke[name])) and type(tab.build) == "function"
   if showLive then
+    content:SetHeight(tab.height or DEFAULT_TAB.height)
     local ok, err = pcall(tab.build, content)
     if not ok then
       BIT.Say("the " .. name .. " settings could not be built: " .. tostring(err))
@@ -570,42 +566,21 @@ local function buildPage(name)
       .. "Its settings are here while it runs; its appearance and a sample preview are below"
       .. " -- they need no module runtime. Tick Enable to open the settings before the next reload.")
     page.offNote = note
-    local refreshModulePreview = nil
-    if type(tab.buildPreview) == "function" or type(tab.previewRender) == "function" then
-      refreshModulePreview = function()
-        local scene = page.modulePreview
-        if scene == nil then return end
-        if type(tab.previewRender) == "function" then
-          local okRender, err = pcall(tab.previewRender, scene, BIT.Style.Resolve(name, tab.legacy))
-          if not okRender then
-            BIT.Say("the " .. name .. " preview could not render: " .. tostring(err))
-          end
-        end
-        layoutContent()
-      end
+    page.appearance = BIT.UI.Appearance(content, name, tab.capabilities, function()
+      if page.layoutOffPage then page.layoutOffPage() end
+    end, tab.legacy)
+    local function layoutOffPage()
+      local top = math.max(74, (note:GetStringHeight() or 54) + 20)
+      page.appearance:SetPoint("TOPLEFT", 8, -top)
+      content:SetHeight(math.max(viewport, top + page.appearance:GetHeight() + 12))
+      if page.syncScroll then page.syncScroll() end
     end
-    page.appearance = BIT.UI.Appearance(content, name, tab.capabilities, refreshModulePreview, tab.legacy)
-    page.appearance:SetPoint("TOPLEFT", 8, -74)
-    page.appearance.onLayout = layoutContent
-    if type(tab.buildPreview) == "function" then
-      local ok, scene = pcall(tab.buildPreview, content)
-      if ok and type(scene) == "table"
-        and type(scene.SetPoint) == "function" and type(scene.GetHeight) == "function" then
-        page.modulePreview = scene
-        scene:SetPoint("TOPLEFT", page.appearance, "BOTTOMLEFT", 0, -MODULE_PREVIEW_GAP)
-        if type(tab.previewRender) == "function" then
-          local okRender, err = pcall(tab.previewRender, scene, BIT.Style.Resolve(name, tab.legacy))
-          if not okRender then
-            BIT.Say("the " .. name .. " preview could not render: " .. tostring(err))
-          end
-        end
-      elseif not ok then
-        BIT.Say("the " .. name .. " preview could not be built: " .. tostring(scene))
-      end
-    end
+    page.appearance.onLayout = layoutOffPage
+    page.layoutOffPage = layoutOffPage
+    layoutOffPage()
   end
 
-  layoutContent()
+  if page.layoutOffPage then page.layoutOffPage() else layoutContent() end
   refreshSwitch(page)
   return page
 end
@@ -703,6 +678,8 @@ local function createWindow()
   end
   layoutTabs()
   window:SetHeight(HEADER_HEIGHT + TAB_HEIGHT * tabRows + SWITCH_HEIGHT + h + MARGIN)
+  window:SetScale(math.min(1, (UIParent:GetWidth() - 24) / window:GetWidth(),
+    (UIParent:GetHeight() - 24) / window:GetHeight()))
 
   if BIT.GamePadUI then
     local pad = BIT.GamePadUI
@@ -738,7 +715,7 @@ local function createWindow()
     end)
   end
 
-  window:SetScript("OnShow", function()
+  window:HookScript("OnShow", function()
     if current and pages[current] then
       refreshSwitch(pages[current])
     end

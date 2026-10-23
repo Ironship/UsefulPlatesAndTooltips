@@ -46,6 +46,8 @@ Incoming healing on target, party and raid frames, drawn from the current health
 
 ### HunterRange
 
+Hunter and ResourceDing dots share the same shaded orb, dark socket and bezel. Appearance samples use each module's renderer; changes also update the open preview. ResourceDing has an Appearance tab for its palette and opacity.
+
 For hunters only. A range rail sits above the target's nameplate, or at a spot you place on screen: six dots, and a seventh past 35 yd when Hawk Eye is detected or switched on. A sword marks melee range, and a skull marks the dead zone. The bands are approximate, not exact yard measurements.
 
 ![range indicator](https://i.imgur.com/AGTwBqF.gif)
