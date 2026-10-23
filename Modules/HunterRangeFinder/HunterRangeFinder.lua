@@ -966,7 +966,7 @@ local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 500
 local PREVIEW_WIDTH = 290
 local COL_HEIGHT = 440 -- both columns fit the window's viewport; only the Appearance tab scrolls
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 170, control = 200 }
+local SETTINGS_LAYOUT = { label = 250, control = 200 }
 local PREVIEW_LAYOUT = { label = 86, control = 146 }
 local DISABLED_ALPHA = 0.35
 
@@ -1160,6 +1160,7 @@ local function makeRow(parent, labelText, opts)
     row.label:SetWidth(layout.label - 8)
     row.label:SetJustifyH("LEFT")
     row.label:SetText(labelText)
+    BIT.UI.FitRow(row, ROW_HEIGHT)
     row.enabledIf = opts.enabledIf
     if opts.tooltip then
         row:EnableMouse(true)
@@ -1320,12 +1321,12 @@ local function addTab(name)
     local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
     button:SetText(name)
     button.text = button:GetFontString()
-    button:SetSize(button.text:GetStringWidth() + 20, 26)
+    button:SetSize(BIT.UI.TabWidth(button.text), 26)
     button.text:SetPoint("CENTER")
     BIT.UI.SkinTabButton(button, button.text)
     local previous = tabs[#tabs]
     if previous then
-        button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
+        button:SetPoint("LEFT", previous.button, "RIGHT", BIT.UI.TAB_GAP, 0)
     else
         button:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -8)
     end
@@ -1334,7 +1335,7 @@ local function addTab(name)
 
     local function place(row, key, height)
         row:SetPoint("TOPLEFT", inner, "TOPLEFT", 0, -tab.y)
-        tab.y = tab.y + (height or ROW_HEIGHT)
+        tab.y = tab.y + math.max(height or ROW_HEIGHT, type(row.GetHeight) == "function" and row:GetHeight() or 0)
         if key then tab.keys[#tab.keys + 1] = key end
         return row
     end

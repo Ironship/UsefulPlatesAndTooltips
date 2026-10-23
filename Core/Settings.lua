@@ -17,7 +17,7 @@ local SWITCH_HEIGHT = 54
 local MARGIN = 10
 local SCROLL_BAR_WIDTH = 16
 local DEFAULT_TAB = { width = 640, height = 360 }
-local MAX_CONTENT_HEIGHT = 470 -- the window stays bounded; taller tabs scroll inside it
+local MAX_CONTENT_HEIGHT = 560 -- the window stays bounded; taller tabs scroll inside it
 
 local SHORT_LABEL = {
   SpellDamageInfo = "Spells",
@@ -335,6 +335,136 @@ function UI.Slider(parent, labelText, min, max, step, get, set, format, tooltip)
 end
 
 ---------------------------------------------------------------------------------------------
+-- Column layout helpers shared by the module tabs
+---------------------------------------------------------------------------------------------
+
+-- A width for a sub-tab button that keeps the art of its neighbours from overlapping (the
+-- art needs about 64 px whatever the label is).
+UI.TAB_GAP = 4
+function UI.TabWidth(text)
+  local w = type(text) == "table" and type(text.GetStringWidth) == "function" and text:GetStringWidth() or 48
+  if type(w) ~= "number" then w = 48 end
+  return math.max(64, math.ceil(w) + 20)
+end
+
+-- Grow a row to fit its wrapped label. The label is centred vertically in the row, so a
+-- two-line label no longer runs into the rows above and below it.
+function UI.FitRow(row, minHeight)
+  local label = type(row) == "table" and row.label or nil
+  if type(label) ~= "table" or type(label.GetStringHeight) ~= "function" then return end
+  local h = label:GetStringHeight()
+  if type(h) ~= "number" then return end
+  row:SetHeight(math.max(minHeight or 26, math.ceil(h) + 8))
+end
+
+-- A section header: small gold caps and a hairline to the column's right edge. It is a frame,
+-- so a column can anchor it on both sides and the rule has a right end.
+function UI.Header(parent, text)
+  local row = CreateFrame("Frame", nil, parent)
+  row:SetHeight(20)
+  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  row.label:SetPoint("LEFT", 0, 0)
+  row.label:SetText(text)
+  local heading = UI.COLOR.heading
+  row.label:SetTextColor(heading[1], heading[2], heading[3])
+  local rule = row:CreateTexture(nil, "ARTWORK")
+  local c = UI.COLOR.divider
+  rule:SetColorTexture(c[1], c[2], c[3], c[4])
+  rule:SetHeight(1)
+  rule:SetPoint("LEFT", row.label, "RIGHT", 8, 0)
+  rule:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+  return row
+end
+
+-- A wrapped muted paragraph of a fixed width. Its height is measured, so the next row can be
+-- placed below it instead of at a guessed offset.
+function UI.Note(parent, text, width)
+  local row = CreateFrame("Frame", nil, parent)
+  row.text = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  row.text:SetPoint("TOPLEFT", 0, 0)
+  row.text:SetWidth(width)
+  row.text:SetJustifyH("LEFT")
+  row.text:SetWordWrap(true)
+  row.text:SetText(text)
+  local h = row.text:GetStringHeight()
+  row:SetSize(width, math.max(14, type(h) == "number" and math.ceil(h) or 14))
+  return row
+end
+
+-- Place a row in a column of its parent, inset 6 on both sides, and return the next y. A check
+-- box keeps its own size (its label runs to its right): stretching it across the column would
+-- stretch its art and push the label out of view. Every other row spans the column.
+function UI.PlaceRow(row, y, height)
+  local parent = row:GetParent()
+  row:ClearAllPoints()
+  row:SetPoint("TOPLEFT", parent, "TOPLEFT", 6, -y)
+  if not (type(row.IsObjectType) == "function" and row:IsObjectType("CheckButton")) then
+    row:SetPoint("RIGHT", parent, "RIGHT", -6, 0)
+  end
+  return y + (height or 26)
+end
+
+-- A vertically scrolling column. The holder is what a tab shows and hides; the rows go in
+-- holder.content, and holder:Fit(height) sets how tall they are. The slider and the wheel move
+-- the same offset, and the slider hides while everything fits.
+function UI.ScrollColumn(parent)
+  local holder = CreateFrame("Frame", nil, parent)
+  local scroll = CreateFrame("ScrollFrame", nil, holder)
+  scroll:SetPoint("TOPLEFT", 0, 0)
+  scroll:SetPoint("BOTTOMRIGHT", -SCROLL_BAR_WIDTH + 2, 0)
+  scroll:EnableMouseWheel(true)
+  local content = CreateFrame("Frame", nil, scroll)
+  content:SetSize(1, 1)
+  scroll:SetScrollChild(content)
+
+  local bar = CreateFrame("Slider", nil, holder)
+  bar:SetOrientation("VERTICAL")
+  bar:SetWidth(12)
+  bar:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, 0)
+  bar:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
+  bar:SetMinMaxValues(0, 1)
+  bar:SetValue(1)
+  bar:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Vertical")
+  UI.SkinSlider(bar, 6, true)
+
+  local function offset()
+    local v = scroll:GetVerticalScroll()
+    return type(v) == "number" and v or 0
+  end
+  local function maxScroll()
+    return math.max(0, (content:GetHeight() or 0) - (scroll:GetHeight() or 0))
+  end
+  local function sync()
+    local max = maxScroll()
+    bar._sync = true
+    bar:SetMinMaxValues(0, math.max(max, 0.001))
+    bar:SetShown(max > 0)
+    if offset() > max then scroll:SetVerticalScroll(max) end
+    bar:SetValue(max - math.min(offset(), max))
+    bar._sync = false
+  end
+  scroll:SetScript("OnMouseWheel", function(_, delta)
+    scroll:SetVerticalScroll(math.min(math.max(offset() - (delta or 0) * 24, 0), maxScroll()))
+    sync()
+  end)
+  scroll:SetScript("OnSizeChanged", function(_, width)
+    if type(width) == "number" and width > 0 then content:SetWidth(width) end
+    sync()
+  end)
+  bar:SetScript("OnValueChanged", function(_, value)
+    if bar._sync or type(value) ~= "number" then return end
+    local max = maxScroll()
+    scroll:SetVerticalScroll(math.min(math.max(max - value, 0), max))
+  end)
+  holder.scroll, holder.content, holder.bar = scroll, content, bar
+  function holder:Fit(height)
+    content:SetHeight(math.max(1, height))
+    sync()
+  end
+  return holder
+end
+
+---------------------------------------------------------------------------------------------
 -- The window
 ---------------------------------------------------------------------------------------------
 
@@ -619,7 +749,7 @@ local function addTabButton(name, label, tipTitle, tipBody, extraTip)
   button.name = name
   button:SetText(label)
   button.text = button:GetFontString()
-  local width = math.max(64, (button.text:GetStringWidth() or 48) + 20)
+  local width = UI.TabWidth(button.text)
   button:SetSize(width, TAB_HEIGHT - 2)
   button:SetScript("OnClick", function() selectTab(name) end)
   button:SetScript("OnEnter", function(self)
@@ -690,9 +820,15 @@ local function createWindow()
     addTabButton(name, SHORT_LABEL[name] or tab.title or name, tab.title or name, tab.summary, extra)
   end
   layoutTabs()
-  window:SetHeight(HEADER_HEIGHT + TAB_HEIGHT * tabRows + SWITCH_HEIGHT + h + MARGIN)
-  window:SetScale(math.min(1, (UIParent:GetWidth() - 24) / window:GetWidth(),
-    (UIParent:GetHeight() - 24) / window:GetHeight()))
+  window.baseHeight = HEADER_HEIGHT + TAB_HEIGHT * tabRows + SWITCH_HEIGHT + h + MARGIN
+  -- The gamepad hint line below the pages adds to the window instead of taking from the pages,
+  -- so a controller does not cut the bottom of every tab.
+  window.fit = function(extra)
+    window:SetHeight(window.baseHeight + (extra or 0))
+    window:SetScale(math.min(1, (UIParent:GetWidth() - 24) / window:GetWidth(),
+      (UIParent:GetHeight() - 24) / window:GetHeight()))
+  end
+  window.fit(0)
 
   if BIT.GamePadUI then
     local pad = BIT.GamePadUI
@@ -707,6 +843,7 @@ local function createWindow()
         .. "/" .. pad.Key("PADRSHOULDER") .. ": tabs") or "")
       hint:SetWordWrap(true)
       local padding = enabled and math.max(32, hint:GetStringHeight() + 8) or 0
+      window.fit(padding)
       for _, page in pairs(pages) do page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + padding) end
     end
     window.refreshGamePadHints = refreshHints
