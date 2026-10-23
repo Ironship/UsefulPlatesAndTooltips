@@ -258,6 +258,8 @@ local function overlayFor(healthBar)
     b:SetAllPoints(healthBar)
     b:SetFrameLevel((healthBar:GetFrameLevel() or 0) + 1)
     styleOverlay(b)
+    -- The frame's own HealthBarMask keeps the fill inside the visible bar.
+    if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(b:GetStatusBarTexture(), healthBar, true) end
     b:Hide()
     return b
   end)
@@ -283,6 +285,8 @@ local function applyOverlayMode(o, edge)
   else
     bar:SetAllPoints(healthBar)
   end
+  -- The thin top edge sits on the frame's border art; only the full overlay takes the mask.
+  if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(bar:GetStatusBarTexture(), healthBar, not edge) end
   o.edge = edge
 end
 
@@ -810,7 +814,7 @@ local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 470
 -- The preview's own numbers (plain sample data, in % of SAMPLE_MAX) and the mock the frame
 -- switch shows. The sample starts at SAMPLE_ABSORB; the sliders move health and absorb only,
 -- and nothing here ever asks the game for a reading.
-local preview = { frame = "player", health = 100, absorb = SAMPLE_ABSORB * 100 / SAMPLE_MAX }
+local preview = { frame = "target", health = 100, absorb = SAMPLE_ABSORB * 100 / SAMPLE_MAX }
 
 -- The four mocks the frame switch offers, named and sized as the real frames read. x centres
 -- the bar in the preview card; the cluster (name above, caption below) is seated on the card's
@@ -1424,6 +1428,8 @@ local function buildLivePreview(pane)
       scene.overlay:SetParent(kit.bar)
       scene.overlay:SetAllPoints(kit.bar)
       scene.overlay:SetFrameLevel((kit.bar:GetFrameLevel() or 0) + 1)
+      -- The mock frame's own mask (player and target), as on the real frames.
+      BIT.UI.BarMask.Apply(scene.overlay:GetStatusBarTexture(), kit.bar, true)
       scene.overlay:SetMinMaxValues(0, 100)
       scene.overlay:SetValue(clampPercent(preview.absorb))
       styleOverlay(scene.overlay)
