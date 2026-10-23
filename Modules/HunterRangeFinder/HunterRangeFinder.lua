@@ -351,10 +351,7 @@ end
 -- (Dead Zone skull + melee sword, both shown only for MELEE/DEAD, never a
 -- RaidTarget assignment). Only native primitives are used.
 -- Pure construction: no gameplay reads, no events, no timers, no sounds.
-local GLOSS_WHITE = "Interface\\Buttons\\WHITE8X8"
 -- Hoisted gradient stops: no per-slot tables on the render path.
-local GLOSS_TOP = { r = 1, g = 1, b = 1, a = 0.55 }
-local GLOSS_BOTTOM = { r = 1, g = 1, b = 1, a = 0 }
 
 -- Nameplate anchor (ResourceDing pattern): the rail rides above the target's
 -- own plate, where the eyes already are, instead of a fixed screen spot.
@@ -409,61 +406,6 @@ local function reanchorHunterHud()
         hud:ClearAllPoints()
         hud:SetPoint("TOP", bar, "BOTTOM", 0, -offset)
         reanchorKey, reanchorOffset = bar, offset
-    end
-end
-
--- Blizzard-style orb gloss (hunter-local): a specular highlight over each dot,
--- like the shine on Blizzard's own power orbs. A second texture per dot holder
--- reuses the holder's own circle mask, so it stays round with no square edges.
--- The gradient API is probed (older clients fall back to a flat faint shine).
--- Pure paint: no gameplay reads, never errors when APIs are missing.
-local function paintHunterGloss(frame, style, active, bandName, close)
-    local glossOn = style and style.shape == "dots" and not close
-    local borderPx = 0
-    if style then borderPx = math.max(0, (tonumber(style.border) or 0) * (tonumber(style.scale) or 1)) end
-    local opacity = (style and tonumber(style.opacity)) or 1
-    local slots = frame.slots or {}
-    for i = 1, #slots do
-        local slot = slots[i]
-        local holder = slot and slot.markers and slot.markers[1]
-        local gloss = holder and holder.hunterGloss
-        local slotShown = false
-        if type(slot) == "table" and type(slot.IsShown) == "function" then
-            local ok, shown = pcall(slot.IsShown, slot)
-            slotShown = ok and shown and true or false
-        elseif type(slot) == "table" then
-            slotShown = true
-        end
-        if not glossOn or not slotShown or type(holder) ~= "table" then
-            if gloss and type(gloss.Hide) == "function" then pcall(gloss.Hide, gloss) end
-        else
-            if not gloss and type(holder.CreateTexture) == "function" then
-                local ok, tex = pcall(holder.CreateTexture, holder, nil, "OVERLAY")
-                if ok and tex then
-                    holder.hunterGloss = tex
-                    gloss = tex
-                    local mask = holder.dotFillMask
-                    if mask and type(tex.AddMaskTexture) == "function" then
-                        pcall(tex.AddMaskTexture, tex, mask)
-                    end
-                end
-            end
-            if gloss then
-                local lit = i <= (active or 0)
-                local alpha = (lit and 0.5 or 0.14) * opacity
-                if type(gloss.ClearAllPoints) == "function" then pcall(gloss.ClearAllPoints, gloss) end
-                if type(gloss.SetPoint) == "function" then
-                    pcall(gloss.SetPoint, gloss, "TOPLEFT", holder, "TOPLEFT", borderPx, -borderPx)
-                    pcall(gloss.SetPoint, gloss, "BOTTOMRIGHT", holder, "BOTTOMRIGHT", -borderPx, borderPx)
-                end
-                if type(gloss.SetTexture) == "function" then pcall(gloss.SetTexture, gloss, GLOSS_WHITE) end
-                if type(gloss.SetGradient) == "function" then
-                    pcall(gloss.SetGradient, gloss, "VERTICAL", GLOSS_TOP, GLOSS_BOTTOM)
-                end
-                if type(gloss.SetAlpha) == "function" then pcall(gloss.SetAlpha, gloss, alpha) end
-                if type(gloss.Show) == "function" then pcall(gloss.Show, gloss) end
-            end
-        end
     end
 end
 
@@ -635,7 +577,6 @@ local function renderScene(frame, style, bandName, scatter)
             frame.rail:SetSize(segTotal * step - gap, thick)
         end
     end
-    paintHunterGloss(frame, style, active, bandName, close)
     frame.zone:SetText(BAND_LABEL[bandName] or "")
     -- Role-colored label for the close bands (MELEE good, DEAD bad), plain
     -- text for distance bands so the rail gradient stays the signal.
@@ -1489,7 +1430,6 @@ local function buildTabs(parent, isHunter)
     editor.onLayout = function()
         appearance.y = (editor:GetHeight() or 0) + 8
         appearance:finish()
-        appearance.content:SetVerticalScroll(0)
     end
     appearance.y = (editor:GetHeight() or 0) + 8
     appearance.editor = editor

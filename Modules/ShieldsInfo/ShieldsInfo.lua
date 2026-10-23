@@ -1543,7 +1543,6 @@ local function buildTabs(area)
       editor.onLayout = function()
         effects.y = editorTop + (editor:GetHeight() or 0) + 8
         effects:finish()
-        effects.content:SetVerticalScroll(0)
       end
       effects.y = editorTop + (editor:GetHeight() or 0) + 8
     end

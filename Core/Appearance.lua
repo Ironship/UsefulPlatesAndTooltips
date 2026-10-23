@@ -418,10 +418,6 @@ function Style.Resolve(moduleName, legacy)
   ---------------------------------------------------------------------------------------------
 
   local WHITE = "Interface\\Buttons\\WHITE8X8"
-  local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
-  -- The glossy fill for round markers (the combo orbs' own art, shared): tinted by the role
-  -- colour, it reads the same as the Points orbs wherever a "dots" marker family is drawn.
-  local ORB = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\ComboOrb" -- white disc, same as ResourceDing combo dots
   local INACTIVE_ALPHA = 0.25 -- the dim level of inactive markers
 
   local function roleColor(style, role)
@@ -508,121 +504,13 @@ function Style.Resolve(moduleName, legacy)
     holder.fill:SetColorTexture(c[1], c[2], c[3], alpha)
   end
 
-  -- Round dots: real shape comes from circle MASKS, not from paint alone. The
-  -- native TempPortraitAlphaMask file is a MaskTexture asset (SharedUIPanelTemplates
-  -- and TalentUI Mists use it AS a mask with CLAMPTOBLACKADDITIVE; EvokerEbonMightBar
-  -- applies it via Texture:AddMaskTexture). A bare SetTexture(CIRCLE) is only the
-  -- no-mask fallback and does not prove transparent corners.
-  --
-  -- Each dot holder therefore owns cached circle masks (holder.dotFillMask for the
-  -- inner fill, holder.dotBorderMask for the outset ring), created once via the
-  -- holder's own CreateMaskTexture and applied with AddMaskTexture. Painted bounds
-  -- stay reserved (holder = thick+2*border, step = holder+gap) so a large border
-  -- (Hunter thickness12/border8/gap7) cannot cover the fill or overlap neighbours.
-  local function hideMask(mask)
-    if not mask then return end
-    if type(mask.Hide) == "function" then pcall(mask.Hide, mask)
-    elseif type(mask.SetShown) == "function" then pcall(mask.SetShown, mask, false) end
-  end
-
-  local function showMask(mask)
-    if not mask then return end
-    if type(mask.Show) == "function" then pcall(mask.Show, mask)
-    elseif type(mask.SetShown) == "function" then pcall(mask.SetShown, mask, true) end
-  end
-
-  -- Guarded one-circle mask for one texture: creates holder[slot] once, points it
-  -- at CIRCLE, sizes it to the target and links it. Returns true when a real mask
-  -- is linked, false when the client has no mask API (caller uses the CIRCLE
-  -- paint fallback). No union of masks is needed: one circle per fill/edge.
-  local function applyCircleMask(holder, target, slot)
-    if not target then return false end
-    if type(holder.CreateMaskTexture) ~= "function" then return false end
-    if type(target.AddMaskTexture) ~= "function" then return false end
-    local mask = holder[slot]
-    if not mask then
-      local ok, m = pcall(holder.CreateMaskTexture, holder)
-      if not ok or not m then return false end
-      holder[slot] = m
-      mask = m
-    end
-    if type(mask.SetTexture) ~= "function" then return false end
-    local configured, success = pcall(mask.SetTexture, mask, CIRCLE,
-      "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    if not configured or success == false then
-      hideMask(mask)
-      return false
-    end
-    if type(mask.ClearAllPoints) == "function" then pcall(mask.ClearAllPoints, mask) end
-    local positioned
-    if type(mask.SetAllPoints) == "function" then
-      positioned = pcall(mask.SetAllPoints, mask, target)
-    elseif type(mask.SetPoint) == "function" then
-      local top = pcall(mask.SetPoint, mask, "TOPLEFT", holder, "TOPLEFT", 0, 0)
-      local bottom = pcall(mask.SetPoint, mask, "BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
-      positioned = top and bottom
-    end
-    if not positioned then
-      hideMask(mask)
-      return false
-    end
-    local linkedKey = slot .. "LinkedTexture"
-    if holder[linkedKey] ~= target then
-      local linked = pcall(target.AddMaskTexture, target, mask)
-      if not linked then
-        hideMask(mask)
-        return false
-      end
-      holder[linkedKey] = target
-    end
-    showMask(mask)
-    return true
-  end
-
-  -- Detach and hide one cached circle mask (square shapes must not keep it:
-  -- a retained mask would clip bars/segments/diamonds to a disc).
-  local function removeCircleMask(holder, target, slot)
-    local mask = holder[slot]
-    if not mask then return end
-    local linkedKey = slot .. "LinkedTexture"
-    if target and holder[linkedKey] == target and type(target.RemoveMaskTexture) == "function" then
-      local removed = pcall(target.RemoveMaskTexture, target, mask)
-      if removed then holder[linkedKey] = nil end
-    end
-    hideMask(mask)
-  end
-
-  local function hideDotBorder(holder)
-    local b = holder.dotBorder
-    if b then
-      if type(b.SetShown) == "function" then b:SetShown(false)
-      elseif type(b.Hide) == "function" then b:Hide() end
-    end
-    hideMask(holder.dotBorderMask)
-  end
-
-  local function hideDotMasks(holder)
-    hideMask(holder.dotFillMask)
-    hideMask(holder.dotBorderMask)
-  end
-
-  -- Return one holder to the square family: detach both circle masks, hide the
-  -- circular ring, restore the WHITE fill over the whole holder and reset the
-  -- vertex tint (dots tint via SetVertexColor; squares colour via SetColorTexture,
-  -- so a stale tint would double-darken the square). paint() re-applies the
-  -- square colour next.
   local function toSquare(holder)
-    removeCircleMask(holder, holder.fill, "dotFillMask")
-    removeCircleMask(holder, holder.dotBorder, "dotBorderMask")
-    hideDotBorder(holder)
-    local f = holder.fill
-    if f then
-      f:SetTexture(WHITE)
-      if type(f.SetVertexColor) == "function" then f:SetVertexColor(1, 1, 1, 1) end
-      if type(f.ClearAllPoints) == "function" then f:ClearAllPoints() end
-      f:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
-      f:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
-    end
+    if holder.orb then holder.orb:Hide() end
+    holder.fill:Show()
+    holder.fill:SetTexture(WHITE)
+    holder.fill:SetVertexColor(1, 1, 1, 1)
+    holder.fill:ClearAllPoints()
+    holder.fill:SetAllPoints(holder)
   end
 
   -- Render markers into a container from a resolved style. activeCount and totalCount are plain
@@ -645,74 +533,36 @@ function Style.Resolve(moduleName, legacy)
     local len = math.max(1, style.length * style.scale)
 
     if style.shape == "dots" then
-      -- Round dots with real masked shape: each texture gets its own cached
-      -- circle mask when the client offers CreateMaskTexture/AddMaskTexture;
-      -- otherwise the CIRCLE paint asset is reused as a no-mask fallback (which
-      -- alone does not prove transparent corners). The border stays outset
-      -- (holder = thick+2*border) and the gap separates painted extents.
       local borderPx = math.max(0, style.border * style.scale)
       local outer = thick + 2 * borderPx
       local step = outer + gap
-      local width = totalCount > 0 and totalCount * step - gap or 0
-      container:SetSize(width, outer)
-      for i = 1, #markers do
-        local m = markers[i]
+      container:SetSize(totalCount > 0 and totalCount * step - gap or 0, outer)
+      for i, holder in ipairs(markers) do
+        holder:SetShown(i <= totalCount)
         if i <= totalCount then
-          m:SetShown(true)
-          m:SetSize(outer, outer)
-          m:SetPoint("TOPLEFT", container, "TOPLEFT", (i - 1) * step, 0)
-          -- round dots carry no square Backdrop stroke
-          if type(m.SetBackdrop) == "function" then m:SetBackdrop(nil) end
+          holder:SetSize(outer, outer)
+          holder:ClearAllPoints()
+          holder:SetPoint("TOPLEFT", container, "TOPLEFT", (i - 1) * step, 0)
+          if holder.SetBackdrop then holder:SetBackdrop(nil) end
+          holder.fill:Hide()
+          local orb = holder.orb
+          if not orb then orb = BIT.Orbs.Create(holder); holder.orb = orb end
+          orb:ClearAllPoints()
+          orb:SetPoint("TOPLEFT", holder, "TOPLEFT", borderPx, -borderPx)
+          orb:SetSize(thick, thick)
+          BIT.Orbs.Layout(orb, borderPx)
+          orb.border:SetShown(borderPx > 0)
+          orb:SetMinMaxValues(0, 1)
+          orb:SetValue(i <= activeCount and 1 or 0)
+          orb.overlay:Show()
+          orb.overlay:SetMinMaxValues(0, 1)
+          orb.overlay:SetValue(0)
           local alpha = i <= activeCount and activeAlpha or dimAlpha
-          local b = m.dotBorder
-          if not b then
-            b = m:CreateTexture(nil, "BACKGROUND")
-            m.dotBorder = b
-          end
-          if applyCircleMask(m, b, "dotBorderMask") then
-            b:SetTexture(WHITE)
-          else
-            b:SetTexture(CIRCLE)
-          end
-          if type(b.ClearAllPoints) == "function" then b:ClearAllPoints() end
-          b:SetPoint("TOPLEFT", m, "TOPLEFT", 0, 0)
-          b:SetPoint("BOTTOMRIGHT", m, "BOTTOMRIGHT", 0, 0)
-          b:SetSize(outer, outer)
-          if borderPx > 0.01 then
-            if type(b.SetShown) == "function" then b:SetShown(true)
-            elseif type(b.Show) == "function" then b:Show() end
-          else
-            if type(b.SetShown) == "function" then b:SetShown(false)
-            elseif type(b.Hide) == "function" then b:Hide() end
-            hideMask(m.dotBorderMask)
-          end
-          if type(b.SetVertexColor) == "function" then
-            b:SetVertexColor(c[1], c[2], c[3], alpha)
-          end
-          local f = m.fill
-          -- The orb art alone proves the round shape (its corners are transparent); the
-          -- circle mask, where the client has one, only sharpens the edge.
-          applyCircleMask(m, f, "dotFillMask")
-          f:SetTexture(ORB)
-          if type(f.ClearAllPoints) == "function" then f:ClearAllPoints() end
-          f:SetPoint("TOPLEFT", m, "TOPLEFT", borderPx, -borderPx)
-          f:SetPoint("BOTTOMRIGHT", m, "BOTTOMRIGHT", -borderPx, borderPx)
-          f:SetSize(thick, thick)
-          if type(f.SetVertexColor) == "function" then
-            f:SetVertexColor(c[1], c[2], c[3], alpha)
-          end
-        else
-          m:SetShown(false)
-          hideDotBorder(m)
-          hideDotMasks(m)
+          BIT.Orbs.Paint(orb, { c[1], c[2], c[3], alpha }, style.opacity)
+          orb.glow:SetShown(i == activeCount and activeCount > 0 and not style.reducedMotion)
+          orb:Show()
         end
       end
-      -- dots are round: a stale diamond rotation must not survive on them
-      pcall(function()
-        for i = 1, #markers do
-          markers[i].fill:SetRotation(0)
-        end
-      end)
       return
     end
 
@@ -1137,43 +987,82 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   local resetButton = BIT.UI.Button(panel, "Reset this module's appearance", 300, function()
     Style.Reset(scopeKey())
   end)
-  resetButton:SetPoint("LEFT", presetButton, "RIGHT", 10, 0)
-  y = y - 34
+  if width < 500 then
+    resetButton:SetPoint("TOPLEFT", presetButton, "BOTTOMLEFT", 0, -6)
+    resetButton:SetWidth(math.min(300, width - 24))
+    y = y - 62
+  else
+    resetButton:SetPoint("LEFT", presetButton, "RIGHT", 10, 0)
+    y = y - 34
+  end
   controls.preset, controls.reset = presetButton, resetButton
 
   local resetHint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   resetHint:SetPoint("TOPLEFT", x, y)
   resetHint:SetText("Reset changes only the appearance: gameplay settings, sounds, anchors and "
     .. "learned values stay.")
-  y = y - 24
+  resetHint:SetWidth(width - 24)
+  resetHint:SetWordWrap(true)
+  y = y - math.max(24, (resetHint:GetStringHeight() or 14) + 10)
   controls.resetHint = resetHint
 
-  -- Sample preview: explicit fictitious data through the same primitives and resolver.
-  local sample = CreateFrame("Frame", nil, panel)
-  sample:SetPoint("TOPLEFT", x, y)
-  local sampleTitle = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  sampleTitle:SetPoint("TOPLEFT", 0, 0)
-  sampleTitle:SetText("Sample: fictitious data, not the live game")
-  sample.markers = Style.CreateMarkers(sample, SAMPLE_MARKERS_TOTAL)
-  sample.markers:SetPoint("TOPLEFT", 0, -22)
-  sample.bar = CreateFrame("StatusBar", nil, sample)
-  sample.bar:SetSize(140, 14)
-  sample.bar:SetPoint("TOPLEFT", 0, -48)
-  sample.bar:SetMinMaxValues(0, SAMPLE_BAR_MAX)
-  sample.bar:SetValue(SAMPLE_BAR_VALUE)
-  sample.barLabel = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  sample.barLabel:SetPoint("LEFT", sample.bar, "RIGHT", 8, 0)
-  sample.textLine = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  sample.textLine:SetPoint("TOPLEFT", 0, -70)
-  panel.sampleMarkers, panel.sampleBar, panel.sampleText = sample.markers, sample.bar, sample.textLine
-
-  local function renderSample(style)
-    Style.RenderMarkers(sample.markers, style, SAMPLE_MARKERS_ACTIVE, SAMPLE_MARKERS_TOTAL, "accent")
-    Style.ApplyBar(sample.bar, style, "absorb")
-    sample.barLabel:SetText(string.format("%d/%d", SAMPLE_BAR_VALUE, SAMPLE_BAR_MAX))
-    Style.ApplyText(sample.barLabel, style, "text")
-    sample.textLine:SetText(SAMPLE_TEXT)
-    Style.ApplyText(sample.textLine, style, "text")
+  -- The module's real renderer also owns the appearance sample, including while off.
+  local tab = BIT.tabs and BIT.tabs[moduleName]
+  local sample, renderSample
+  local sampleTop, sampleHeight = y, 96
+  if tab and type(tab.buildPreview) == "function" and type(tab.previewRender) == "function" then
+    local ok, scene = pcall(tab.buildPreview, panel)
+    if ok and type(scene) == "table" and type(scene.SetPoint) == "function" then
+      sample = scene
+    else
+      BIT.Say("the " .. moduleName .. " appearance sample could not be built: " .. tostring(scene))
+    end
+  end
+  if sample then
+    sample:SetPoint("TOPLEFT", x, sampleTop)
+    renderSample = function()
+      local ok, err = pcall(tab.previewRender, sample, Style.Resolve(moduleName, legacy))
+      if not ok then
+        BIT.Say("the " .. moduleName .. " appearance sample could not render: " .. tostring(err))
+        return
+      end
+      local fit = math.min(1, (width - 24) / math.max(1, sample:GetWidth()))
+      sample:SetScale(fit)
+      local height = sample:GetHeight() * fit + 12
+      if height ~= sampleHeight then
+        sampleHeight = height
+        if panel.layout then panel.layout() end
+      end
+    end
+  else
+    sample = CreateFrame("Frame", nil, panel)
+    sample:SetPoint("TOPLEFT", x, sampleTop)
+    sample:SetSize(width - 24, 96)
+    local sampleTitle = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    sampleTitle:SetPoint("TOPLEFT", 0, 0)
+    sampleTitle:SetText("Sample: fictitious data, not the live game")
+    sample.markers = Style.CreateMarkers(sample, SAMPLE_MARKERS_TOTAL)
+    sample.markers:SetPoint("TOPLEFT", 0, -22)
+    sample.bar = CreateFrame("StatusBar", nil, sample)
+    sample.bar:SetSize(140, 14)
+    sample.bar:SetMinMaxValues(0, SAMPLE_BAR_MAX)
+    sample.bar:SetValue(SAMPLE_BAR_VALUE)
+    sample.barLabel = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    sample.barLabel:SetPoint("LEFT", sample.bar, "RIGHT", 8, 0)
+    sample.textLine = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    panel.sampleMarkers, panel.sampleBar, panel.sampleText = sample.markers, sample.bar, sample.textLine
+    renderSample = function(style)
+      Style.RenderMarkers(sample.markers, style, SAMPLE_MARKERS_ACTIVE, SAMPLE_MARKERS_TOTAL, "accent")
+      Style.ApplyBar(sample.bar, style, "absorb")
+      sample.bar:SetPoint("TOPLEFT", 0, -34 - sample.markers:GetHeight())
+      sample.barLabel:SetText(string.format("%d/%d", SAMPLE_BAR_VALUE, SAMPLE_BAR_MAX))
+      Style.ApplyText(sample.barLabel, style, "text")
+      sample.textLine:SetPoint("TOPLEFT", sample.bar, "BOTTOMLEFT", 0, -10)
+      sample.textLine:SetText(SAMPLE_TEXT)
+      Style.ApplyText(sample.textLine, style, "text")
+      sampleHeight = 70 + sample.markers:GetHeight() + style.fontSize
+      if panel.layout then panel.layout() end
+    end
   end
   panel.sample = sample
 
@@ -1195,6 +1084,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     renderSample(style)
   end
   panel.Refresh = refreshPanel
+  panel:HookScript("OnShow", refreshPanel)
 
   local unsubscribe = Style.Subscribe("*", function(scope)
     if scope == moduleName or scope == "*" then
@@ -1210,11 +1100,11 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   refreshPanel()
   -- The sample hangs below the last control; keep it inside the panel, and grow
   -- further only while Advanced is open. onLayout lets the /upt scroll follow.
-  y = y - 96
   local function layoutPanel()
+    local bottom = sampleTop - sampleHeight
     advanced:ClearAllPoints()
-    advanced:SetPoint("TOPLEFT", 0, y)
-    local h = -y + 16
+    advanced:SetPoint("TOPLEFT", 0, bottom)
+    local h = -bottom + 16
     if panel.advancedOpen then h = h + advanced:GetHeight() end
     panel:SetSize(width, h)
     if controls.advancedButton then
