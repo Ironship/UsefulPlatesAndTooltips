@@ -2,7 +2,7 @@
 ## Title: Useful Plates and Tooltips (Retail)
 ## Notes: Retail test build: cast/channel damage, DoT estimates, incoming heals, rogue aura icons/timers, resource sounds/markers, absorb overlays and spell damage numbers. /upt
 ## Author: Ironship
-## Version: 0.9.92-retail
+## Version: 0.9.93-retail
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 

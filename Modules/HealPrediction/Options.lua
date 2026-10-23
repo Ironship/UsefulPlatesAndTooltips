@@ -187,17 +187,20 @@ local function buildPreview(pane)
     rule:SetPoint("TOPLEFT", 8, -34)
     rule:SetPoint("TOPRIGHT", -8, -34)
 
-    local scene = BIT.UI.Preview.Scene(pane, PREVIEW_WIDTH - 2 * SIDE, 120)
+    -- The same Murloc target frame the other tabs preview on, with the module's own segment
+    -- drawn from the health edge exactly as it is on the real frame.
+    local scene = BIT.UI.Preview.Scene(pane, PREVIEW_WIDTH - 2 * SIDE, 122)
     scene:SetPoint("TOP", pane, "TOP", 0, -44)
 
-    local mock = BIT.UI.Preview.PartyBar(scene, { width = 200, health = 60, name = "Kaya" })
-    mock.frame:SetPoint("CENTER", scene, "CENTER")
+    local mock = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 60 })
+    mock.frame:SetPoint("CENTER", scene, "CENTER", 0, 0)
     mock.bar:SetMinMaxValues(0, 100)
     mock.bar:SetValue(60)
 
     local state = { health = 60, heal = 25 }
     local function redraw()
         mock.bar:SetValue(state.health)
+        if mock.healthPercent then mock.healthPercent:SetText(string.format("%d%%", state.health)) end
         ns.DrawSample(mock.bar, 100, state.heal)
     end
 

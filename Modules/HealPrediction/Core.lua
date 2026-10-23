@@ -142,6 +142,8 @@ local function overlayFor(healthBar)
         clip:SetFrameLevel((healthBar:GetFrameLevel() or 0) + 2)
         local bar = CreateFrame("StatusBar", nil, clip)
         bar:SetStatusBarTexture(WHITE)
+        -- The frame's own HealthBarMask keeps the segment inside the visible bar.
+        if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(bar:GetStatusBarTexture(), healthBar, true) end
         local label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         label:SetPoint("LEFT", bar:GetStatusBarTexture(), "RIGHT", 2, 0)
         clip:Hide()
