@@ -466,13 +466,13 @@ local function addTab(name)
     local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
     button:SetText(name)
     button.text = button:GetFontString()
-    button:SetSize(button.text:GetStringWidth() + 20, TAB_HEIGHT)
+    button:SetSize(BIT.UI.TabWidth(button.text), TAB_HEIGHT)
     button.text:SetPoint("CENTER")
     BIT.UI.SkinTabButton(button, button.text)
     local previous = tabs[#tabs]
     -- Native tabs grow to fit their end caps on show; keep three per row.
     if previous and #tabs % 3 ~= 0 then
-        button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
+        button:SetPoint("LEFT", previous.button, "RIGHT", BIT.UI.TAB_GAP, 0)
     else
         button:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -8 - math.floor(#tabs / 3) * TAB_HEIGHT)
     end
