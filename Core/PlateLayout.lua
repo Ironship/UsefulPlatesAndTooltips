@@ -25,13 +25,19 @@ local function read(fn, ...)
   if ok and not (type(issecretvalue) == "function" and issecretvalue(value)) then return value end
 end
 
+-- The frame family of each unit, for EUI's global ("EllesmereUIUnitFrames_Focus") and Blizzard's
+-- ("FocusFrameHealthBar"); any other unit is the target's. Blizzard's focus frame is built from the target
+-- frame's template, so its bar and portrait sit at the target frame's paths.
+local FRAME_PART = { player = "Player", focus = "Focus" }
+
 -- EUI keeps Blizzard's frames alive but hidden, so follow the profile's active source.
 function Plate.UnitFrame(unit)
+  local part = FRAME_PART[unit] or "Target"
   local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
   local eui = type(modules) == "table" and modules.EllesmereUIUnitFrames
   local source = type(eui) == "table" and read(eui.GetUnitFrameSource, unit)
   if source == "hidden" then return end
-  local custom = _G["EllesmereUIUnitFrames_" .. (unit == "player" and "Player" or "Target")]
+  local custom = _G["EllesmereUIUnitFrames_" .. part]
   if source == "eui" or (source ~= "blizzard" and type(custom) == "table"
       and read(custom.IsVisible, custom) == true) then
     if type(custom) ~= "table" or read(custom.IsForbidden, custom) == true then return end
@@ -41,7 +47,7 @@ function Plate.UnitFrame(unit)
     return custom, bar, portrait
   end
   local frame
-  if unit == "player" then frame = PlayerFrame else frame = TargetFrame end
+  if unit == "player" then frame = PlayerFrame elseif unit == "focus" then frame = FocusFrame else frame = TargetFrame end
   local content = type(frame) == "table" and (unit == "player" and frame.PlayerFrameContent or frame.TargetFrameContent)
   local main = type(content) == "table" and (unit == "player" and content.PlayerFrameContentMain or content.TargetFrameContentMain)
   local container = type(main) == "table" and main.HealthBarsContainer
@@ -49,10 +55,10 @@ function Plate.UnitFrame(unit)
   if type(bar) ~= "table" then bar = type(main) == "table" and main.HealthBar end
   if type(bar) ~= "table" then bar = type(frame) == "table" and frame.HealthBar end
   if type(bar) ~= "table" then bar = type(frame) == "table" and frame.healthbar end
-  if type(bar) ~= "table" then bar = _G[unit == "player" and "PlayerFrameHealthBar" or "TargetFrameHealthBar"] end
+  if type(bar) ~= "table" then bar = _G[part .. "FrameHealthBar"] end
   local portraitHost = type(frame) == "table" and frame.TargetFrameContainer
   local portrait = type(portraitHost) == "table" and portraitHost.Portrait
-  if type(portrait) ~= "table" then portrait = _G[unit == "player" and "PlayerFramePortrait" or "TargetFramePortrait"] end
+  if type(portrait) ~= "table" then portrait = _G[part .. "FramePortrait"] end
   if type(portrait) ~= "table" then portrait = type(frame) == "table" and frame.portrait end
   return frame, bar, portrait
 end

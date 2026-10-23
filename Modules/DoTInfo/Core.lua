@@ -89,7 +89,7 @@ ns.refreshNames = {
 }
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames }
-ns.locale.addGermanNames(NAME_TABLES)
+ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
     Physical = 1, Holy = 2, Fire = 4, Nature = 8, Frost = 16, Shadow = 32, Arcane = 64,
@@ -141,6 +141,7 @@ local DEFAULTS = {
     estimateDuringCast = true,
     -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
     nameplateMode = "markerIcon",
+    focusMode = "markerIcon",       -- the focus frame's marker (Focus.lua), in the nameplates' look
     nameplateIconSize = 18,
     nameplateIconPosition = "left", -- the level badge sits right of the bar on Forever's plates
     plateIconOffsetX = 0,
@@ -208,7 +209,24 @@ local function isSecret(v)
     return ok and r or false
 end
 
--- Stable key for the mob behind a unit token, or nil if the unit can't be tracked.
+-- The nameplate token ("nameplate3") of the mob behind `unit`, or nil (no plate, plates off, or unreadable).
+-- Mob GUIDs are secret in Forever's instances (Does It Die PR #8, verified in a dungeon), but a mob keeps its
+-- nameplate token from NAME_PLATE_UNIT_ADDED to NAME_PLATE_UNIT_REMOVED, and C_NamePlate.GetNamePlateForUnit
+-- still finds the target's plate. So the token stands in for the GUID while the plate is up; the nameplate events
+-- drop its DoTs before the token goes to another mob. A field on ns: this chunk is at Lua 5.1's 200-local limit.
+function ns._plateTokenFor(unit)
+    if type(unit) == "string" and unit:match("^nameplate%d+$") then return unit end
+    if not (C_NamePlate and C_NamePlate.GetNamePlateForUnit) then return nil end
+    local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+    if not ok or not plate or isSecret(plate) or type(plate) ~= "table" then return nil end
+    local token = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+    if type(token) ~= "string" or isSecret(token) or not token:match("^nameplate%d+$") then return nil end
+    return token
+end
+
+-- Stable key for the mob behind a unit token, or nil if the unit can't be tracked: its GUID when readable (open
+-- world); "plate:nameplateN" when the GUID is secret (instances) and the mob has a nameplate; "target" as the last
+-- resort (secret GUID, no plate: only the current target is tracked, and target changes drop its DoTs).
 -- The same hit arrives for target, nameplateN and softenemy, and their GUIDs may not all be readable,
 -- so a hidden GUID only affects that one unit token.
 local function unitKey(unit)
@@ -217,7 +235,8 @@ local function unitKey(unit)
     if ok and not isSecret(guid) then return guid end
     -- A secret action-target GUID can still identify the same mob as a readable nameplate.
     -- Only trust the game's plain identity answer, then keep that plate's real GUID across switches.
-    if ok and isSecret(guid) and type(UnitIsUnit) == "function" then
+    -- (A nameplate token is its own plate: the loop could only find itself.)
+    if ok and isSecret(guid) and type(UnitIsUnit) == "function" and not unit:match("^nameplate%d+$") then
         for i = 1, 40 do
             local plateUnit = "nameplate" .. i
             local sameOK, same = pcall(UnitIsUnit, plateUnit, unit)
@@ -227,10 +246,19 @@ local function unitKey(unit)
             end
         end
     end
+    local token = ns._plateTokenFor(unit)
+    if token then
+        if warnedSecretGuid ~= "plate" then
+            warnedSecretGuid = "plate"
+            trace("Mob GUIDs are secret here (instance?); tracking each mob by its nameplate instead")
+        end
+        return "plate:" .. token
+    end
     if unit ~= "target" then return nil end
-    if not warnedSecretGuid then
-        warnedSecretGuid = true
-        trace("Target GUID is secret; tracking DoTs on the current target only")
+    if warnedSecretGuid ~= "target" then
+        warnedSecretGuid = "target"
+        trace("Target GUID is secret and it has no nameplate; tracking DoTs on the current target only"
+            .. " (turn on enemy nameplates to track several mobs)")
     end
     return "target"
 end
@@ -1439,7 +1467,7 @@ local skullTestUntil -- /dotinfo skull forces the skull visible until this time
 -- max = current health, value = remaining DoT damage; the fill only reaches the bar's right end when
 -- damage >= health. The skull rides the fill's right edge, and only the last skull-width of the very
 -- long bar is visible (clipped), so the skull appears over the portrait only when lethal.
--- It starts sliding in at skullSize / SKULL_BAR_LENGTH (~0.4%) short of lethal.
+-- It starts sliding in at skullSize / SKULL_BAR_LENGTH short of lethal (0.2% at 20px, 1.3% at 128px).
 local SKULL_BAR_LENGTH = 10000
 
 local skullWindow = CreateFrame("Frame", "UsefulPlatesAndTooltips_DoTInfoSkull", UIParent)
@@ -2430,6 +2458,49 @@ function ns.resetLearnedTicks()
     print("Learned tick sizes cleared.")
 end
 
+function ns.forgetLearnedTick(key)
+    db.ticks[key] = nil
+    trace("FORGET learned tick size for " .. tostring(key))
+end
+
+-- The learned tick sizes viewer's list (TickViewer.lua): per entry its key in db.ticks, spellID, comboPoints
+-- (finishers, whose keys are "spellIDxN"), perTick, and when the client has them the spell's name and what its
+-- description predicts (tooltipPerTick, ticks, interval, duration, school). Shaped DoTs (Agony) learn their
+-- average tick. Sorted by name, then combo points. From Does It Die v0.7.0 (MIT).
+function ns.learnedTickList()
+    local list = {}
+    for key, perTick in pairs(db.ticks) do
+        local spellID, points = key, nil
+        if type(key) == "string" then
+            local id, n = key:match("^(%d+)x(%d+)$")
+            spellID, points = tonumber(id), tonumber(n)
+        end
+        if type(spellID) == "number" and type(perTick) == "number" then
+            local entry = { key = key, spellID = spellID, comboPoints = points, perTick = perTick }
+            local ok, name, desc = pcall(spellNameAndDescription, spellID)
+            if ok and type(name) == "string" and not isSecret(name) then entry.name = name end
+            if ok and entry.name and type(desc) == "string" and not isSecret(desc) then
+                local total, school, duration, stated = parseDot(desc, points or 1)
+                if total then
+                    local interval = stated or KNOWN_TICK_INTERVALS[entry.name] or DEFAULT_TICK_INTERVAL
+                    entry.ticks = math.max(1, math.floor(duration / interval + 0.5))
+                    entry.interval, entry.duration = interval, duration
+                    entry.school = SCHOOL_BY_NAME[entry.name] or school
+                    entry.tooltipPerTick = total / entry.ticks
+                end
+            end
+            entry.color = entry.school and SCHOOL_COLORS[entry.school]
+            table.insert(list, entry)
+        end
+    end
+    table.sort(list, function(a, b)
+        local an, bn = a.name or ("~" .. a.spellID), b.name or ("~" .. b.spellID)
+        if an ~= bn then return an < bn end
+        return (a.comboPoints or 0) < (b.comboPoints or 0)
+    end)
+    return list
+end
+
 -- host: { healthBar, portrait, layerFrame } to draw on the options window's mock target frame, or nil to go
 -- back to the real target frame.
 function ns.setDisplayHost(host)
@@ -2470,10 +2541,9 @@ frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
 frame:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")   -- keeps a recent combo point reading as backup
 frame:RegisterEvent("UNIT_COMBAT")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-if ns.Retail then
-    frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
-    frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-end
+-- Plate tokens stand in for secret GUIDs (Forever's instances, see ns._plateTokenFor), and Retail keys by plate.
+frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 -- Never register COMBAT_LOG_EVENT_UNFILTERED: Forever forbids it and shows a "blocked" popup.
 
 frame:SetScript("OnEvent", function(self, event, ...)
@@ -2531,6 +2601,21 @@ frame:SetScript("OnEvent", function(self, event, ...)
             if castInProgress and castInProgress.key == old then dropCastInProgress("nameplate removed") end
         end
         safeRefresh()
+
+    elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
+        -- Forever: a plate token goes to the next mob that gets a plate, so DoTs keyed by it ("plate:nameplateN",
+        -- used while mob GUIDs are secret) belonged to the mob it showed before.
+        local token = ...
+        local old = type(token) == "string" and not isSecret(token) and ("plate:" .. token) or nil
+        if old and (dotsByTarget[old] or (pendingCast and pendingCast.key == old)
+            or (castInProgress and castInProgress.key == old)) then
+            trace("PLATE " .. token .. (event == "NAME_PLATE_UNIT_REMOVED" and " removed" or " reused")
+                .. ": its DoTs were for the mob it showed before")
+            dotsByTarget[old] = nil
+            ns._forgetRecipient(old)
+            if castInProgress and castInProgress.key == old then dropCastInProgress("nameplate removed") end
+            safeRefresh()
+        end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
         if ns.Retail then
@@ -2623,8 +2708,10 @@ SlashCmdList.BITDOTINFO = function(msg)
         db.debug = not db.debug
         print("Debug " .. (db.debug and "ON" or "OFF") .. ".")
     elseif cmd == "reset" then
-        wipe(db.ticks)
-        print("Learned tick sizes cleared.")
+        ns.resetLearnedTicks()
+    elseif cmd == "ticks" then
+        if ns.toggleTickViewer then ns.toggleTickViewer()
+        else print("Tick sizes are not learned on this client.") end
     else
         print("The kill icon on the target's portrait means your DoTs will kill it.")
         print(SLASH .. " - open the options window")
@@ -2632,6 +2719,7 @@ SlashCmdList.BITDOTINFO = function(msg)
         print(SLASH .. " skull - show the kill icon for 5 seconds to check its position")
         print(SLASH .. " plates - check what the addon can reach on visible nameplates (logged)")
         print(SLASH .. " debug - toggle echoing the trace log (casts, ticks, estimates) to chat")
+        if not ns.Retail then print(SLASH .. " ticks - show the learned tick sizes") end
         print(SLASH .. " reset - forget learned tick sizes")
     end
 end
