@@ -2,7 +2,7 @@
 ## Title: Useful Plates and Tooltips
 ## Notes: Useful nameplate and tooltip info for WoW: Forever: cast/channel damage, DoT marks, incoming heals, shields, hunter range, combo points, stat comparisons and action bar numbers. Every part can be switched off. /upt
 ## Author: Ironship
-## Version: 0.9.80
+## Version: 0.9.81
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
@@ -31,10 +31,17 @@ Modules\CastPrediction\Options.lua
 
 # DoTInfo: based on a standalone DoT addon by Joe Greive (MIT), via Ironship's German fork (see LICENSE)
 Modules\DoTInfo\Locale.lua
+Modules\DoTInfo\Locale_esES.lua
+Modules\DoTInfo\Locale_frFR.lua
+Modules\DoTInfo\Locale_koKR.lua
+Modules\DoTInfo\Locale_ptBR.lua
+Modules\DoTInfo\Locale_zhCN.lua
 Modules\DoTInfo\Core.lua
 Modules\DoTInfo\RogueEffects.lua
 Modules\DoTInfo\Options.lua
 Modules\DoTInfo\Nameplates.lua
+Modules\DoTInfo\Focus.lua
+Modules\DoTInfo\TickViewer.lua
 
 Modules\StatsInfo\Weights.lua
 Modules\StatsInfo\StatsInfo.lua

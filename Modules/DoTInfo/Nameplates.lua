@@ -395,6 +395,10 @@ local function updatePlate(unit, plate, db)
         UnitHealthMax(unit), UnitHealth(unit), db, iconOnly)
 end
 
+-- For Focus.lua: the same widgets on another health bar (the focus frame's), hosted by a frame of its own.
+-- A widget set marked pinned belongs to its owner, which hides it itself: the plate refresh leaves it alone.
+ns.barMarker = { widgetsFor = widgetsFor, draw = drawPlate, hide = hideWidgets }
+
 function ns.nameplateDamageBase(plate, bar)
     local w = widgetsByPlate[plate]
     return w and w.healthBar == bar and w.displayDamage or 0
@@ -449,7 +453,7 @@ local function refreshPlates()
         end
     end
     for plate, w in pairs(widgetsByPlate) do
-        if not seenPlates[plate] then hideWidgets(w) end
+        if not seenPlates[plate] and not w.pinned then hideWidgets(w) end
     end
 end
 

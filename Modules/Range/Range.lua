@@ -294,6 +294,9 @@ end
 -- the target may still be out of range.
 local DIM = 0.6
 local seen = {}   -- every action button the range update has reached
+-- button -> true while Blizzard says it is out of range. Kept here, not as a field on the button: a field written
+-- onto a secure action button from addon code is tainted state on it.
+local outOfRange = setmetatable({}, { __mode = "k" })
 local dimmed = {} -- the ones dimmed now
 
 -- EUI owns its range subscriptions and icon colors. Poll with the existing target
@@ -395,7 +398,7 @@ local function dimIcon(button)
   if usable == false then
     if noMana then r, g, b = 0.5, 0.5, 1 else r, g, b = 0.4, 0.4, 0.4 end
   end
-  if settings.dimIcons and button.bitOutOfRange then
+  if settings.dimIcons and outOfRange[button] then
     icon:SetDesaturated(true)
     icon:SetVertexColor(r * DIM, g * DIM, b * DIM)
     dimmed[button] = true
@@ -422,7 +425,7 @@ local function startDimming()
     -- Normalize: Blizzard passes booleans, but 1/0 must read the same (0 is truthy in Lua).
     checksRange = (checksRange == true or checksRange == 1)
     inRange = (inRange == true or inRange == 1)
-    button.bitOutOfRange = (checksRange and not inRange) and true or false
+    outOfRange[button] = (checksRange and not inRange) and true or nil
     if not seen[button] then
       seen[button] = true
       if type(button.UpdateUsable) == "function" then hooksecurefunc(button, "UpdateUsable", dimIcon) end
