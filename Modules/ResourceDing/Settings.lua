@@ -487,10 +487,18 @@ end
 -- A tab whose methods add rows top to bottom and remember the setting keys, for "Reset this tab".
 local function addTab(name)
   local tab = { name = name, keys = {}, widgets = {}, y = 0 }
-  tab.content = CreateFrame("Frame", nil, settingsArea)
+  tab.content = CreateFrame("ScrollFrame", nil, settingsArea)
   tab.content:SetPoint("TOPLEFT", settingsArea, "TOPLEFT", 8, -40)
   tab.content:SetPoint("BOTTOMRIGHT", settingsArea, "BOTTOMRIGHT", -8, 40)
   tab.content:Hide()
+  tab.content:EnableMouseWheel(true)
+  tab.inner = CreateFrame("Frame", nil, tab.content)
+  tab.inner:SetWidth(settingsArea:GetWidth() - 16)
+  tab.content:SetScrollChild(tab.inner)
+  tab.content:SetScript("OnMouseWheel", function(_, delta)
+    local limit = math.max(0, tab.inner:GetHeight() - tab.content:GetHeight())
+    tab.content:SetVerticalScroll(math.max(0, math.min(limit, tab.content:GetVerticalScroll() - delta * 24)))
+  end)
 
   local button = CreateFrame("Button", nil, settingsArea, "PanelTopTabButtonTemplate")
   button:SetText(name)
@@ -508,7 +516,7 @@ local function addTab(name)
   tab.button = button
 
   local function place(row, key)
-    row:SetPoint("TOPLEFT", tab.content, "TOPLEFT", 0, -tab.y)
+    row:SetPoint("TOPLEFT", tab.inner, "TOPLEFT", 0, -tab.y)
     tab.y = tab.y + (type(row.GetHeight) == "function" and row:GetHeight() or ROW_HEIGHT)
     if type(key) == "string" then
       table.insert(tab.keys, key)
@@ -518,19 +526,19 @@ local function addTab(name)
   end
 
   function tab:checkbox(key, labelText, opts)
-    return place(checkbox(self.content, key, labelText, opts), key)
+    return place(checkbox(self.inner, key, labelText, opts), key)
   end
   function tab:slider(key, labelText, min, max, step, opts)
-    return place(slider(self.content, key, labelText, min, max, step, opts), key)
+    return place(slider(self.inner, key, labelText, min, max, step, opts), key)
   end
   function tab:sound(key, labelText, frameName, opts)
-    return place(soundRow(self.content, labelText, key, frameName, opts), key)
+    return place(soundRow(self.inner, labelText, key, frameName, opts), key)
   end
   function tab:action(labelText, buttonText, onClick, opts)
-    return place((actionRow(self.content, labelText, buttonText, onClick, opts)))
+    return place((actionRow(self.inner, labelText, buttonText, onClick, opts)))
   end
   function tab:note(text)
-    return place(noteRow(self.content, text))
+    return place(noteRow(self.inner, text))
   end
   function tab:gap() self.y = self.y + 8 end
 
@@ -540,6 +548,7 @@ end
 
 local function resetTab(tab)
   if not tab then return end
+  if tab.reset then tab.reset() end
   for _, key in ipairs(tab.keys) do
     applySetting(key, defaultFor(key), true)
   end
@@ -604,7 +613,17 @@ local function buildTabs()
     .. ". Classes without one of these get no finisher sound.")
   sound:gap()
 
+  local appearance = addTab("Appearance")
+  local editor = BIT.UI.Appearance(appearance.inner, "ResourceDing", {
+    roles = Addon.DotStyleRoles, font = true, opacity = true, width = 400,
+  }, updateLivePreview)
+  editor:SetPoint("TOPLEFT", 0, 0)
+  editor.onLayout = function() appearance.inner:SetHeight(editor:GetHeight() + 12) end
+  appearance.y = editor:GetHeight() + 12
+  appearance.reset = function() BIT.Style.Reset("ResourceDing") end
+
   for _, tab in ipairs(tabs) do
+    tab.inner:SetHeight(math.max(1, tab.y + 12))
     for key, widget in pairs(tab.widgets) do widgets[key] = widget end
   end
   return widgets
@@ -699,6 +718,9 @@ function Addon.CreateSettingsPanel(parent)
     panel.refresh()
   end
   panel:SetScript("OnShow", panel.refresh)
+  if BIT.Style and BIT.Style.Subscribe then
+    BIT.Style.Subscribe("ResourceDing", updateLivePreview)
+  end
 
   selectTab(tabs[1])
   panel.refresh()
@@ -754,6 +776,8 @@ end
 local function layoutResourceDingPreview(scene, style)
   if scene == nil or scene.title == nil or scene.rows == nil then return end
   local y = PREVIEW_TITLE_TOP
+  local size = clampNumber(Addon.db and Addon.db.dotSize, 8, 24, PREVIEW_DOT_SIZE)
+  local gap = math.max(2, math.floor(size / 4))
   scene.title:ClearAllPoints()
   scene.title:SetPoint("TOPLEFT", PREVIEW_TITLE_X, y)
   y = y - previewTextHeight(scene.title, style) - 8
@@ -762,11 +786,13 @@ local function layoutResourceDingPreview(scene, style)
     row.label:SetPoint("TOPLEFT", PREVIEW_LABEL_X, y)
     local dotsTop = y - previewTextHeight(row.label, style) - 4
     for i, dot in ipairs(row.dots) do
+      dot:SetSize(size, size)
+      Addon.LayoutCircleChrome(dot)
       dot:ClearAllPoints()
       dot:SetPoint("TOPLEFT", scene, "TOPLEFT",
-        PREVIEW_X + (i - 1) * (PREVIEW_DOT_SIZE + PREVIEW_GAP), dotsTop)
+        PREVIEW_X + (i - 1) * (size + gap), dotsTop)
     end
-    y = dotsTop - PREVIEW_DOT_SIZE - 2 - PREVIEW_ROW_GAP
+    y = dotsTop - size - 2 - PREVIEW_ROW_GAP
   end
   local needed = -y + PREVIEW_BOTTOM
   if needed < 1 then needed = 1 end
