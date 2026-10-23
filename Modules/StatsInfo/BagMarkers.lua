@@ -578,6 +578,9 @@ local markers = {}      -- button -> marker frame (pooled per button, as the but
 M._bagMarkers = markers -- the tests read these; not part of the addon's interface
 function M._bagMarkerFor(button) return markers[button] end
 local pendingCreate = {} -- buttons whose marker waited for PLAYER_REGEN_ENABLED
+-- button -> { refresh, link }: the revision and item this button was last judged for. Kept here, not as fields
+-- on the button: a field written onto a Blizzard item button from addon code is tainted state on a secure frame.
+local checked = setmetatable({}, { __mode = "k" })
 M._pendingCreate = pendingCreate -- test seam, not part of the addon's interface
 
 -- Forward declarations: defined in the lifecycle section below (after scheduleRefresh);
@@ -704,7 +707,7 @@ local function paintContents(container, verdict, nativeUp)
 end
 
 local function hideMarker(button)
-  if button then button.bitCheckedRefresh, button.bitCheckedLink = nil, nil end
+  if button then checked[button] = nil end
   driveNativeUpgradeIcon(button, false)
   local marker = markers[button]
   if not marker then return end
@@ -1134,21 +1137,22 @@ local function evaluate(button, bag, slot)
   if not link or stackCount == 0 then
     -- no item, or a slot being emptied or moved: never a marker
     applyMarker(button, nil)
-    button.bitCheckedRefresh, button.bitCheckedLink = nil, nil
+    checked[button] = nil
     return
   end
-  if button.bitCheckedRefresh == refreshCounter and button.bitCheckedLink == link then
+  local last = checked[button]
+  if last and last.refresh == refreshCounter and last.link == link then
     return -- the same item in the same slot since the last revision: the verdict cannot have changed
   end
   local state, verdict = M.BagVerdictState(link)
   if state ~= "ok" then
     -- "wait"/"dead": clear now; the arrival events (ITEM_DATA_LOAD_RESULT / ...) re-run this
     applyMarker(button, nil)
-    button.bitCheckedRefresh, button.bitCheckedLink = nil, nil
+    checked[button] = nil
     return
   end
   applyMarker(button, verdict)
-  button.bitCheckedRefresh, button.bitCheckedLink = refreshCounter, link
+  checked[button] = { refresh = refreshCounter, link = link }
 end
 
 -- The live module switch (Core/Settings.lua writes BIT.SetSwitchedOn): the reload-scoped

@@ -14,6 +14,10 @@ Shows the damage your DoTs or Bleeds still have to deal as a marker on the targe
 
 Nameplate marks use the visible health bar, with dedicated support for EllesmereUI and Platynator and a cached automatic search for other nameplate addons. If no visible bar is found, DoTInfo can still show the kill icon beside the nameplate when "Marker and kill icon" is enabled.
 
+The same marker (and kill icon) can sit on your focus frame, Blizzard's or EllesmereUI's, for your DoTs on the focused enemy ("Show on focus frame" in the Nameplates tab); `[@focus]` casts go on the focus. In Forever's instances mob GUIDs are secret: DoTInfo then keeps each mob apart by its nameplate, so tab-dotting a pack works (needs enemy nameplates on). The kill icon can be up to 128 px.
+
+Description parsing covers English, German, Spanish, French, Korean, Brazilian Portuguese and Chinese (simplified and traditional), after Does It Die; the non-German languages are from Forever's own tooltips and not yet verified on a client in those languages. In Forever, `/dotinfo ticks` (Behavior tab > View) lists the tick sizes learned from your casts next to what the tooltips predict.
+
 ![simulation](https://i.imgur.com/rI5Kdyv.gif)
 
 <img width="465" height="407" alt="WowB_Bx6Sgl1bvb-ezgif com-optimize (1)" src="https://github.com/user-attachments/assets/7cf3fe30-5752-4cec-9bb4-2e4ece2af2c9" />

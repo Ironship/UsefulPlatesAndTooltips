@@ -1,9 +1,20 @@
 -- UsefulPlatesAndTooltips module DoTInfo: other client languages. Based on the standalone DoT addon's
--- locale file at e4faef4 by Joe Greive (MIT); it lives only here now and is edited directly.
--- Core.lua reads English spell descriptions and looks spells up by their English names. This file adds the
--- German (deDE) wording for the same readings, and the non-English names for the name-keyed tables. The English
--- patterns always run first and are unchanged; the German ones only see descriptions the English ones didn't
--- read, and can't match English text (they need "Sek", "Schaden", "Punkt"). Loaded before Core.lua.
+-- locale file at e4faef4 by Joe Greive (MIT); the registry and the Spanish, French, Korean, Portuguese and
+-- Chinese files follow Does It Die v0.8.3 (MIT). It lives only here now and is edited directly.
+-- Core.lua reads English spell descriptions and looks spells up by their English names. This file is the registry
+-- every other language joins (Locale_esES.lua, ... call ns.locale.register) and holds the German (deDE) wording
+-- for the same readings, and the non-English names for the name-keyed tables. The English patterns always run
+-- first and are unchanged; each other language only sees descriptions the English ones didn't read, in
+-- registration order, whatever GetLocale() says: one language's patterns can't match another's text, and on
+-- WoW: Forever GetLocale() answers enUS while the spell text is German. Loaded before Core.lua.
+--
+--     ns.locale.register({
+--         tag = "koKR",
+--         parseDot = function(desc, comboPoints) ... end,   -- same returns as parseDot in Core.lua
+--         isFinisher = function(desc) ... end,              -- a combo point finisher ("Finishing move")
+--         comboPointsAwarded = function(desc) ... end,      -- N from "Awards N combo point", or nil
+--         names = { ["Rip"] = { "..." }, ... },             -- English name -> names in this language
+--     })
 --
 -- The German wording is Classic Era deDE (Wowhead and Blizzard API tooltips); Forever's own German text is
 -- unverified. How it differs from English:
@@ -16,8 +27,14 @@ local ADDON_NAME, BIT = ...
 -- UsefulPlatesAndTooltips's own namespace for the module, shared by its four files.
 local ns = BIT.Module("DoTInfo")
 
-local L = {}
+local L = { languages = {} }
 ns.locale = L
+
+-- Every field but tag is optional.
+function L.register(language)
+    assert(type(language) == "table" and type(language.tag) == "string", "DoTInfo: a language needs a tag")
+    table.insert(L.languages, language)
+end
 
 local PHYSICAL = 1
 
@@ -135,9 +152,12 @@ local function addAlias(tables, englishName, alias)
     return added
 end
 
-function L.addGermanNames(tables)
-    for englishName, aliases in pairs(L.GERMAN_NAMES) do
-        for _, alias in ipairs(aliases) do addAlias(tables, englishName, alias) end
+-- The names of every registered language.
+function L.addNames(tables)
+    for _, language in ipairs(L.languages) do
+        for englishName, aliases in pairs(language.names or {}) do
+            for _, alias in ipairs(aliases) do addAlias(tables, englishName, alias) end
+        end
     end
 end
 
@@ -158,12 +178,12 @@ end
 -- German descriptions
 ---------------------------------------------------------------------------
 
-function L.isFinisher(desc)
+local function germanIsFinisher(desc)
     return desc:find("Finishing%-Move") ~= nil
 end
 
 -- "Gewährt 1 Combopunkt." (Retail: "Gewährt für jeden Treffer 1 Combopunkt.")
-function L.comboPointsAwarded(desc)
+local function germanComboPointsAwarded(desc)
     return tonumber(desc:match("Gewährt[^%.]-(%d+) Combopunkt"))
 end
 
@@ -214,8 +234,8 @@ end
 -- Like the English reader, the last DoT clause wins, and per-second channels ("6 Sek. lang pro Sekunde 50 ...")
 -- and minutes ("Hält 1 Min. lang an") aren't read. Neither is a buff or debuff whose duration comes before direct
 -- damage ("30 Sek. lang um 10% und fügt ihnen 103 Schaden zu"), which English words so that it isn't read either.
-function L.parseDot(desc, comboPoints)
-    if L.isFinisher(desc) then return parseFinisher(plainNumbers(desc), comboPoints) end
+local function germanParseDot(desc, comboPoints)
+    if germanIsFinisher(desc) then return parseFinisher(plainNumbers(desc), comboPoints) end
     -- Rogue poisons: "Überzieht eine Waffe mit Gift", Retail "Überzieht Eure Waffen".
     if desc:find("Überzieht %a+ Waffe") then return nil end
     -- Heals over time: Rejuvenation reads "Heilt beim Ziel 12 Sek. lang 32 Punkt(e) Schaden."
@@ -271,15 +291,62 @@ function L.parseDot(desc, comboPoints)
     end
 end
 
--- Only for non-English text: whether to log a description that wasn't read as a DoT (once per spell per
--- session), so a play session collects the client's real wording. Forever's client answers GetLocale() with
--- enUS while its text is German, so a German duration ("Sek", English writes "sec") counts too.
+---------------------------------------------------------------------------
+-- The registry
+---------------------------------------------------------------------------
+
+L.register({
+    tag = "deDE",
+    parseDot = germanParseDot,
+    isFinisher = germanIsFinisher,
+    comboPointsAwarded = germanComboPointsAwarded,
+    names = L.GERMAN_NAMES,
+})
+
+-- The first registered language that reads `desc` as a DoT: total damage, school mask, duration, stated tick
+-- interval (the returns of parseDot in Core.lua).
+function L.parseDot(desc, comboPoints)
+    for _, language in ipairs(L.languages) do
+        if language.parseDot then
+            local total, school, duration, interval = language.parseDot(desc, comboPoints)
+            if total then return total, school, duration, interval end
+        end
+    end
+end
+
+function L.isFinisher(desc)
+    for _, language in ipairs(L.languages) do
+        if language.isFinisher and language.isFinisher(desc) then return true end
+    end
+    return false
+end
+
+function L.comboPointsAwarded(desc)
+    for _, language in ipairs(L.languages) do
+        local points = language.comboPointsAwarded and language.comboPointsAwarded(desc)
+        if points then return points end
+    end
+end
+
+-- Words nearly every English description has and other languages' descriptions don't ("sec" is left out: French
+-- writes it too).
+local ENGLISH_WORDS = { the = true, damage = true, ["and"] = true, ["for"] = true, over = true, of = true,
+    to = true, by = true, with = true, your = true, you = true }
+
+local function looksEnglish(desc)
+    for word in desc:gmatch("%a+") do
+        if ENGLISH_WORDS[word:lower()] then return true end
+    end
+    return false
+end
+
+-- Whether to log a description nothing read as a DoT (once per spell per session), so a play session collects
+-- the wording of a language that isn't read yet, or not fully. Decided by the text itself, not GetLocale():
+-- Forever's client answers enUS while its text is German, and English descriptions that aren't DoTs (Fireball)
+-- aren't logged.
 local loggedUnread = {}
 function L.shouldLogUnread(spellID, desc)
-    if type(desc) ~= "string" then return false end
-    local locale = GetLocale and GetLocale()
-    local english = not locale or locale == "enUS" or locale == "enGB"
-    if english and not desc:find("Sek") then return false end
+    if type(desc) ~= "string" or desc == "" or looksEnglish(desc) then return false end
     if loggedUnread[spellID] then return false end
     loggedUnread[spellID] = true
     return true

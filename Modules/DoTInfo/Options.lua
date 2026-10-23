@@ -14,7 +14,7 @@ local ADDON_NAME, BIT = ...
 local ns = BIT.Module("DoTInfo")
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 574 -- two tab rows plus the longest page (Nameplates, 15 rows)
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 600 -- two tab rows plus the longest page (Nameplates, 16 rows)
 local HEADER_HEIGHT = 52 -- title bar: title, presets, close button
 local TAB_HEIGHT = 26
 local PREVIEW_WIDTH = 290
@@ -534,7 +534,7 @@ local function buildTabs()
     icon:checkbox("showSkull", "Show icon on portrait",
         { tooltip = "Shows an icon over the target's portrait when your DoTs on it will kill it." })
     icon:choice("skullIcon", "Icon", lists.icons)
-    icon:slider("skullSize", "Size", 20, 64, 2)
+    icon:slider("skullSize", "Size", 20, 128, 2)
     icon:checkbox("skullPulse", "Pulse", { tooltip = "Gently pulses the icon while it's showing." })
     icon:slider("skullOffsetX", "Horizontal offset", -60, 60, 1,
         { tooltip = "Pixels right (+) or left (-) of the portrait's center." })
@@ -589,8 +589,11 @@ local function buildTabs()
     local plates = addTab("Nameplates")
     plates:choice("nameplateMode", "Show on nameplates", lists.nameplateModes, { tooltip = "Draws a marker "
         .. "(and optionally the kill icon) on every enemy nameplate with your DoTs on it, in its own look below." })
+    plates:choice("focusMode", "Show on focus frame", lists.nameplateModes, { tooltip = "Draws the same marker "
+        .. "(and optionally the kill icon) on your focus frame's health bar for your DoTs on the focused enemy, "
+        .. "in the nameplate look below." })
     plates:choice("plateIcon", "Kill icon", lists.icons, { enabledIf = plateIcon })
-    plates:slider("nameplateIconSize", "Kill icon size", 12, 32, 1, { enabledIf = plateIcon })
+    plates:slider("nameplateIconSize", "Kill icon size", 12, 128, 1, { enabledIf = plateIcon })
     plates:choice("nameplateIconPosition", "Kill icon position", lists.nameplateIconPositions,
         { enabledIf = plateIcon })
     plates:slider("plateIconOffsetX", "Icon horizontal offset", -40, 40, 1,
@@ -638,7 +641,10 @@ local function buildTabs()
             ns.print("Rogue bleed and poison icons use WoW's aura timers. DoT damage is estimated from your casts and spell descriptions; dispels, immunities, procs and damage modifiers may change it.")
         end, { tooltip = "The skull means estimated damage exceeds health. It is a prediction, not a confirmed kill." })
     else
-        behavior:action("Learned tick sizes", "Reset", function() ns.resetLearnedTicks() end,
+        behavior:action("Learned tick sizes", "View", function() ns.toggleTickViewer() end, { tooltip = "What each of "
+            .. "your DoTs really ticks for, learned from earlier casts and used instead of the tooltip's number. "
+            .. "You can also type /dotinfo ticks." })
+        behavior:action("Forget learned sizes", "Reset", function() ns.resetLearnedTicks() end,
             { tooltip = "Forget the tick sizes learned from earlier casts." })
     end
 end
