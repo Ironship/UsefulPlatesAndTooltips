@@ -34,10 +34,8 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function place(row, y, height)
-    row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 6, -y)
-    row:SetPoint("RIGHT", row:GetParent(), "RIGHT", -6, 0)
     table.insert(controls, row)
-    return y + (height or ROW_HEIGHT)
+    return BIT.UI.PlaceRow(row, y, height or ROW_HEIGHT)
 end
 
 local function checkRow(parent, labelText, key, tooltip)
@@ -118,23 +116,17 @@ local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
     return row
 end
 
-local function header(parent, text)
-    local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetText(text)
-    label:SetTextColor(1, 0.82, 0)
-    local rule = parent:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-    rule:SetHeight(1)
-    rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
-    return label
+-- A section header, with room above it once there is something above it.
+local function section(parent, y, text)
+    if y > 0 then y = y + 8 end
+    return place(BIT.UI.Header(parent, text), y, 28)
 end
 
-local function note(parent, text)
-    local line = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    line:SetWidth(470)
-    line:SetJustifyH("LEFT")
-    line:SetText(text)
-    return line
+-- A wrapped note; the next row starts below its measured height.
+local NOTE_WIDTH = 470
+local function noteRow(parent, y, text)
+    local row = BIT.UI.Note(parent, text, NOTE_WIDTH)
+    return place(row, y + 4, row:GetHeight() + 10)
 end
 
 ---------------------------------------------------------------------------------------------
@@ -142,7 +134,7 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildSettings(parent)
-    local y = place(header(parent, "FRAMES"), 0, ROW_HEIGHT)
+    local y = section(parent, 0, "FRAMES")
     y = place(checkRow(parent, "Target frame", "target",
         "The segment starts where the target's green ends and reaches as far as the incoming heal will."), y)
     y = place(checkRow(parent, "Player frame", "player", "Your own frame, off by default."), y)
@@ -150,11 +142,11 @@ local function buildSettings(parent)
         "Blizzard's classic party frames and the compact party members."), y)
     y = place(checkRow(parent, "Raid frames", "raid",
         "The compact raid members (CompactRaidFrameContainer), including the EllesmereUI raid members."), y)
-    y = place(header(parent, "THE NUMBERS"), y + 4)
+    y = section(parent, y, "THE NUMBERS")
     y = place(checkRow(parent, "All healers", "allHealers",
         "Ask the client for its total incoming healing (every healer it tracks) instead of only your "
         .. "own. Where the client cannot tell the two apart, both read the same."), y)
-    y = place(header(parent, "THE SEGMENT"), y + 4)
+    y = section(parent, y, "THE SEGMENT")
     y = place(choiceRow(parent, "Color", "fillColor", {
         { id = "green", label = "Green" }, { id = "cyan", label = "Cyan" }, { id = "gold", label = "Gold" },
         { id = "white", label = "White" }, { id = "purple", label = "Purple" }, { id = "black", label = "Black" },
@@ -164,18 +156,18 @@ local function buildSettings(parent)
         "How tall the segment is against the health bar; the top edge is the anchor."), y, 40)
     y = place(checkRow(parent, "Show a number", "showText",
         "A small ~ number at the segment's right end, when the client gives a readable amount."), y)
-    y = place(header(parent, "DIAGNOSTICS"), y + 4)
+    y = section(parent, y, "DIAGNOSTICS")
     y = place(buttonRow(parent, "What the client says", "Print", function()
         ns.Probe()
     end, "Prints UnitGetIncomingHeals for you and your group to chat, and the same to the log."), y)
     y = place(checkRow(parent, "Debug lines in chat", "debug",
         "Echo the module's notes while it reads and draws."), y)
-    local hint = note(parent, "The number is the client's own incoming-heal projection "
+    y = noteRow(parent, y, "The number is the client's own incoming-heal projection "
         .. "(UnitGetIncomingHeals) - the same one Blizzard's raid frames use. This module only "
         .. "redraws it: no heal math, no crit guesses, no addon messages. WoW: Forever may hide "
         .. "some values in combat; a hidden value draws nothing rather than a guess. /upt healprobe "
         .. "prints what is readable.")
-    hint:SetPoint("TOPLEFT", parent, "TOPLEFT", 6, -y - 8)
+    return y
 end
 
 ---------------------------------------------------------------------------------------------
@@ -188,7 +180,7 @@ local function buildPreview(pane)
 
     local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText("Live sample")
+    title:SetText("Live preview")
     local rule = pane:CreateTexture(nil, "ARTWORK")
     rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     rule:SetHeight(1)
@@ -215,7 +207,7 @@ local function buildPreview(pane)
         function(value)
             state.health = math.max(1, math.min(100, math.floor(value + 0.5)))
             redraw()
-        end, "%%")
+        end, function(value) return math.floor(value + 0.5) .. "%" end)
     healthSlider:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -14)
     local healSlider = BIT.UI.Slider(pane, "Incoming heal", 0, 100, 1,
         function() return state.heal end,
@@ -278,7 +270,10 @@ if BIT.RegisterTab then
             divider:SetHeight(1)
             divider:SetPoint("TOPLEFT", 8, -34)
             divider:SetPoint("TOPRIGHT", -8, -34)
-            buildSettings(area)
+            local column = BIT.UI.ScrollColumn(area)
+            column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -42)
+            column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 8)
+            column:Fit((buildSettings(column.content) or 0) + 12)
             refreshControls()
             if ns._updateAll then ns._updateAll() end
         end,

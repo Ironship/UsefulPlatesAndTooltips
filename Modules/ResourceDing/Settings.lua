@@ -5,7 +5,7 @@ local Addon = BIT.Module("ResourceDing")
 
 local PANE_WIDTH = 290
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 170, control = 200 }
+local SETTINGS_LAYOUT = { label = 250, control = 200 }
 local PREVIEW_LAYOUT = { label = 96, control = 140 }
 local DISABLED_ALPHA = 0.35
 local DIAMOND = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_3"
@@ -102,6 +102,7 @@ local function makeRow(parent, labelText, opts)
   row.label:SetWidth(layout.label - 8)
   row.label:SetJustifyH("LEFT")
   row.label:SetText(labelText)
+  BIT.UI.FitRow(row, ROW_HEIGHT)
   row.enabledIf = opts.enabledIf
   if opts.tooltip then
     row:EnableMouse(true)
@@ -503,12 +504,12 @@ local function addTab(name)
   local button = CreateFrame("Button", nil, settingsArea, "PanelTopTabButtonTemplate")
   button:SetText(name)
   button.text = button:GetFontString()
-  button:SetSize(button.text:GetStringWidth() + 20, 26)
+  button:SetSize(BIT.UI.TabWidth(button.text), 26)
   button.text:SetPoint("CENTER")
   BIT.UI.SkinTabButton(button, button.text)
   local previous = tabs[#tabs]
   if previous then
-    button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
+    button:SetPoint("LEFT", previous.button, "RIGHT", BIT.UI.TAB_GAP, 0)
   else
     button:SetPoint("TOPLEFT", settingsArea, "TOPLEFT", 8, -8)
   end

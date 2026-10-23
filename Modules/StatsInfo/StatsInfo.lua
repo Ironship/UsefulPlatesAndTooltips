@@ -2547,12 +2547,12 @@ BIT.RegisterTab("StatsInfo", {
       -- string it shows, so a font string must not live under that name
       button:SetText(name)
       button.caption = button:GetFontString()
-      button:SetSize(button.caption:GetStringWidth() + 20, 26)
+      button:SetSize(BIT.UI.TabWidth(button.caption), 26)
       button.caption:SetPoint("CENTER")
       BIT.UI.SkinTabButton(button, button.caption)
       local previous = tabs[#tabs]
       if previous then
-        button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
+        button:SetPoint("LEFT", previous.button, "RIGHT", BIT.UI.TAB_GAP, 0)
       else
         button:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -2)
       end

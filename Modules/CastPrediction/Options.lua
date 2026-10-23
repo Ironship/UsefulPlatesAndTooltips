@@ -105,10 +105,8 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function place(row, y, height)
-    row:SetPoint("TOPLEFT", row:GetParent(), "TOPLEFT", 6, -y)
-    row:SetPoint("RIGHT", row:GetParent(), "RIGHT", -6, 0)
     table.insert(controls, row)
-    return y + (height or ROW_HEIGHT)
+    return BIT.UI.PlaceRow(row, y, height or ROW_HEIGHT)
 end
 
 local function checkRow(parent, labelText, key, tooltip)
@@ -273,23 +271,17 @@ local function auraForceRow(parent, entry, tooltip)
         end, tooltip)
 end
 
-local function header(parent, text)
-    local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetText(text)
-    label:SetTextColor(1, 0.82, 0)
-    local rule = parent:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-    rule:SetHeight(1)
-    rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
-    return label
+-- A section header, with room above it once there is something above it.
+local function section(parent, y, text)
+    if y > 0 then y = y + 8 end
+    return place(BIT.UI.Header(parent, text), y, 28)
 end
 
-local function note(parent, text)
-    local line = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    line:SetWidth(470)
-    line:SetJustifyH("LEFT")
-    line:SetText(text)
-    return line
+-- A wrapped note; the next row starts below its measured height.
+local NOTE_WIDTH = 470
+local function noteRow(parent, y, text)
+    local row = BIT.UI.Note(parent, text, NOTE_WIDTH)
+    return place(row, y + 4, row:GetHeight() + 10)
 end
 
 local function colorList(school)
@@ -307,10 +299,10 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildMarkerTab(parent)
-    local y = place(header(parent, "THE MARKER"), 0, ROW_HEIGHT)
+    local y = section(parent, 0, "THE MARKER")
     y = place(checkRow(parent, "Show the marker", "showMarker",
         "The predicted damage, drawn across the target's health bar while a cast is in flight."), y)
-    y = place(header(parent, "SOLID CASTS / BANDED CHANNELS"), y, ROW_HEIGHT)
+    y = section(parent, y, "SOLID CASTS / BANDED CHANNELS")
     y = place(choiceRow(parent, "Fill color", "fillColor", colorList(true),
         "Only your own cast is ever drawn on the bar."), y)
     y = place(sliderRow(parent, "Fill opacity", "fillOpacity", 0, 100, 5, nil,
@@ -331,13 +323,13 @@ local function buildMarkerTab(parent)
         { id = "cross", label = "Red X" },
         { id = "impact", label = "Impact" },
     }, "Which icon the lethal cue uses."), y)
-    local hint = note(parent, "The marker covers health backwards from the current HP edge. "
+    y = noteRow(parent, y, "The marker covers health backwards from the current HP edge. "
         .. "At 60/100 HP, 20 damage covers 60 down to 40. Overkill is clipped inside the bar.")
-    hint:SetPoint("TOPLEFT", parent, "TOPLEFT", 6, -y - 6)
+    return y
 end
 
 local function buildLabelTab(parent)
-    local y = place(header(parent, "THE LABEL"), 0, ROW_HEIGHT)
+    local y = section(parent, 0, "THE LABEL")
     y = place(checkRow(parent, "Show a label", "showLabel",
         "The spell name and the number, at the spot picked below."), y)
     y = place(choiceRow(parent, "Label shows", "labelMode", {
@@ -353,10 +345,11 @@ local function buildLabelTab(parent)
     }, nil), y)
     y = place(sliderRow(parent, "Label size", "labelSize", 8, 20, 1, nil, nil), y, 40)
     y = place(choiceRow(parent, "Label color", "labelColor", colorList(), nil), y)
+    return y
 end
 
 local function buildNameplateTab(parent)
-    local y = place(header(parent, "NAMEPLATES"), 0, ROW_HEIGHT)
+    local y = section(parent, 0, "NAMEPLATES")
     y = place(choiceRow(parent, "On nameplates", "nameplateMode", {
         { id = "off", label = "Off" },
         { id = "marker", label = "Marker on the health bar" },
@@ -379,10 +372,11 @@ local function buildNameplateTab(parent)
     }, nil), y)
     y = place(sliderRow(parent, "Icon offset X", "plateIconOffsetX", -40, 40, 1, nil, nil), y, 40)
     y = place(sliderRow(parent, "Icon offset Y", "plateIconOffsetY", -40, 40, 1, nil, nil), y, 40)
+    return y
 end
 
 local function buildPredictionTab(parent)
-    local y = place(header(parent, "THE PREDICTION"), 0, ROW_HEIGHT)
+    local y = section(parent, 0, "THE PREDICTION")
     y = place(choiceRow(parent, "The marker shows", "estimate", {
         { id = "average", label = "Average of the range" },
         { id = "min", label = "Lowest of the range" },
@@ -400,7 +394,7 @@ local function buildPredictionTab(parent)
     y = place(buttonRow(parent, "Learned factors", "Reset", function()
         ns.resetLearned()
     end, "Forget what earlier hits taught the estimate."), y)
-    y = place(header(parent, "TALENTS (FOREVER)"), y)
+    y = section(parent, y, "TALENTS (FOREVER)")
     local playerClass = ns.Talents and ns.Talents.PlayerClass and ns.Talents.PlayerClass() or nil
     local applicable = {}
     if ns.Talents and ns.Talents.LIST then
@@ -409,9 +403,8 @@ local function buildPredictionTab(parent)
         end
     end
     if #applicable == 0 then
-        local none = note(parent, "No curated passive talent multipliers for this class (or the character "
+        y = noteRow(parent, y, "No curated passive talent multipliers for this class (or the character "
             .. "class could not be read). Retail tooltips already include talents, so nothing is added there.")
-        none:SetPoint("TOPLEFT", parent, "TOPLEFT", 6, -y - 6)
     else
         for _, entry in ipairs(applicable) do
             y = place(talentForceRow(parent, entry,
@@ -419,7 +412,7 @@ local function buildPredictionTab(parent)
                 .. "Max rank applies it without asking. Retail never adds talents: its descriptions hold them."), y)
         end
     end
-    y = place(header(parent, "AURAS (READ WHEN VISIBLE)"), y)
+    y = section(parent, y, "AURAS (READ WHEN VISIBLE)")
     y = place(checkRow(parent, "Include auras", "useAuras",
         "Buffs on you and debuffs on the target that the description does not hold: Arcane Power, "
         .. "Power Infusion, Arcane Blast stacks, Improved Scorch, Curse of the Elements."), y)
@@ -431,11 +424,11 @@ local function buildPredictionTab(parent)
                 .. "/upt castpred auras prints what is readable right now."), y)
         end
     end
-    local hint = note(parent, "The estimate is the description's own damage range plus your spell "
+    y = noteRow(parent, y, "The estimate is the description's own damage range plus your spell "
         .. "power through the spell's coefficient, the detected passive talents and the readable auras. "
         .. "Critical strikes roll about double, so a crit can outrun the marker: the prediction is an honest "
         .. "estimate, never a promise. /upt castpred talents and /upt castpred auras print what the client answers.")
-    hint:SetPoint("TOPLEFT", parent, "TOPLEFT", 6, -y - 6)
+    return y
 end
 
 local function buildTabs(parent, area)
@@ -450,27 +443,29 @@ local function buildTabs(parent, area)
         end
     end
     local x = 6
+    local builders = {
+        Marker = buildMarkerTab, Label = buildLabelTab,
+        Nameplates = buildNameplateTab, Prediction = buildPredictionTab,
+    }
     for _, name in ipairs({ "Marker", "Label", "Nameplates", "Prediction" }) do
-        local frame = CreateFrame("Frame", nil, area)
-        frame:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -32)
-        frame:SetSize(WINDOW_WIDTH - PREVIEW_WIDTH - 30, COL_HEIGHT - 36)
+        -- Each sub-tab scrolls inside the column: the Prediction tab alone is taller than it.
+        local frame = BIT.UI.ScrollColumn(area)
+        frame:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
+        frame:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 8)
         frame:Hide()
         areas[name] = frame
         local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
         button:SetText(name)
         button.text = button:GetFontString()
-        button:SetSize(button.text:GetStringWidth() + 20, 26)
+        button:SetSize(BIT.UI.TabWidth(button.text), 26)
         button.text:SetPoint("CENTER")
         BIT.UI.SkinTabButton(button, button.text)
         button:SetPoint("TOPLEFT", x, -6)
-        x = x + button:GetWidth() + 2
+        x = x + button:GetWidth() + BIT.UI.TAB_GAP
         button:SetScript("OnClick", function() selectTab(name) end)
         tabButtons[name] = button
+        frame:Fit((builders[name](frame.content) or 0) + 12)
     end
-    buildMarkerTab(areas.Marker)
-    buildLabelTab(areas.Label)
-    buildNameplateTab(areas.Nameplates)
-    buildPredictionTab(areas.Prediction)
     selectTab("Marker")
     parent.castpredTabs = tabButtons
     parent.castpredAreas = areas
@@ -523,7 +518,7 @@ local function buildPreview(pane)
         function(value)
             preview.health = math.max(1, math.min(100, math.floor(value + 0.5)))
             updatePreview()
-        end, "%%")
+        end, function(value) return math.floor(value + 0.5) .. "%" end)
     healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -2)
     pane.healthSlider = healthSlider
 

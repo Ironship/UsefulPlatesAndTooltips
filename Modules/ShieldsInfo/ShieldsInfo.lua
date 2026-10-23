@@ -798,7 +798,7 @@ local CAPABILITIES = { roles = { "absorb", "muted", "text" }, shapes = false,
 
 local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 150, control = 190 }
+local SETTINGS_LAYOUT = { label = 230, control = 190 }
 local PREVIEW_LAYOUT = { label = 96, control = 128 }
 local DISABLED_ALPHA = 0.35
 -- 470 is Core/Settings.lua's MAX_CONTENT_HEIGHT: the tallest content the window shows without
@@ -900,6 +900,7 @@ local function makeRow(parent, labelText, opts)
   row.label:SetWidth(layout.label - 8)
   row.label:SetJustifyH("LEFT")
   row.label:SetText(labelText)
+  BIT.UI.FitRow(row, ROW_HEIGHT)
   row.enabledIf = opts.enabledIf
   if opts.tooltip then
     row:EnableMouse(true)
@@ -1237,12 +1238,12 @@ local function addTab(name, area)
   local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
   button:SetText(name)
   button.text = button:GetFontString()
-  button:SetSize(button.text:GetStringWidth() + 20, 26)
+  button:SetSize(BIT.UI.TabWidth(button.text), 26)
   button.text:SetPoint("CENTER")
   BIT.UI.SkinTabButton(button, button.text)
   local previous = tabs[#tabs]
   if previous then
-    button:SetPoint("LEFT", previous.button, "RIGHT", 2, 0)
+    button:SetPoint("LEFT", previous.button, "RIGHT", BIT.UI.TAB_GAP, 0)
   else
     button:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -8)
   end
@@ -1251,7 +1252,7 @@ local function addTab(name, area)
 
   local function place(row, height, key)
     row:SetPoint("TOPLEFT", inner, "TOPLEFT", 0, -tab.y)
-    tab.y = tab.y + (height or ROW_HEIGHT)
+    tab.y = tab.y + math.max(height or ROW_HEIGHT, type(row.GetHeight) == "function" and row:GetHeight() or 0)
     if key then tab.keys[#tab.keys + 1] = key end
     return row
   end
