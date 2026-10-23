@@ -1044,7 +1044,9 @@ function ns.registerOptions()
     text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
     text:SetText("Settings have their own window with a live preview. You can also type /dotinfo.")
     local open = pushButton(panel, "Open DoTInfo options", 200, function()
-        if SettingsPanel and SettingsPanel:IsShown() then pcall(HideUIPanel, SettingsPanel) end
+        -- Blizzard's Options panel is not closed from here: closing it from addon code runs its
+        -- gamepad focus and binding teardown tainted, which later blocks
+        -- SetPreferredGamepadInteractTarget when any window closes. Our DIALOG window opens above it.
         if not (window and window:IsShown()) then ns.openOptions() end
     end)
     open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)

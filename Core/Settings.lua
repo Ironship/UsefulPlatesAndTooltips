@@ -807,10 +807,9 @@ local function registerOptionsPage()
   text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
   text:SetText("The settings have their own window. You can also type /upt.")
   local open = UI.Button(panel, "Open Useful Plates and Tooltips settings", 240, function()
-    if SettingsPanel and SettingsPanel.IsShown and SettingsPanel:IsShown() and type(HideUIPanel) == "function"
-      and not (type(InCombatLockdown) == "function" and InCombatLockdown()) then
-      pcall(HideUIPanel, SettingsPanel)
-    end
+    -- Blizzard's Options panel is not closed from here: closing it from addon code runs its
+    -- gamepad focus and binding teardown tainted, which later blocks
+    -- SetPreferredGamepadInteractTarget when any window closes. Our DIALOG window opens above it.
     if not (window and window:IsShown()) then BIT.OpenSettings() end
   end)
   open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
