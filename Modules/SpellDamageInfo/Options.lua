@@ -92,12 +92,6 @@ local function say(msg)
   if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffSpellDamageInfo|r: " .. msg) end
 end
 
-local function inCombat()
-  if type(InCombatLockdown) ~= "function" then return false end
-  local ok, v = pcall(InCombatLockdown)
-  return ok and v == true
-end
-
 local function findEntry(list, id)
   for _, entry in ipairs(list) do
     if entry.id == id then return entry end
@@ -525,16 +519,13 @@ function ns.RegisterOptions()
   text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
   text:SetText(L.OPT_PANEL_TEXT)
   local open = pushButton(panel, L.OPT_OPEN, 240, function()
-    -- Closing Blizzard's options first: out of combat only, so nothing of the game's panel
-    -- handling runs from here in combat. There the window opens above it instead.
-    local host = (SettingsPanel and SettingsPanel.IsShown and SettingsPanel:IsShown() and SettingsPanel)
-      or (InterfaceOptionsFrame and InterfaceOptionsFrame.IsShown and InterfaceOptionsFrame:IsShown() and InterfaceOptionsFrame)
-    if host and not inCombat() and type(HideUIPanel) == "function" then
-      pcall(HideUIPanel, host)
-      host = host:IsShown() and host or nil
-    end
+    -- Blizzard's Options panel is not closed from here: closing it from addon code runs its
+    -- gamepad focus and binding teardown tainted, which later blocks
+    -- SetPreferredGamepadInteractTarget when any window closes. Our DIALOG window opens above it.
+    -- The legacy InterfaceOptionsFrame may share our strata, so raise above it.
+    local legacy = InterfaceOptionsFrame and InterfaceOptionsFrame.IsShown and InterfaceOptionsFrame:IsShown()
     if not (window and window:IsShown()) then ns.OpenOptions() end
-    if host then window:SetFrameStrata("FULLSCREEN_DIALOG") end
+    if legacy then window:SetFrameStrata("FULLSCREEN_DIALOG") end
   end)
   open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
   ns._optionsPanel, ns._optionsOpenButton = panel, open
