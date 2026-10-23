@@ -510,6 +510,14 @@ end
 -- Options > AddOns > SpellDamageInfo: a short page with a button that opens the window.
 -- Returns which registration was used: "settings", "interface" or nil.
 function ns.RegisterOptions()
+  local function openSettings()
+    -- The legacy InterfaceOptionsFrame may share our strata, so raise above it.
+    local legacy = InterfaceOptionsFrame and InterfaceOptionsFrame.IsShown and InterfaceOptionsFrame:IsShown()
+    if not (window and window:IsShown()) then ns.OpenOptions() end
+    if legacy and window then window:SetFrameStrata("FULLSCREEN_DIALOG") end
+  end
+  if type(BIT.UI.RegisterSettingsLauncher) == "function"
+      and BIT.UI.RegisterSettingsLauncher("SpellDamageInfo", L.OPT_PANEL_TEXT, openSettings) then return "settings" end
   local panel = CreateFrame("Frame")
   local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", 16, -16)
@@ -518,15 +526,7 @@ function ns.RegisterOptions()
   local text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
   text:SetText(L.OPT_PANEL_TEXT)
-  local open = pushButton(panel, L.OPT_OPEN, 240, function()
-    -- Blizzard's Options panel is not closed from here: closing it from addon code runs its
-    -- gamepad focus and binding teardown tainted, which later blocks
-    -- SetPreferredGamepadInteractTarget when any window closes. Our DIALOG window opens above it.
-    -- The legacy InterfaceOptionsFrame may share our strata, so raise above it.
-    local legacy = InterfaceOptionsFrame and InterfaceOptionsFrame.IsShown and InterfaceOptionsFrame:IsShown()
-    if not (window and window:IsShown()) then ns.OpenOptions() end
-    if legacy then window:SetFrameStrata("FULLSCREEN_DIALOG") end
-  end)
+  local open = pushButton(panel, "Open settings", 180, openSettings)
   open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
   ns._optionsPanel, ns._optionsOpenButton = panel, open
 
