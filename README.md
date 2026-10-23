@@ -99,3 +99,5 @@ Third-party parts keep their own MIT notices:
 *   **ShieldsInfo** is adapted from [Shield Aura Forever](https://github.com/JasonEcks/ShieldAuraForever) by JasonEcks and contributors; see `Modules/ShieldsInfo/LICENSE-ShieldAuraForever.txt`.
 *   **SpellDamageInfo's options window** is adapted from Does It Die by Joe Greive; see `Modules/SpellDamageInfo/LICENSE-SpellDamageInfo.txt`.
 *   **Stat weights** come from [ForeverSim](https://github.com/laurencestokes/foreversim) (MIT), built on [WoWSims](https://github.com/wowsims/forever) and Elliot Wood's Forever sim; see `Modules/StatsInfo/LICENSE-ForeverSim.txt`.
+
+On clients with the modern Settings API, the UPT, DoTInfo and SpellDamageInfo launchers use native settings-list buttons. Select the add-on, move right with the D-pad and confirm to open its window. Older clients retain the canvas page.

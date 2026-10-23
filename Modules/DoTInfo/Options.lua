@@ -1035,6 +1035,11 @@ end
 
 -- Options > AddOns > DoTInfo: a short page with a button that opens the window.
 function ns.registerOptions()
+    local function openSettings()
+        if not (window and window:IsShown()) then ns.openOptions() end
+    end
+    if type(BIT.UI.RegisterSettingsLauncher) == "function" and BIT.UI.RegisterSettingsLauncher("DoTInfo",
+        "Open the options window with a live preview. You can also type /dotinfo.", openSettings) then return end
     local panel = CreateFrame("Frame")
     local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
@@ -1043,12 +1048,7 @@ function ns.registerOptions()
     local text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
     text:SetText("Settings have their own window with a live preview. You can also type /dotinfo.")
-    local open = pushButton(panel, "Open DoTInfo options", 200, function()
-        -- Blizzard's Options panel is not closed from here: closing it from addon code runs its
-        -- gamepad focus and binding teardown tainted, which later blocks
-        -- SetPreferredGamepadInteractTarget when any window closes. Our DIALOG window opens above it.
-        if not (window and window:IsShown()) then ns.openOptions() end
-    end)
+    local open = pushButton(panel, "Open settings", 180, openSettings)
     open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
     local category = Settings.RegisterCanvasLayoutCategory(panel, "DoTInfo")
     Settings.RegisterAddOnCategory(category)

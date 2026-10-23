@@ -226,6 +226,19 @@ function UI.Button(parent, text, width, onClick)
   return UI.SkinButton(button)
 end
 
+-- Native list rows participate in SettingsPanel's gamepad focus; canvas controls do not.
+function UI.RegisterSettingsLauncher(title, tooltip, onClick)
+  if type(Settings) ~= "table" or type(Settings.RegisterVerticalLayoutCategory) ~= "function"
+      or type(Settings.RegisterInitializer) ~= "function"
+      or type(Settings.RegisterAddOnCategory) ~= "function"
+      or type(CreateSettingsButtonInitializer) ~= "function" then return false end
+  local category = Settings.RegisterVerticalLayoutCategory(title)
+  local initializer = CreateSettingsButtonInitializer(title, "Open settings", onClick, tooltip, true)
+  Settings.RegisterInitializer(category, initializer)
+  Settings.RegisterAddOnCategory(category)
+  return true
+end
+
 -- A check box with its label to the right. get() and set(value) read and write the setting.
 function UI.Check(parent, labelText, get, set, tooltip)
   local box = CreateFrame("CheckButton", nil, parent)
@@ -776,6 +789,12 @@ SLASH_USEFULPLATESANDTOOLTIPS2 = "/usefulplates"
 if type(SlashCmdList) == "table" then SlashCmdList.USEFULPLATESANDTOOLTIPS = slash end
 
 local function registerOptionsPage()
+  local function openSettings()
+    -- Keep Blizzard's panel open so its native gamepad binding teardown stays native.
+    if not (window and window:IsShown()) then BIT.OpenSettings() end
+  end
+  if UI.RegisterSettingsLauncher("Useful Plates and Tooltips",
+      "Open the settings window. You can also type /upt.", openSettings) then return end
   local panel = CreateFrame("Frame")
   local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", 16, -16)
@@ -783,12 +802,7 @@ local function registerOptionsPage()
   local text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
   text:SetText("The settings have their own window. You can also type /upt.")
-  local open = UI.Button(panel, "Open Useful Plates and Tooltips settings", 240, function()
-    -- Blizzard's Options panel is not closed from here: closing it from addon code runs its
-    -- gamepad focus and binding teardown tainted, which later blocks
-    -- SetPreferredGamepadInteractTarget when any window closes. Our DIALOG window opens above it.
-    if not (window and window:IsShown()) then BIT.OpenSettings() end
-  end)
+  local open = UI.Button(panel, "Open settings", 180, openSettings)
   open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
   if type(Settings) == "table" and type(Settings.RegisterCanvasLayoutCategory) == "function"
     and type(Settings.RegisterAddOnCategory) == "function" then
