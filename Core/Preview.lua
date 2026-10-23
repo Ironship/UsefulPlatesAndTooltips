@@ -42,6 +42,54 @@ function P.gradient(texture, bottom, top)
   texture:SetVertexColor(bottom[1], bottom[2], bottom[3], (bottom[4] + top[4]) / 2)
 end
 
+-- Blizzard's unit frames clip absorb and heal-prediction fills to the bar's own shape with the
+-- HealthBarMask of the frame that holds the bar. Our overlays are plain full-size children of
+-- the bar, so they take the same mask; without it a fill spills above and below the visible
+-- bar (the shield hatching escaped the player frame's health bar).
+local BarMask = {}
+BIT.UI.BarMask = BarMask
+
+function BarMask.Find(healthBar)
+  local ok, mask = pcall(function()
+    local parent = healthBar:GetParent()
+    return parent and parent.HealthBarMask or nil
+  end)
+  if ok and type(mask) == "table" and type(mask.GetObjectType) == "function" then return mask end
+  return nil
+end
+
+-- Put the health bar's mask on a fill texture, replacing the mask it took from a previous bar.
+-- on = false only removes it. Safe on a texture without mask support.
+function BarMask.Apply(fill, healthBar, on)
+  if type(fill) ~= "table" or type(fill.AddMaskTexture) ~= "function" then return end
+  if fill.uptMask then
+    pcall(fill.RemoveMaskTexture, fill, fill.uptMask)
+    fill.uptMask = nil
+  end
+  if not on then return end
+  local mask = BarMask.Find(healthBar)
+  if mask and pcall(fill.AddMaskTexture, fill, mask) then fill.uptMask = mask end
+end
+
+-- The mask a mock frame carries for its own health bar (the same atlas and offset as the game's).
+local function addHealthMask(mock, healthBar, atlas, x, y)
+  if type(mock.CreateMaskTexture) ~= "function" or not (C_Texture and type(C_Texture.GetAtlasInfo) == "function") then
+    return
+  end
+  for _, candidate in ipairs({ atlas .. "-c60", atlas }) do
+    local ok, info = pcall(C_Texture.GetAtlasInfo, candidate)
+    if ok and info then
+      local mask = mock:CreateMaskTexture()
+      if pcall(mask.SetAtlas, mask, candidate) then
+        mask:SetSize(info.width, info.height)
+        mask:SetPoint("TOPLEFT", healthBar, "TOPLEFT", x, y)
+        mock.HealthBarMask = mask
+        return
+      end
+    end
+  end
+end
+
 -- A patch of dusky world behind the mock frames, so they read as the game's own HUD.
 function P.Scene(parent, width, height)
   local scene = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -147,6 +195,7 @@ function P.TargetFrame(parent, opts)
     healthBack:SetAllPoints()
     healthBack:SetColorTexture(0.25, 0.08, 0.08, 1)
   end
+  addHealthMask(mock, healthBar, "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Mask", -1, 6)
   local out = { frame = mock, healthBar = healthBar, bar = healthBar, portrait = portrait, name = nameText,
     level = levelText, host = { healthBar = healthBar, portrait = portrait, layerFrame = opts.layerFrame } }
   if opts.text ~= false then
@@ -222,6 +271,7 @@ function P.PlayerFrame(parent, opts)
     healthBack:SetAllPoints()
     healthBack:SetColorTexture(0.05, 0.2, 0.05, 1)
   end
+  addHealthMask(mock, healthBar, "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Mask", -2, 6)
   local out = { frame = mock, healthBar = healthBar, bar = healthBar, portrait = portrait, name = nameText,
     host = { healthBar = healthBar, portrait = portrait, layerFrame = opts.layerFrame } }
   if opts.text ~= false then
