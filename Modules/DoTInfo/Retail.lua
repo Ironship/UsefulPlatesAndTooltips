@@ -15,6 +15,10 @@ R.spells = {
     [703] = {}, [1943] = { finisher = true }, -- Garrote, Rupture
     [385627] = { pandemic = false }, [360194] = { pandemic = false }, -- Kingsbane, Deathmark
     [188389] = {}, [772] = {}, -- Flame Shock, Rend
+    [348] = {}, [335467] = {}, -- Immolate, Devouring Plague: a direct hit and a DoT in one description (the last clause is read)
+    [63106] = {}, [445468] = {}, -- Siphon Life, Wither (Hellcaller's Corruption)
+    [204197] = {}, [14914] = {}, -- Purge the Wicked, Holy Fire
+    [202347] = {}, [217694] = {}, [271788] = {}, [204021] = {}, -- Stellar Flare, Living Bomb, Serpent Sting, Fiery Brand
 }
 
 -- Aura IDs are deliberately separate: casting a weapon coating does not poison the target.

@@ -16,7 +16,9 @@ Nameplate marks use the visible health bar, with dedicated support for Ellesmere
 
 The same marker (and kill icon) can sit on your focus frame, Blizzard's or EllesmereUI's, for your DoTs on the focused enemy ("Show on focus frame" in the Nameplates tab); `[@focus]` casts go on the focus. In Forever's instances mob GUIDs are secret: DoTInfo then keeps each mob apart by its nameplate, so tab-dotting a pack works (needs enemy nameplates on). The kill icon can be up to 128 px.
 
-Description parsing covers English, German, Spanish, French, Korean, Brazilian Portuguese and Chinese (simplified and traditional), after Does It Die; the non-German languages are from Forever's own tooltips and not yet verified on a client in those languages. In Forever, `/dotinfo ticks` (Behavior tab > View) lists the tick sizes learned from your casts next to what the tooltips predict.
+Description parsing covers English, German, Spanish, French, Korean, Brazilian Portuguese and Chinese (simplified and traditional), after Does It Die; the non-German languages are from Forever's own tooltips and not yet verified on a client in those languages. Other unit frame addons: name their target, focus or player health bar (and a spot for the kill icon, and a nameplate bar the automatic search misses) under DoTInfo > Behavior, with a Pick button that takes the frame you click, or by `/upt frame target ElvUF_Target.Health` and `/upt pick target`. ShieldsInfo and HealPrediction use the same frames. A hidden replacement frame hides the marks with it; with nothing set, nothing changes. After Does It Die's custom frames.
+
+`/dotinfo check` reads every spell in your spellbook and lists the ones whose text mentions seconds but gives no DoT (full texts go to the saved log), so a client in another language can show what is still unread. In Forever, `/dotinfo ticks` (Behavior tab > View) lists the tick sizes learned from your casts next to what the tooltips predict.
 
 ![simulation](https://i.imgur.com/rI5Kdyv.gif)
 
@@ -29,7 +31,7 @@ Description parsing covers English, German, Spanish, French, Korean, Brazilian P
 <img width="236" height="108" alt="{182459A7-7224-45BB-BB6B-D8D1FA35FDD0}" src="https://github.com/user-attachments/assets/e6f429a0-ca1c-4813-9b66-29f6ef7b489b" />
 
 
-Rip and Rupture use your combo points. Procs from critical hits, such as Ignite and Deep Wounds, are not tracked as they are based on RNG i still think how this can be improved.
+Rip and Rupture use your combo points. Immolation Trap is tracked: placing it only arms it, and the DoT starts on the mob that takes its first tick. Ignite (mages) and Deep Wounds (warriors) are lit by critical hits, which no cast announces: a crit counts as yours when you cast at that mob just before (for Deep Wounds also when you swing at it alone), and the talent is assumed unless the talent tree shows no points. Ignite shows 8% a point of the fire crit over 4 s (rolling what the running one still owed into the new one), Deep Wounds 20% a point of your main hand's average damage over 12 s. The first tick confirms the guess. Forever only; switch them off in DoTInfo > Behavior.
 
 ### WIP
 Channeling and casting prediction for normal spells.
@@ -42,11 +44,13 @@ Shows the damage of the spell you are casting on the enemy's health bar and name
 
 The fill covers health backwards from its current edge: 20 damage at 60/100 HP covers 60 down to 40. It follows health changes and clips overkill inside the bar. Action targeting works without clicking a target, and the prediction stays on the original enemy if the reticle moves.
 
+The estimate also holds the talents and effects the description leaves out (Forever): Fire Power, Piercing Ice, Arcane Instability, Shadow Mastery, Aftermath, Darkness, Searing Light, Moonfury and the rest of the curated list, and, while the client shows the aura, Arcane Power, Power Infusion, Arcane Blast stacks, Improved Scorch, Curse of the Elements, Demonic Sacrifice, Improved Shadow Bolt, Shadow and Flame, Decimation, Incinerate against your Immolate, Power in Light, Shadow Weaving, Shadowform, Stormstrike, Lava Burst against your Flame Shock, Rage of the Farseer and Eureka!. Talent ranks are matched by spell id as well as name, so a client in another language reads them. Auras are hidden in combat on Forever, so they apply out of combat only; the hit calibration carries the rest.
+
 The direct hit is separate from DoTInfo's damage-over-time marker. For rank-1 Fireball, the unmodified average is 18 damage on impact plus 2 over time. Critical strikes, procs and resists can change the result. `/upt cast` opens the settings and preview.
 
 ### HealPrediction
 
-Incoming healing on target, party and raid frames, drawn from the current health edge. It uses the client's `UnitGetIncomingHeals` reading. The "All healers" option shows the client's total instead of only your heals. `/upt heals` opens the settings.
+Incoming healing on target, party and raid frames, drawn from the current health edge. It uses the client's `UnitGetIncomingHeals` reading. The other healers' share is a second band behind yours (the client's total is drawn first and your own heal over it); "All healers" draws the total in your color instead. Heals over time that you cast (Rejuvenation, Renew, Regrowth's tick part) are not part of the client's reading, so the amount their description promises is drawn after your direct heal for the next few seconds of the effect, as an estimate that runs out with the effect's time. `/upt heals` opens the settings.
 
 ### HunterRange
 
@@ -73,7 +77,7 @@ Damage and healing numbers on your action buttons and in spell tooltips.
 
 Forever's native gamepad crossbar also gets the numbers, including after changing pages. Total mode includes the direct hit and DoT; Direct mode shows only the hit.
 
-Bars built on LibActionButton (Bartender4, ElvUI and others) get no numbers. Blizzard's action bars do.
+Bars built on LibActionButton (Bartender4, ElvUI and others) get the numbers too, for spells, macros and items on their buttons; this is new and not yet checked in the game with those addons.
 
 ![damage prediction](https://i.imgur.com/ySumj4S.png) ![healing prediction](https://i.imgur.com/xvGpoTg.png)
 

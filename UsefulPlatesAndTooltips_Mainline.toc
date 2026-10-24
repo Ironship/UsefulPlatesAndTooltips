@@ -2,7 +2,7 @@
 ## Title: Useful Plates and Tooltips (Retail)
 ## Notes: Retail test build: cast/channel damage, DoT estimates, incoming heals, rogue aura icons/timers, resource sounds/markers, absorb overlays and spell damage numbers. /upt
 ## Author: Ironship
-## Version: 0.9.95-retail
+## Version: 0.9.96-retail
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
@@ -12,6 +12,7 @@ Core\Orbs.lua
 Core\Appearance.lua
 Core\Gamepad.lua
 Core\Settings.lua
+Core\Frames.lua
 Core\Preview.lua
 
 # SpellDamageInfo: its original MIT notice is included in Modules/SpellDamageInfo.
@@ -43,6 +44,7 @@ Modules\DoTInfo\RogueEffects.lua
 Modules\DoTInfo\Options.lua
 Modules\DoTInfo\Nameplates.lua
 Modules\DoTInfo\Focus.lua
+Modules\DoTInfo\ParseCheck.lua
 
 # ResourceDing: its MIT notice is included in Modules/ResourceDing.
 Modules\ResourceDing\Core.lua
@@ -56,4 +58,5 @@ Modules\ShieldsInfo\ShieldsInfo.lua
 
 # HealPrediction: the client's incoming-heal projection, redrawn on Blizzard's frames.
 Modules\HealPrediction\Core.lua
+Modules\HealPrediction\Hots.lua
 Modules\HealPrediction\Options.lua

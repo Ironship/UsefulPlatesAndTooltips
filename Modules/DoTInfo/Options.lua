@@ -439,6 +439,48 @@ local function actionRow(parent, labelText, buttonText, onClick, opts)
     return row
 end
 
+-- A frame path (Core/Frames.lua): a text box, saved on Enter or leaving it, and a Pick button that takes the next
+-- click on screen. kind: "bar" or "anchor". key: the Frames setting ("target", "icon", "focus", "plate").
+local function frameRow(parent, key, labelText, kind, opts)
+    opts = opts or {}
+    local row = makeRow(parent, labelText, opts)
+    local Frames = BIT.Frames
+    local box = CreateFrame("EditBox", nil, row, "BackdropTemplate")
+    box:SetSize(row.layout.control - (opts.noPick and 0 or 58), 22)
+    box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
+    setBackdrop(box, 0.13)
+    box:SetFontObject("GameFontHighlightSmall")
+    box:SetTextInsets(6, 6, 0, 0)
+    box:SetAutoFocus(false)
+    local function save(value)
+        Frames.Set(key, value)
+        changed()
+    end
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEscapePressed", function(self)
+        self:SetText(Frames.Get(key))
+        self:ClearFocus()
+    end)
+    box:SetScript("OnEditFocusLost", function(self)
+        if strtrim(self:GetText() or "") ~= Frames.Get(key) then save(self:GetText()) end
+    end)
+    local pick = (not opts.noPick) and pushButton(row, "Pick", 52, function()
+        ns.print(kind == "bar" and "Click the health bar (you may need to move this window). Right-click cancels."
+            or "Click where the kill icon should go (you may need to move this window). Right-click cancels.")
+        Frames.StartPick(kind, function(path)
+            box:SetText(path)
+            save(path)
+            ns.print("Picked " .. path .. ".")
+        end)
+    end)
+    if pick then pick:SetPoint("LEFT", box, "RIGHT", 6, 0) end
+    function row:Refresh()
+        if not box:HasFocus() then box:SetText(Frames.Get(key)) end
+        self:ApplyEnabled(box)
+    end
+    return row
+end
+
 ---------------------------------------------------------------------------
 -- Tabs
 ---------------------------------------------------------------------------
@@ -489,6 +531,7 @@ local function addTab(name)
     function tab:slider(key, ...) return place(slider(self.content, key, ...), key) end
     function tab:choice(key, ...) return place(choice(self.content, key, ...), key) end
     function tab:action(...) return place(actionRow(self.content, ...)) end
+    function tab:frame(key, ...) return place(frameRow(self.content, key, ...)) end
     function tab:gap() self.y = self.y + 8 end
 
     table.insert(tabs, tab)
@@ -630,6 +673,14 @@ local function buildTabs()
             or "A gold edge on that DoT's segment while the time left is inside the refresh window: "
             .. "one tick, three seconds, or a quarter of the duration, whichever is longer. "
             .. "The damage number stays off unless you turn it on." })
+    if not ns.Retail then
+        behavior:checkbox("procDots", "Ignite, Deep Wounds, traps", { tooltip = "Mages and warriors: a critical hit lights "
+            .. "Ignite (a share of the fire crit over 4 s) or Deep Wounds (a share of your weapon damage over 12 s), "
+            .. "with no cast to say so. Assumes you have the talent (when the talent tree can be read and shows no "
+            .. "points, nothing is drawn). A crit counts as yours when you cast at that mob just before, or, for "
+            .. "Deep Wounds, swing at it while alone; the first tick confirms it. Traps (Immolation Trap) are "
+            .. "tracked as well." })
+    end
     behavior:checkbox("estimateDuringCast", "Estimate during casting", { tooltip = "Shows a DoT with a cast time "
         .. "while you're still casting it. Once the cast lands the normal estimate takes over; an interrupted or "
         .. "failed cast removes it." })
@@ -647,6 +698,22 @@ local function buildTabs()
         behavior:action("Forget learned sizes", "Reset", function() ns.resetLearnedTicks() end,
             { tooltip = "Forget the tick sizes learned from earlier casts." })
     end
+    -- Another addon's unit frames (Core/Frames.lua); shared with ShieldsInfo and HealPrediction.
+    behavior:gap()
+    behavior:frame("target", "Target health bar", "bar", { tooltip = "For unit frame addons that replace "
+        .. "Blizzard's target frame (ElvUI, Shadowed Unit Frames, ...). Target something, click Pick, then click "
+        .. "its health bar; or type the frame's name (/fstack shows it), like ElvUF_Target.Health. The bar must "
+        .. "fill left to right. Empty: Blizzard's, or EllesmereUI's when it shows its own. Shared with ShieldsInfo "
+        .. "and HealPrediction." })
+    behavior:frame("icon", "Kill icon spot", "anchor", { tooltip = "Where the kill icon is centered (e.g. the "
+        .. "custom frame's portrait). Empty: Blizzard's portrait, or EllesmereUI's; with a custom health bar and no spot "
+        .. "the icon sits on that bar. Fine-tune with the offsets on the Kill icon tab." })
+    behavior:frame("focus", "Focus health bar", "bar", { tooltip = "The same for the focus frame. Empty: "
+        .. "Blizzard's, or EllesmereUI's when it shows its own." })
+    behavior:frame("plate", "Nameplate health bar", "bar", { noPick = true, tooltip = "Most nameplate addons' "
+        .. "bars are found automatically (Plater, EllesmereUI, Platynator, ...). If the marker does not show on "
+        .. "yours, type the keys from Blizzard's nameplate to its bar, like unitFrame.healthBar. /dotinfo plates "
+        .. "logs what each plate uses. Empty: automatic." })
 end
 
 local function buildPreview(pane)

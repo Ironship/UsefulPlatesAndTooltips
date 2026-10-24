@@ -2,7 +2,7 @@
 ## Title: Useful Plates and Tooltips
 ## Notes: Useful nameplate and tooltip info for WoW: Forever: cast/channel damage, DoT marks, incoming heals, shields, hunter range, combo points, stat comparisons and action bar numbers. Every part can be switched off. /upt
 ## Author: Ironship
-## Version: 0.9.82
+## Version: 0.9.83
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
@@ -12,6 +12,7 @@ Core\Orbs.lua
 Core\Appearance.lua
 Core\Gamepad.lua
 Core\Settings.lua
+Core\Frames.lua
 Core\Preview.lua
 
 # SpellDamageInfo, from the addon of that name
@@ -37,10 +38,12 @@ Modules\DoTInfo\Locale_koKR.lua
 Modules\DoTInfo\Locale_ptBR.lua
 Modules\DoTInfo\Locale_zhCN.lua
 Modules\DoTInfo\Core.lua
+Modules\DoTInfo\ProcDots.lua
 Modules\DoTInfo\RogueEffects.lua
 Modules\DoTInfo\Options.lua
 Modules\DoTInfo\Nameplates.lua
 Modules\DoTInfo\Focus.lua
+Modules\DoTInfo\ParseCheck.lua
 Modules\DoTInfo\TickViewer.lua
 
 Modules\StatsInfo\Weights.lua
@@ -63,6 +66,7 @@ Modules\ShieldsInfo\ShieldsInfo.lua
 
 # Incoming-heal projection (the client's own UnitGetIncomingHeals), redrawn on Blizzard's frames
 Modules\HealPrediction\Core.lua
+Modules\HealPrediction\Hots.lua
 Modules\HealPrediction\Options.lua
 
 # Hunter-specific range ladder, beside the existing class range marker
