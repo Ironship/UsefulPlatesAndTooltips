@@ -34,6 +34,8 @@ local function isRetail()
     return major ~= nil and major >= 10
 end
 
+Talents.IsRetail = isRetail
+
 local function spellName(spellID)
     local fn = (C_Spell and C_Spell.GetSpellName) or GetSpellInfo
     if type(fn) ~= "function" or type(spellID) ~= "number" then return nil end
@@ -60,29 +62,49 @@ end
 -- spells: name-limited talents (only these spells' casts). verify: the magnitude still needs a
 -- live tooltip read; it is reported by the probe but never applied until confirmed here.
 Talents.LIST = {
-    { key = "MAGE_FIRE_POWER", class = "MAGE", en = "Fire Power", perRank = 0.02, maxRank = 5,
+    { key = "MAGE_FIRE_POWER", class = "MAGE", en = "Fire Power", ids = { 11124 }, perRank = 0.02, maxRank = 5,
         schools = { fire = true } },
-    { key = "MAGE_PIERCING_ICE", class = "MAGE", en = "Piercing Ice", perRank = 0.02, maxRank = 3,
+    { key = "MAGE_PIERCING_ICE", class = "MAGE", en = "Piercing Ice", ids = { 11151 }, perRank = 0.02, maxRank = 3,
         schools = { frost = true, frostfire = true } },
-    { key = "MAGE_ARCANE_INSTABILITY", class = "MAGE", en = "Arcane Instability", perRank = 0.01, maxRank = 3,
-        schools = { arcane = true, fire = true, frost = true, frostfire = true } },
-    { key = "WARLOCK_SHADOW_MASTERY", class = "WARLOCK", en = "Shadow Mastery", perRank = 0.01, maxRank = 5,
+    { key = "MAGE_ARCANE_INSTABILITY", class = "MAGE", en = "Arcane Instability", ids = { 15058 }, perRank = 0.01,
+        maxRank = 3, schools = { arcane = true, fire = true, frost = true, frostfire = true } },
+    { key = "WARLOCK_SHADOW_MASTERY", class = "WARLOCK", en = "Shadow Mastery", ids = { 18271 }, perRank = 0.01,
+        maxRank = 5, schools = { shadow = true } },
+    -- Immolate's initial hit +10% a point (client curve, beta pass 17 Sep): the only part of Immolate this
+    -- module predicts.
+    { key = "WARLOCK_AFTERMATH", class = "WARLOCK", en = "Aftermath", ids = { 18119 }, perRank = 0.10, maxRank = 5,
+        spells = { ["Immolate"] = true } },
+    { key = "PRIEST_DARKNESS", class = "PRIEST", en = "Darkness", ids = { 15259 }, perRank = 0.02, maxRank = 5,
         schools = { shadow = true } },
-    { key = "PRIEST_DARKNESS", class = "PRIEST", en = "Darkness", perRank = 0.02, maxRank = 5,
-        schools = { shadow = true } },
-    { key = "PRIEST_SEARING_LIGHT", class = "PRIEST", en = "Searing Light", byRank = { 0.02, 0.05 }, maxRank = 2,
-        schools = { holy = true } },
-    { key = "DRUID_MOONFURY", class = "DRUID", en = "Moonfury", perRank = 0.02, maxRank = 5,
+    { key = "PRIEST_SEARING_LIGHT", class = "PRIEST", en = "Searing Light", ids = { 14909 }, byRank = { 0.02, 0.05 },
+        maxRank = 2, schools = { holy = true } },
+    { key = "DRUID_MOONFURY", class = "DRUID", en = "Moonfury", ids = { 16896 }, perRank = 0.02, maxRank = 5,
         schools = { arcane = true, nature = true } },
     { key = "PALADIN_CRUSADE", class = "PALADIN", en = "Crusade", perRank = 0.02, maxRank = 2,
         schools = { holy = true, physical = true } },
-    { key = "PALADIN_SACRED_ARBITER", class = "PALADIN", en = "Sacred Arbiter", perRank = 0.10, maxRank = 1,
-        spells = { ["Holy Strike"] = true } },
+    { key = "PALADIN_SACRED_ARBITER", class = "PALADIN", en = "Sacred Arbiter", ids = { 1311087 }, perRank = 0.10,
+        maxRank = 1, spells = { ["Holy Strike"] = true } },
     -- Seen in the Forever trees, magnitude still to be confirmed from the live tooltip:
-    { key = "SHAMAN_CONCUSSION", class = "SHAMAN", en = "Concussion", perRank = 0.01, maxRank = 5, verify = true,
-        spells = { ["Lightning Bolt"] = true, ["Chain Lightning"] = true, ["Earth Shock"] = true } },
-    { key = "SHAMAN_CALL_OF_FLAME", class = "SHAMAN", en = "Call of Flame", perRank = 0.02, maxRank = 3, verify = true,
+    { key = "SHAMAN_CONCUSSION", class = "SHAMAN", en = "Concussion", ids = { 16035 }, perRank = 0.01, maxRank = 5,
+        verify = true, spells = { ["Lightning Bolt"] = true, ["Chain Lightning"] = true, ["Earth Shock"] = true } },
+    { key = "SHAMAN_CALL_OF_FLAME", class = "SHAMAN", en = "Call of Flame", ids = { 16038 }, perRank = 0.02,
+        maxRank = 3, verify = true,
         spells = { ["Lava Burst"] = true, ["Fire Nova"] = true, ["Flame Shock"] = true } },
+    { key = "WARLOCK_AGONIZING_FLAMES", class = "WARLOCK", en = "Agonizing Flames", ids = { 17927 },
+        byRank = { 0.03, 0.07, 0.10 }, maxRank = 3, verify = true, spells = { ["Immolate"] = true } },
+    -- Ranks that only matter together with an aura (Auras.lua reads them through `talent`); never applied here.
+    -- Improved Shadow Bolt 4% a point while the 12 s debuff (17794) is on the target (beta pass).
+    { key = "WARLOCK_IMPROVED_SHADOW_BOLT", class = "WARLOCK", en = "Improved Shadow Bolt", ids = { 17793 },
+        perRank = 0.04, maxRank = 5, auraOnly = true },
+    -- Shadow and Flame 2% a point on Shadow Bolt and Incinerate while its 20 s buffs (1293816, 426311) are up.
+    { key = "WARLOCK_SHADOW_AND_FLAME", class = "WARLOCK", en = "Shadow and Flame", ids = { 426316 },
+        perRank = 0.02, maxRank = 5, auraOnly = true },
+    -- Decimation 3/6% on Shadow Bolt and Searing Pain while its buff (440873) is up (target under 35%).
+    { key = "WARLOCK_DECIMATION", class = "WARLOCK", en = "Decimation", ids = { 440870 }, byRank = { 0.03, 0.06 },
+        maxRank = 2, auraOnly = true },
+    -- Power in Light 2% a point on Smite and Penance against your own Holy Fire.
+    { key = "PRIEST_POWER_IN_LIGHT", class = "PRIEST", en = "Power in Light", ids = { 1309969 }, perRank = 0.02,
+        maxRank = 5, auraOnly = true },
 }
 
 local function percentFor(entry, rank)
@@ -110,6 +132,7 @@ local function collectTree()
     if type(treeIDs) ~= "table" then return nil end
 
     local found, any = {}, false
+    local byId = {}
     local function spellIDOf(nodeID, nodeInfo)
         local id = nodeInfo.spellID
         if type(id) == "number" and not isSecret(id) then return id end
@@ -143,6 +166,10 @@ local function collectTree()
                             if name and type(rank) == "number" and not isSecret(rank) then
                                 found[name] = { rank = rank, maxRank = maxRank, spellID = spellID }
                             end
+                            -- by spell id too: a name is localised, the id is not
+                            if spellID and type(rank) == "number" and not isSecret(rank) then
+                                byId[spellID] = { rank = rank, maxRank = maxRank, spellID = spellID }
+                            end
                         end
                     end
                 end
@@ -150,23 +177,24 @@ local function collectTree()
         end
     end
     if not any then return nil end
-    return found
+    return found, byId
 end
 Talents._collectTree = collectTree
 
-local treeCache, treeCacheAt
+local treeCache, idCache, treeCacheAt
 function Talents.Invalidate()
-    treeCache, treeCacheAt = nil, nil
+    treeCache, idCache, treeCacheAt = nil, nil, nil
 end
 
 local function tree()
     local ok, t = pcall(GetTime)
     local now = ok and type(t) == "number" and t or 0
-    if treeCache and now - (treeCacheAt or 0) < CACHE_SECONDS then return treeCache end
+    if treeCache and now - (treeCacheAt or 0) < CACHE_SECONDS then return treeCache, idCache end
     treeCacheAt = now
-    local okCollect, collected = pcall(collectTree)
+    local okCollect, collected, byId = pcall(collectTree)
     treeCache = (okCollect and collected) or nil
-    return treeCache
+    idCache = (okCollect and byId) or nil
+    return treeCache, idCache
 end
 
 -- The rank of one curated talent: the manual override first, else the tree by name, else
@@ -178,7 +206,12 @@ local function rankOf(entry)
     if forced == "off" then return 0 end
     if forced == "max" then return entry.maxRank end
 
-    local t = tree()
+    local t, byId = tree()
+    if byId and entry.ids then
+        for _, id in ipairs(entry.ids) do
+            if byId[id] then return byId[id].rank, byId[id] end
+        end
+    end
     if t then
         local node = t[entry.en] or (entry.de and t[entry.de])
         if node then return node.rank, node end
@@ -196,6 +229,26 @@ local function rankOf(entry)
     return nil
 end
 Talents.RankOf = rankOf
+
+-- The rank the talent tree gives a talent by spell id (else by name), with no settings or overrides involved: for
+-- other modules (DoTInfo's Ignite and Deep Wounds). nil when the tree cannot be read or does not list it.
+function Talents.NodeRank(ids, name)
+    local t, byId = tree()
+    if byId and type(ids) == "table" then
+        for _, id in ipairs(ids) do
+            if byId[id] then return byId[id].rank end
+        end
+    end
+    if t and name and t[name] then return t[name].rank end
+    return nil
+end
+
+-- The curated entry of a key (Auras.lua asks for the ranks behind its auras).
+function Talents.ByKey(key)
+    for _, entry in ipairs(Talents.LIST) do
+        if entry.key == key then return entry end
+    end
+end
 
 local function playerClass()
     if type(UnitClass) ~= "function" then return nil end
@@ -215,7 +268,7 @@ function Talents.MultiplierFor(name, school, class)
     class = class or playerClass()
     local percent, notes, unknown = 0, {}, false
     for _, entry in ipairs(Talents.LIST) do
-        if entry.class == class then
+        if entry.class == class and not entry.auraOnly then
             local applies = false
             if entry.spells then
                 applies = type(name) == "string" and entry.spells[name] or false

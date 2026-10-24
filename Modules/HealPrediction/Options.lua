@@ -146,12 +146,28 @@ local function buildSettings(parent)
     y = place(checkRow(parent, "All healers", "allHealers",
         "Ask the client for its total incoming healing (every healer it tracks) instead of only your "
         .. "own. Where the client cannot tell the two apart, both read the same."), y)
+    y = place(checkRow(parent, "Other healers' share", "showOthers",
+        "A second band behind yours for the part of the client's total that is not yours. Where the client "
+        .. "cannot tell healers apart the band simply stays hidden."), y)
+    y = place(checkRow(parent, "My heals over time", "showHots",
+        "Rejuvenation, Renew and the like are not part of the client's projection. After you cast one, "
+        .. "the amount its description promises is drawn after your direct heal for the next few seconds of "
+        .. "the effect. An estimate: a dispelled or cancelled effect keeps showing until its time is up."), y)
+    y = place(sliderRow(parent, "Heal over time horizon", "hotHorizon", 1, 15, 1,
+        function(value) return math.floor(value + 0.5) .. " s" end,
+        "How many seconds of each heal over time are drawn ahead."), y, 40)
     y = section(parent, y, "THE SEGMENT")
     y = place(choiceRow(parent, "Color", "fillColor", {
         { id = "green", label = "Green" }, { id = "cyan", label = "Cyan" }, { id = "gold", label = "Gold" },
         { id = "white", label = "White" }, { id = "purple", label = "Purple" }, { id = "black", label = "Black" },
     }, "The incoming-heal segment's own color; absorbs keep ShieldsInfo's look."), y)
     y = place(sliderRow(parent, "Opacity", "fillOpacity", 0, 100, 5, nil, nil), y, 40)
+    local COLORS = {
+        { id = "green", label = "Green" }, { id = "cyan", label = "Cyan" }, { id = "gold", label = "Gold" },
+        { id = "white", label = "White" }, { id = "purple", label = "Purple" }, { id = "black", label = "Black" },
+    }
+    y = place(choiceRow(parent, "Other healers' color", "otherColor", COLORS, nil), y)
+    y = place(choiceRow(parent, "Heal over time color", "hotColor", COLORS, nil), y)
     y = place(sliderRow(parent, "Height", "heightPercent", 15, 100, 5, nil,
         "How tall the segment is against the health bar; the top edge is the anchor."), y, 40)
     y = place(checkRow(parent, "Show a number", "showText",
@@ -197,11 +213,11 @@ local function buildPreview(pane)
     mock.bar:SetMinMaxValues(0, 100)
     mock.bar:SetValue(60)
 
-    local state = { health = 60, heal = 25 }
+    local state = { health = 60, heal = 25, others = 12, hot = 10 }
     local function redraw()
         mock.bar:SetValue(state.health)
         if mock.healthPercent then mock.healthPercent:SetText(string.format("%d%%", state.health)) end
-        ns.DrawSample(mock.bar, 100, state.heal)
+        ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, state.hot)
     end
 
     -- The two sliders are the sample's own numbers, never settings.

@@ -327,6 +327,15 @@ local function readWeapon()
   end
 end
 
+-- The main hand's average weapon damage without attack power (the sheet's average minus AP / 14 x speed), or nil.
+-- Deep Wounds (DoTInfo/ProcDots.lua) pays a share of it. Out of combat reads only: in combat the last ones stay.
+function ns.MainHandAverage()
+  local avg, speed, ap = weaponStats.melee, weaponStats.meleeSpeed, weaponStats.ap
+  if not avg then return nil end
+  if speed and ap then avg = avg - ap / 14 * speed end
+  return avg > 0 and avg or nil
+end
+
 -- The target's attack speed, for what a lower attack power takes off each of its hits: Classic's
 -- rule, 14 attack power are 1 damage for each second of weapon speed (the rule WeaponView uses for
 -- the player's own weapon). UnitAttackSpeed can be secret in combat (SecretWhenUnitStatsRestricted):
@@ -866,6 +875,24 @@ local gamepadButtons, gamepadHosts = {}, {}
 local labels = {}  -- [button] = our FontString for the main number
 local sideLabels = {} -- [button] = our smaller FontString for a reduction next to a damage number
 
+-- Bars built on LibActionButton (Bartender4, ElvUI and others) keep their buttons in the library,
+-- one registry per copy (ElvUI ships its own). [button] = true for the ones we draw on.
+local labButtons, labHooked, labOwner = {}, {}, {}
+local labSeen = false
+
+local function labLibraries()
+  local libs = {}
+  if type(LibStub) ~= "table" or type(LibStub.IterateLibraries) ~= "function" then return libs end
+  local ok, iter, state, key = pcall(LibStub.IterateLibraries, LibStub)
+  if not ok or type(iter) ~= "function" then return libs end
+  for name, lib in iter, state, key do
+    if type(name) == "string" and name:find("^LibActionButton%-1%.0") and type(lib) == "table" then
+      libs[#libs + 1] = lib
+    end
+  end
+  return libs
+end
+
 local function collectButtons()
   local prefixes, seenPrefix = {}, {}
   local function addPrefix(p)
@@ -896,6 +923,38 @@ local function collectButtons()
     for i = 1, 180 do
       local b = _G["EABButton" .. i]
       if type(b) == "table" then euiButtons[b] = true; add(b) end
+    end
+  end
+  for _, lib in ipairs(labLibraries()) do
+    labSeen = true
+    -- GetAllButtons answers a table keyed by button (current versions) or an iterator (older ones); the
+    -- library's own registry is the fallback.
+    local found
+    if type(lib.GetAllButtons) == "function" then
+      local ok, result, state, key = pcall(lib.GetAllButtons, lib)
+      if ok and type(result) == "table" then
+        found = result
+      elseif ok and type(result) == "function" then
+        found = {}
+        for b in result, state, key do found[b] = true end
+      end
+    end
+    if not found and type(lib.buttonRegistry) == "table" then found = lib.buttonRegistry end
+    if found then
+      for b in pairs(found) do
+        if type(b) == "table" and not seen[b] then
+          labButtons[b] = true
+          add(b)
+        end
+      end
+    end
+    -- New buttons and changed contents (a page switch, a drag) ask for a redraw; the work itself
+    -- waits for the coalesced timer, so nothing of ours runs inside the library's secure update.
+    if not labHooked[lib] and type(lib.RegisterCallback) == "function" then
+      labHooked[lib] = true
+      local function again() if ns.Refresh then ns.Refresh() end end
+      pcall(lib.RegisterCallback, labOwner, "OnButtonCreated", again)
+      pcall(lib.RegisterCallback, labOwner, "OnButtonContentsChanged", again)
     end
   end
   -- Forever's native crossbar stores its buttons in page units, outside ActionButton1..12.
@@ -1480,9 +1539,50 @@ function ns.DumpAll(done)
   pass()
 end
 
+-- A Blizzard button's action slot: its action field, or, where the client keeps that out of reach, what the
+-- button itself calculates (the way the gamepad bar's buttons are read).
+local function slotOf(button)
+  local slot = button.action
+  if not isSecret(slot) and type(slot) == "number" and slot > 0 then return slot end
+  if type(button.CalculateAction) == "function" then
+    local ok, value = pcall(button.CalculateAction, button)
+    if ok and not isSecret(value) and type(value) == "number" and value > 0 then return value end
+  end
+  if isSecret(slot) then return nil end
+  return slot
+end
+
+-- What a LibActionButton button holds in its current state: an action slot (read like Blizzard's),
+-- or a spell, macro or item of its own that has no slot. Returns slot, spellID, itemID, countShown.
+local function labContent(button)
+  if type(button.GetAction) ~= "function" then return nil end
+  local ok, kind, action = pcall(button.GetAction, button)
+  if not ok or isSecret(kind) or isSecret(action) then return nil end
+  if kind == "action" then
+    if type(action) == "number" and action > 0 then return action end
+  elseif kind == "spell" then
+    if type(action) == "number" then return nil, action end
+  elseif kind == "macro" then
+    if type(action) == "number" and type(GetMacroSpell) == "function" then
+      local okm, id = pcall(GetMacroSpell, action)
+      if okm and not isSecret(id) and type(id) == "number" then return nil, id end
+    end
+  elseif kind == "item" then
+    local id = action
+    if type(id) == "string" then id = tonumber(id) or tonumber(id:match("item:(%d+)")) end
+    if type(id) == "number" then
+      local get = type(C_Item) == "table" and C_Item.GetItemCount or GetItemCount
+      local okc, n = false, nil
+      if type(get) == "function" then okc, n = pcall(get, id) end
+      return nil, nil, id, okc and not isSecret(n) and type(n) == "number" and n > 1
+    end
+  end
+  return nil
+end
+
 local function updateButton(button, pet)
   local view, reduction
-  local slot
+  local slot, labSpell, labItem, labCount
   if not pet then
     if gamepadButtons[button] then
       local ok, value = pcall(button.CalculateAction, button)
@@ -1490,11 +1590,12 @@ local function updateButton(button, pet)
     elseif euiButtons[button] then
       local ok, value = pcall(button.GetAttribute, button, "action")
       if ok and not isSecret(value) and type(value) == "number" and value > 0 then slot = value end
-    else slot = button.action end
+    elseif labButtons[button] then slot, labSpell, labItem, labCount = labContent(button)
+    else slot = slotOf(button) end
   end
   if db.button ~= "off" then
     local spellID
-    if pet then spellID = petSpellOnSlot(petSlots[button]) else spellID = spellOnSlot(slot) end
+    if pet then spellID = petSpellOnSlot(petSlots[button]) else spellID = labSpell or spellOnSlot(slot) end
     if spellID then
       view = ns.Compute(spellID, pet)
       if db.reduction then reduction = ns.Reduction(spellID) end
@@ -1504,7 +1605,7 @@ local function updateButton(button, pet)
       -- its raw healing, bandage total or mana, through the same button text
       -- as spells (Format.Short; healing green, mana blue). No reduction
       -- and no miss tracking: those read spell wordings only.
-      local itemID = itemOnSlot(slot)
+      local itemID = labItem or itemOnSlot(slot)
       if itemID then view = ns.ComputeItem(itemID) end
     end
   end
@@ -1515,12 +1616,136 @@ local function updateButton(button, pet)
     return
   end
   local side = sideText and getSideLabel(button) or sideLabels[button]
-  drawNumber(button, getLabel(button), side, mainText, mainColor, sideText, not pet and hasCount(slot), sideColor, layout)
+  drawNumber(button, getLabel(button), side, mainText, mainColor, sideText, not pet and (labCount or hasCount(slot)), sideColor, layout)
 end
 
 local function updateAllButtons()
   for _, b in ipairs(buttons) do updateButton(b, false) end
   for _, b in ipairs(petButtons) do updateButton(b, true) end
+end
+
+-- /sdi buttons: what the number on each collected button was made from (for a bar that shows none).
+function ns.DescribeButtons(out)
+  local lab, plainCount = 0, 0
+  for _, b in ipairs(buttons) do
+    if labButtons[b] then lab = lab + 1 else plainCount = plainCount + 1 end
+  end
+  out(string.format("%d buttons (%d Blizzard/other, %d LibActionButton), %d pet; button mode %s, position %s",
+    #buttons, plainCount, lab, #petButtons, tostring(db.button), tostring(db.position)))
+  local shown = 0
+  for _, b in ipairs(buttons) do
+    local slot, labSpell, labItem
+    if gamepadButtons[b] then
+      local ok, value = pcall(b.CalculateAction, b)
+      if ok and not isSecret(value) then slot = value end
+    elseif euiButtons[b] then
+      local ok, value = pcall(b.GetAttribute, b, "action")
+      if ok and not isSecret(value) then slot = value end
+    elseif labButtons[b] then slot, labSpell, labItem = labContent(b)
+    else slot = slotOf(b) end
+    local spellID = labSpell or spellOnSlot(slot)
+    local name = "?"
+    if type(b.GetName) == "function" then
+      local ok, n = pcall(b.GetName, b)
+      if ok and not isSecret(n) and n then name = tostring(n) end
+    end
+    local fs = labels[b]
+    if spellID or labItem or (slot and shown < 6) then
+      shown = shown + 1
+      local view = spellID and ns.Compute(spellID, false) or nil
+      local value, kind = Estimate.ButtonValue(view, db.button)
+      local raw = ""
+      if slot and type(GetActionInfo) == "function" then
+        local ok, kindA, idA = pcall(GetActionInfo, slot)
+        if ok and not isSecret(kindA) and not isSecret(idA) then raw = tostring(kindA) .. ":" .. tostring(idA) end
+      end
+      local okV, btnVisible = pcall(b.IsVisible, b)
+      out(string.format("%s slot=%s action=%s spell=%s value=%s label=%s%s button=%s", name, tostring(slot), raw,
+        tostring(spellID), value and string.format("%.0f %s", value, tostring(kind)) or "none",
+        fs and ("'" .. tostring(fs:GetText()) .. "'") or "none", (fs and fs:IsShown()) and " shown" or " hidden",
+        (okV and not isSecret(btnVisible)) and (btnVisible and "visible" or "HIDDEN") or "?"))
+    end
+    if shown >= 14 then break end
+  end
+  -- Where the first number really is: font, size, alpha, rectangle and layer of the label and its button.
+  for _, b in ipairs(buttons) do
+    local fs = labels[b]
+    if fs and fs:IsShown() then
+      local function plainCall(obj, method, ...)
+        local ok, a1, a2, a3, a4 = pcall(obj[method], obj, ...)
+        if not ok or isSecret(a1) then return "?" end
+        local parts = {}
+        for _, v in ipairs({ a1, a2, a3, a4 }) do
+          if v ~= nil and not isSecret(v) then
+            parts[#parts + 1] = type(v) == "number" and string.format("%.1f", v) or tostring(v)
+          end
+        end
+        return table.concat(parts, ",")
+      end
+      out(string.format("first label: font=%s alpha=%s effAlpha=%s visible=%s size=%sx%s layer=%s",
+        plainCall(fs, "GetFont"), plainCall(fs, "GetAlpha"), plainCall(fs, "GetEffectiveAlpha"),
+        plainCall(fs, "IsVisible"), plainCall(fs, "GetWidth"), plainCall(fs, "GetHeight"),
+        plainCall(fs, "GetDrawLayer")))
+      out(string.format("  label center=%s | button center=%s size=%sx%s level=%s strata=%s scale=%s effScale=%s",
+        plainCall(fs, "GetCenter"), plainCall(b, "GetCenter"), plainCall(b, "GetWidth"), plainCall(b, "GetHeight"),
+        plainCall(b, "GetFrameLevel"), plainCall(b, "GetFrameStrata"), plainCall(b, "GetScale"),
+        plainCall(b, "GetEffectiveScale")))
+      out(string.format("  text color=%s", plainCall(fs, "GetTextColor")))
+      break
+    end
+  end
+end
+
+-- /sdi where: after 4 seconds, which frame the mouse is over (point at an action button first), its chain of
+-- parents, and whether this module has a number on it.
+function ns.DescribeMouseFrame(out)
+  out("Point the mouse at the action button now; reading in 4 seconds.")
+  local function read()
+    local focus
+    if type(GetMouseFoci) == "function" then
+      local ok, foci = pcall(GetMouseFoci)
+      focus = ok and type(foci) == "table" and foci[1] or nil
+    elseif type(GetMouseFocus) == "function" then
+      local ok, f = pcall(GetMouseFocus)
+      focus = ok and f or nil
+    end
+    if type(focus) ~= "table" then out("No frame under the mouse.") return end
+    local function nameOf(f)
+      if type(f) ~= "table" or type(f.GetDebugName) ~= "function" then return "?" end
+      local ok, n = pcall(f.GetDebugName, f)
+      return (ok and not isSecret(n) and n) and tostring(n) or "(unnamed)"
+    end
+    local chain, cur = {}, focus
+    for _ = 1, 5 do
+      chain[#chain + 1] = nameOf(cur)
+      local ok, parent = pcall(cur.GetParent, cur)
+      if not ok or type(parent) ~= "table" or parent == UIParent then break end
+      cur = parent
+    end
+    out("mouse frame: " .. table.concat(chain, " < "))
+    local found
+    for _, b in ipairs(buttons) do
+      local cur2 = focus
+      for _ = 1, 4 do
+        if cur2 == b then found = b break end
+        local ok, parent = pcall(cur2.GetParent, cur2)
+        if not ok or type(parent) ~= "table" then break end
+        cur2 = parent
+      end
+      if found then break end
+    end
+    if found then
+      local fs = labels[found]
+      out("collected button " .. nameOf(found) .. " label=" .. (fs and ("'" .. tostring(fs:GetText()) .. "'" ..
+        (fs:IsShown() and " shown" or " hidden")) or "none"))
+    else
+      out("this frame is NOT one of the collected buttons: its action field is " .. tostring(rawget(focus, "action")))
+      for _, key in ipairs({ "action", "buttonType", "CalculateAction", "GetAction" }) do
+        out("  field " .. key .. " = " .. type(focus[key]) .. " " .. ((type(focus[key]) == "number" or type(focus[key]) == "string") and tostring(focus[key]) or ""))
+      end
+    end
+  end
+  if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(4, read) else read() end
 end
 
 local pending = false
@@ -1531,7 +1756,7 @@ local function requestUpdate()
     pending = false
     -- EUI can create additional bars after login or defer them until combat ends.
     if type(EllesmereUI) == "table" or type(EABButton1) == "table"
-      or type(GamepadMainActionBarFrame) == "table" then collectButtons() end
+      or type(GamepadMainActionBarFrame) == "table" or labSeen then collectButtons() end
     readBonus()
     readWeapon()
     parseBudget, parseDeferred = PARSE_BUDGET, false
@@ -1881,16 +2106,10 @@ function ns.ResetSettings()
   requestUpdate()
 end
 
--- Is a bar addon built on LibActionButton (Bartender4, ElvUI and others) loaded? Its buttons are
--- its own, and only Blizzard's get numbers; /sdi status says so.
+-- Is a bar addon built on LibActionButton (Bartender4, ElvUI and others) loaded? /sdi status says
+-- how many of its buttons carry numbers.
 local function barAddonLoaded()
-  if type(LibStub) ~= "table" or type(LibStub.IterateLibraries) ~= "function" then return false end
-  local ok, iter, state, key = pcall(LibStub.IterateLibraries, LibStub)
-  if not ok or type(iter) ~= "function" then return false end
-  for name in iter, state, key do
-    if type(name) == "string" and name:find("^LibActionButton%-1%.0") then return true end
-  end
-  return false
+  return #labLibraries() > 0
 end
 
 local function langLabel(lang)
@@ -1949,6 +2168,12 @@ local function slash(msg)
   elseif cmd == "position" then
     if not POSITIONS[arg] then say(L.BAD_ARG) return end
     db.position = arg
+  elseif cmd == "buttons" then
+    ns.DescribeButtons(say)
+    return
+  elseif cmd == "where" then
+    ns.DescribeMouseFrame(say)
+    return
   elseif cmd == "lang" then
     if not (arg == "auto" or arg == "en" or arg == "de") then say(L.BAD_ARG) return end
     db.interfaceLang = arg

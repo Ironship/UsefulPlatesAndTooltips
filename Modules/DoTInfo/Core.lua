@@ -74,7 +74,7 @@ local IGNORED_SPELLS = {
     ["Consecration"] = true, ["Hurricane"] = true, ["Volley"] = true,
     ["Drain Life"] = true, ["Drain Soul"] = true, ["Drain Mana"] = true, ["Health Funnel"] = true,
     ["Mind Flay"] = true, ["Arcane Missiles"] = true, ["Starshards"] = true,
-    ["Immolation Trap"] = true, ["Explosive Trap"] = true, ["Wyvern Sting"] = true,
+    ["Explosive Trap"] = true, ["Wyvern Sting"] = true,
 }
 
 -- The name-keyed tables also answer to the German names, and on ADDON_LOADED to the names this client reports
@@ -88,7 +88,13 @@ ns.refreshNames = {
     ["Verderbnis"] = true, ["Schattenwort: Schmerz"] = true,
 }
 
-local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames }
+-- Traps that put a DoT on the first enemy to walk in (ProcDots.lua): placing one only arms it.
+ns.TRAP_DOTS = { ["Immolation Trap"] = true }
+-- Any new Fire trap replaces the armed one (by name, so it works in every language).
+ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
+
+local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
+    ns.TRAP_DOTS, ns.FIRE_TRAPS }
 ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -135,6 +141,7 @@ local DEFAULTS = {
     labelSize = 10,
     labelColor = "white",
     -- Misc
+    procDots = true, -- Ignite (mage) and Deep Wounds (warrior), lit by crits (ProcDots.lua)
     debug = false,
     -- Accuracy
     waitFirstTick = "off",
@@ -863,6 +870,14 @@ function ns.RemoveRogueAuras(unit, seen, removed, resetReason)
     end
 end
 
+-- For /dotinfo check (ParseCheck.lua): what the addon reads from one spell's description.
+function ns.ReadSpellText(spellID, desc)
+    local name = spellID and select(2, pcall(spellNameAndDescription, spellID))
+    if IGNORED_SPELLS[name] then return nil, true end
+    if ns.Retail then return ns.Retail.Parse(spellID, desc, nil, parseDot) end
+    return parseDot(desc, 1)
+end
+
 -- Returns the target key the DoT was applied to, or nil if the cast wasn't a tracked DoT.
 local function onPlayerCast(spellID, castGUID)
     if isSecret(spellID) or type(spellID) ~= "number" then return end
@@ -877,6 +892,7 @@ local function onPlayerCast(spellID, castGUID)
     if not ns.Retail then ok, name, desc = pcall(spellNameAndDescription, spellID) end
     if ns.Retail and sent and sent.name and sent.desc then ok, name, desc = true, sent.name, sent.desc end
     if not ok or not name or isSecret(name) then return end
+    if ns.ProcDots then ns.ProcDots.NoteCast(key, spellID, name, desc) end
     if type(desc) == "string" and not isSecret(desc) then
         local awarded = tonumber(desc:match("Awards (%d+) combo point")) or ns.locale.comboPointsAwarded(desc)
         if awarded and not ns.Retail then onBuilderCast(awarded, key) end
@@ -909,6 +925,11 @@ local function onPlayerCast(spellID, castGUID)
     -- A finisher's tick size depends on the points spent, so learned sizes are kept per point count.
     local tickKey = spellID
     if isFinisher then tickKey = comboPoints and (spellID .. "x" .. comboPoints) or nil end
+
+    -- A trap only arms: the DoT starts when it springs (ProcDots.lua).
+    if ns.ProcDots and ns.TRAP_DOTS[name] and ns.ProcDots.ArmTrap(spellID, name, desc, total, school, duration, statedInterval) then
+        return
+    end
 
     -- DOT-1: SUCCEEDED names only the spell, so the cast belongs to the mob
     -- remembered at SENT time, not to whatever is targeted now (a tab
@@ -1046,7 +1067,9 @@ local function plausibleTickAmount(dot, amount, isCrit, number)
         -- ticks were then dropped. For Physical dots fall back to the
         -- description's per-tick share instead of accepting blindly; other
         -- schools keep the old behaviour (no white-hit collision there).
-        if dot.school == SCHOOL_MASKS.Physical then
+        -- A DoT lit by a crit (Ignite, Deep Wounds) has no learned size either, and the crit that lights the next
+        -- one must not pass for its tick.
+        if dot.school == SCHOOL_MASKS.Physical or dot.procDot then
             known, tolerance = dot.total / dot.totalTicks, FIRST_TICK_AMOUNT_TOLERANCE
         else
             return true
@@ -1187,7 +1210,10 @@ local function onUnitCombat(unit, action, flag, amount, school)
     if isSecret(amount) or isSecret(school) or type(amount) ~= "number" then return end
     local isCrit = not isSecret(flag) and flag == "CRITICAL"
     local dots = dotsByTarget[key]
-    if not dots then return end
+    local tracked = dots ~= nil -- a mob carrying a DoT of yours: only its unmatched hits are logged
+    -- An armed trap or a crit that may light Ignite / Deep Wounds (ProcDots.lua) needs the hit even where no DoT runs.
+    if not dots and not (ns.ProcDots and ns.ProcDots.Wants(isCrit, school)) then return end
+    dots = dots or {}
 
     -- The same hit fires for target, nameplateN, softenemy...: handle it once.
     -- F1: two same-school ticks in the same instant share one signature, so
@@ -1245,8 +1271,12 @@ local function onUnitCombat(unit, action, flag, amount, school)
                 end
             end
         end
-        trace(string.format("HIT %d%s school %d on %s not matched to a DoT", amount, isCrit and " (crit)" or "",
-            school, unit))
+        -- An armed trap's first tick, or the crit behind an Ignite / Deep Wounds: the DoT starts here.
+        if ns.ProcDots and ns.ProcDots.OnUnmatchedHit(key, unit, amount, school, isCrit, GetTime()) then return key end
+        if tracked then
+            trace(string.format("HIT %d%s school %d on %s not matched to a DoT", amount, isCrit and " (crit)" or "",
+                school, unit))
+        end
         return
     end
 
@@ -1318,6 +1348,13 @@ local function remainingDamage(dot)
     end
     return total
 end
+
+-- What ProcDots.lua needs from the tracking (kept as fields: this file is at Lua's limit of local variables).
+ns.Internals = {
+    newDot = newDot, plausibleTickAmount = plausibleTickAmount, saveLearnedTick = saveLearnedTick,
+    anchorTick = anchorTick, remainingDamage = remainingDamage, dotsByTarget = dotsByTarget, trace = trace,
+    getDb = function() return db end, unitKey = unitKey,
+}
 
 -- Known ticks first, description estimates next, own clocks last. Freeze each visible effect's position
 -- through damage/clock refinements and refreshes; a corrected amount must not reshuffle its neighbours.
@@ -2602,6 +2639,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         wipe(dotsByTarget)
+        if ns.ProcDots then ns.ProcDots.Reset() end
         pendingCast, comboAtSend = nil, nil
         forgetPendingOutcomes()
         resetComboCount()
@@ -2732,6 +2770,8 @@ SlashCmdList.BITDOTINFO = function(msg)
         print("Debug " .. (db.debug and "ON" or "OFF") .. ".")
     elseif cmd == "reset" then
         ns.resetLearnedTicks()
+    elseif cmd == "check" then
+        if ns.CheckSpellbook then ns.CheckSpellbook(trace) end
     elseif cmd == "ticks" then
         if ns.toggleTickViewer then ns.toggleTickViewer()
         else print("Tick sizes are not learned on this client.") end
@@ -2743,6 +2783,7 @@ SlashCmdList.BITDOTINFO = function(msg)
         print(SLASH .. " plates - check what the addon can reach on visible nameplates (logged)")
         print(SLASH .. " debug - toggle echoing the trace log (casts, ticks, estimates) to chat")
         if not ns.Retail then print(SLASH .. " ticks - show the learned tick sizes") end
+        print(SLASH .. " check - read every spell in your spellbook and list the DoT descriptions it cannot read")
         print(SLASH .. " reset - forget learned tick sizes")
     end
 end

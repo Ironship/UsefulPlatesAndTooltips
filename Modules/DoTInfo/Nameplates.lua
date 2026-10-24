@@ -368,6 +368,12 @@ end
 
 local function updatePlate(unit, plate, db)
     local w0 = widgetsByPlate[plate]
+    -- A plate with no DoT is the common case: it hides at once, before the death check below.
+    local entries, total = ns.dotBreakdownForUnit(unit)
+    if total <= 0 then
+        if w0 then hideWidgets(w0) end
+        return
+    end
     -- UI-2: a dead mob's marker must hide at once, not hang until expiry.
     -- Read defensively: on Forever the answer can be secret in combat,
     -- and a secret must never hide a living mob's marker (nor error out).
@@ -377,12 +383,6 @@ local function updatePlate(unit, plate, db)
             if w0 then hideWidgets(w0) end
             return
         end
-    end
-    local entries, total = ns.dotBreakdownForUnit(unit)
-    if total <= 0 then
-        local w = widgetsByPlate[plate]
-        if w then hideWidgets(w) end
-        return
     end
     local healthBar = findHealthBar(plate)
     local iconOnly = not healthBar
@@ -432,6 +432,8 @@ local function updatePreviewPlate(db)
 end
 
 local seenPlates = {}
+local PLATE_UNITS = {} -- "nameplate1".."nameplateN", built once so the 10 Hz refresh makes no strings
+for i = 1, MAX_PLATES do PLATE_UNITS[i] = "nameplate" .. i end
 local function refreshPlates()
     local db = ns.db
     wipe(seenPlates)
@@ -441,7 +443,7 @@ local function refreshPlates()
     end
     if db and db.nameplateMode ~= "off" and C_NamePlate and C_NamePlate.GetNamePlateForUnit then
         for i = 1, MAX_PLATES do
-            local unit = "nameplate" .. i
+            local unit = PLATE_UNITS[i]
             if UnitExists(unit) then
                 local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
                 local forbidden = ok and plate and plate.IsForbidden and plate:IsForbidden()
