@@ -63,7 +63,10 @@ A sound when your combo points (or another finisher resource) are full, and dots
 
 Casters get a sound when mana climbs to a set level: 100% by default, 80% for warlocks. Warlocks also get a sound for each Soul Shard that enters the bags, and purple diamonds under the target's nameplate show how many shards you carry.
 
-![warlock shards](https://i.imgur.com/tVzNFEL.png) ![rogue combo points](https://i.imgur.com/1ITWdUb.png)
+![warlock shards](https://i.imgur.com/tVzNFEL.png) 
+
+<img width="770" height="644" alt="{A2976187-8F39-4399-8EDD-20452A06DA38}" src="https://github.com/user-attachments/assets/e5005294-7f55-4156-bb6b-13d998ea834f" />
+
 
 ### SpellDamageInfo
 
