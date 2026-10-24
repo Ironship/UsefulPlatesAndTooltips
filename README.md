@@ -102,7 +102,7 @@ GPL-3.0-or-later, see [LICENSE](LICENSE).
 
 Third-party parts keep their own MIT notices:
 
-*   **DoTInfo** is based on [Does It Die](https://www.curseforge.com/wow/addons/does-it-die) by Joe Greive; see `Modules/DoTInfo/LICENSE-DoesItDie.txt`.
+*   **DoTInfo** is based on [Does It Die] with my own updates, fixes and changes (i port some of those into DoesItDie) (https://www.curseforge.com/wow/addons/does-it-die) by Joe Greive; see `Modules/DoTInfo/LICENSE-DoesItDie.txt`.
 *   **ShieldsInfo** is adapted from [Shield Aura Forever](https://github.com/JasonEcks/ShieldAuraForever) by JasonEcks and contributors; see `Modules/ShieldsInfo/LICENSE-ShieldAuraForever.txt`.
 *   **SpellDamageInfo's options window** is adapted from Does It Die by Joe Greive; see `Modules/SpellDamageInfo/LICENSE-SpellDamageInfo.txt`.
 *   **Stat weights** come from [ForeverSim](https://github.com/laurencestokes/foreversim) (MIT), built on [WoWSims](https://github.com/wowsims/forever) and Elliot Wood's Forever sim; see `Modules/StatsInfo/LICENSE-ForeverSim.txt`.
