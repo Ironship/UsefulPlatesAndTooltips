@@ -265,7 +265,10 @@ end
 
 function ns._selectedEnemyKey()
     local ok, attackable = pcall(UnitCanAttack, "player", "target")
-    local key = ok and not isSecret(attackable) and attackable == true and unitKey("target")
+    -- A corpse can't be cast at: with a dead hard target the game uses the soft target.
+    local deadOK, dead = pcall(UnitIsDeadOrGhost, "target")
+    local key = ok and not isSecret(attackable) and attackable == true
+        and not (deadOK and not isSecret(dead) and dead == true) and unitKey("target")
     return key or unitKey("softenemy")
 end
 
@@ -545,17 +548,22 @@ end
 -- whose key can't be read, is unknown. A field on ns: this chunk is at Lua 5.1's
 -- 200-local limit, so it cannot gain another local function.
 function ns._namedEnemyKey(sentName)
-    local matched
+    local matched, hardTarget
     for _, unit in ipairs({ "target", "softenemy", "mouseover", "focus" }) do
         local existsOK, exists = pcall(UnitExists, unit)
-        if existsOK and not isSecret(exists) and exists == true then
+        if not (unit == "softenemy" and hardTarget) and existsOK and not isSecret(exists) and exists == true then
             local attackOK, canAttack = pcall(UnitCanAttack, "player", unit)
             local nameOK, unitName = pcall(UnitName, unit)
+            local deadOK, dead = pcall(UnitIsDeadOrGhost, unit)
+            -- A dead unit is never the recipient, and a living hard target beats the soft target (same rule as
+            -- Retail.Recipient): a pack of same-named mobs is the normal case with action targeting.
             if attackOK and not isSecret(canAttack) and canAttack == true
+                and not (deadOK and not isSecret(dead) and dead == true)
                 and nameOK and not isSecret(unitName) and unitName == sentName then
                 local key = unitKey(unit)
                 if not key or (matched and matched ~= key) then return nil end
                 matched = key
+                if unit == "target" then hardTarget = true end
             end
         end
     end
@@ -570,7 +578,22 @@ local function onCastSent(spellID, castGUID, targetName)
     -- Only an attackable hard target takes precedence over softenemy; unitKey only uses
     -- a soft target whose own GUID or matching nameplate's GUID can be read safely.
     local recipient, dynamicTargeting
-    if ns.Retail then recipient = ns.Retail.Recipient(targetName)
+    if ns.Retail then
+        recipient = ns.Retail.Recipient(targetName)
+        if not recipient then
+            -- The CAST line later says only "no target"; this says why the recipient stayed unknown.
+            local shown = targetName
+            if isSecret(targetName) then shown = "<secret>"
+            elseif type(shown) ~= "string" then shown = tostring(shown) end
+            local function state(unit)
+                local existsOK, exists = pcall(UnitExists, unit)
+                if not existsOK or isSecret(exists) or exists ~= true then return "none" end
+                local deadOK, dead = pcall(UnitIsDeadOrGhost, unit)
+                return (deadOK and not isSecret(dead) and dead == true) and "dead" or "alive"
+            end
+            trace("SENT id " .. tostring(spellID) .. " target=" .. shown .. ": recipient unknown (hard=" .. state("target")
+                .. " soft=" .. state("softenemy") .. " mouseover=" .. state("mouseover") .. " focus=" .. state("focus") .. ")")
+        end
     else
         -- Forever's dynamic targeting: the client picks the victim itself, so SENT names no
         -- target at all. Such a cast may land on the current target at SUCCEEDED. A readable

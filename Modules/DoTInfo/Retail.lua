@@ -81,6 +81,12 @@ local function sameUnit(first, second)
     return ask(UnitIsUnit, first, second) == true
 end
 
+-- A corpse cannot be cast at: with a dead hard target the game falls back to the soft target.
+-- An unreadable answer counts as alive, as before.
+local function alive(unit)
+    return ask(UnitIsDeadOrGhost, unit) ~= true
+end
+
 local function ephemeral(key)
     return type(key) == "string" and key:match("^retail%-unit:%d+$") ~= nil
 end
@@ -153,14 +159,18 @@ function R.Recipient(sentName)
         return default
     end
     -- A readable SENT name can identify a focus/mouseover cast, but identical NPC names are ambiguous.
-    local recipient
+    -- Two exceptions: a dead unit is never the recipient, and a living hard target beats the soft target
+    -- (a pack of same-named mobs is the normal case with action targeting).
+    local recipient, hardTarget
     for _, unit in ipairs({ "target", "softenemy", "mouseover", "focus" }) do
-        if ask(UnitExists, unit) == true and ask(UnitCanAttack, "player", unit) == true
-            and ask(UnitName, unit) == sentName then
+        if not (unit == "softenemy" and hardTarget)
+            and ask(UnitExists, unit) == true and ask(UnitCanAttack, "player", unit) == true
+            and alive(unit) and ask(UnitName, unit) == sentName then
             local key = R.UnitKey(unit)
             if not key then return end
             if recipient and key ~= recipient then return end
             recipient = key
+            if unit == "target" then hardTarget = true end
         end
     end
     return recipient
