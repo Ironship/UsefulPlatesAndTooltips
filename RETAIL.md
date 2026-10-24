@@ -60,7 +60,7 @@ CastPrediction pokazuje przewidywane obrażenia czaru, który jest właśnie rzu
 
 Kanały obrażeń (np. Arcane Missiles, Mind Flay) używają tych samych znaczników na HP wybranego przeciwnika i jego nameplate. Szacunek maleje proporcjonalnie do pozostałego czasu kanału; przerwanie, koniec i zmiana celu usuwają znacznik. Ticki kanału nie kalibrują pełnego trafienia. Potrzebne są czytelne czasy klienta i rozpoznany opis obrażeń; moduł nie ustala odbiorców AoE ani stopnia naładowania empowered spells.
 
-Przy action targeting cast i DoTy mogą użyć `softenemy`, gdy nie wybrano zwykłego wrogiego celu, również przy zaznaczonym przyjaznym pecie. Znacznik pozostaje na nameplate pierwotnego odbiorcy. Liczby na natywnym krzyżowym pasku gamepada Forever obsługuje SpellDamageInfo; ta integracja działa tylko tam, gdzie klient udostępnia ten interfejs.
+Przy action targeting cast i DoTy mogą użyć `softenemy`, gdy nie wybrano zwykłego wrogiego celu, również przy zaznaczonym przyjaznym pecie. Martwy cel nie jest odbiorcą (po jego śmierci cast idzie na `softenemy`), a żywy zwykły cel ma pierwszeństwo przed `softenemy`, także przy tej samej nazwie (stado takich samych mobów). Znacznik pozostaje na nameplate pierwotnego odbiorcy. Liczby na natywnym krzyżowym pasku gamepada Forever obsługuje SpellDamageInfo; ta integracja działa tylko tam, gdzie klient udostępnia ten interfejs.
 
 Wygląd predykcji: jednolita półprzezroczysta powierzchnia dla trafienia bezpośredniego, pionowe prążki dla channelingu, domyślnie kolory szkół zgodne z DoTInfo. Nakładka cofa się od aktualnej krawędzi HP i jest przycięta do paska: 20 obrażeń przy 60/100 HP zakrywa przedział 60–40. Skala pozostaje oparta na maksymalnym HP, a kotwica podąża za natywną teksturą zdrowia.
 
