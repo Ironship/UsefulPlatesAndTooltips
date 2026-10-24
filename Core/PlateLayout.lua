@@ -31,8 +31,22 @@ end
 local FRAME_PART = { player = "Player", focus = "Focus" }
 
 -- EUI keeps Blizzard's frames alive but hidden, so follow the profile's active source.
-function Plate.UnitFrame(unit)
+local function unitFrameBase(unit)
   local part = FRAME_PART[unit] or "Target"
+  -- A frame the player named (Core/Frames.lua: /upt frame, DoTInfo > Behavior) comes before everything else.
+  local Frames = BIT.Frames
+  if Frames then
+    local key = FRAME_PART[unit] and string.lower(FRAME_PART[unit]) or "target"
+    local path = Frames.Get(key)
+    if path ~= "" then
+      local bar = Frames.Resolve(path)
+      if bar then
+        -- A replacement frame that is hidden (no target, switched off) hides the marks with it.
+        if not Frames.Shown(bar) then return end
+        return Frames.Root(bar), bar, nil
+      end
+    end
+  end
   local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
   local eui = type(modules) == "table" and modules.EllesmereUIUnitFrames
   local source = type(eui) == "table" and read(eui.GetUnitFrameSource, unit)
@@ -61,6 +75,18 @@ function Plate.UnitFrame(unit)
   if type(portrait) ~= "table" then portrait = _G[part .. "FramePortrait"] end
   if type(portrait) ~= "table" then portrait = type(frame) == "table" and frame.portrait end
   return frame, bar, portrait
+end
+
+-- The frame, health bar and portrait of a unit's frame. The kill icon spot the player named (Core/Frames.lua) replaces
+-- the portrait of the target frame, whichever frame the bar comes from.
+function Plate.UnitFrame(unit)
+  local host, bar, portrait = unitFrameBase(unit)
+  local Frames = BIT.Frames
+  if Frames and (host or bar) and unit ~= "player" and unit ~= "focus" then
+    local icon = Frames.Resolve(Frames.Get("icon"))
+    if icon then portrait = icon end
+  end
+  return host, bar, portrait
 end
 
 local function visibleHealthBar(bar)
@@ -158,6 +184,14 @@ end
 function Plate.HealthBar(plate)
   if type(plate) ~= "table" then return nil, "no nameplate" end
   if read(plate.IsForbidden, plate) == true then return nil, "forbidden nameplate" end
+  local Frames = BIT.Frames
+  if Frames then
+    local path = Frames.Get("plate")
+    if path ~= "" then
+      local bar = Frames.ResolveFromPlate(plate, path)
+      if bar and visibleHealthBar(bar) then return bar, "custom " .. path end
+    end
+  end
   if type(EllesmereNameplates_NS) == "table" then
     local children = { pcall(plate.GetChildren, plate) }
     if children[1] then

@@ -418,10 +418,12 @@ local function buildPredictionTab(parent)
         .. "Power Infusion, Arcane Blast stacks, Improved Scorch, Curse of the Elements."), y)
     if ns.Auras and ns.Auras.LIST then
         for _, entry in ipairs(ns.Auras.LIST) do
-            y = place(auraForceRow(parent, entry,
-                "Auto applies this while the client shows it. WoW: Forever hides auras in combat, so there it "
-                .. "only ever applies out of combat; the hit calibration carries the rest. "
-                .. "/upt castpred auras prints what is readable right now."), y)
+            if (entry.class == nil or entry.class == playerClass) and ns.Auras.AppliesHere(entry) then
+                y = place(auraForceRow(parent, entry,
+                    "Auto applies this while the client shows it. WoW: Forever hides auras in combat, so there it "
+                    .. "only ever applies out of combat; the hit calibration carries the rest. "
+                    .. "/upt castpred auras prints what is readable right now."), y)
+            end
         end
     end
     y = noteRow(parent, y, "The estimate is the description's own damage range plus your spell "

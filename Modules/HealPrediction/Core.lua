@@ -24,6 +24,13 @@ local DEFAULTS = {
     allHealers = false, -- ask for the client's total instead of only your own heals
     fillColor = "green",
     fillOpacity = 55,
+    showOthers = true,  -- the other healers' share, behind your own (needs the client to tell them apart)
+    otherColor = "cyan",
+    otherOpacity = 40,
+    showHots = true,    -- your own heals over time, which the client's projection leaves out
+    hotColor = "gold",
+    hotOpacity = 40,
+    hotHorizon = 4,     -- seconds of each heal over time drawn ahead
     heightPercent = 45, -- the segment's share of the bar's height, anchored to the top edge
     showText = false,   -- a small number at the segment's right end ("~120")
     debug = false,
@@ -100,7 +107,12 @@ ns.ReadIncoming = readIncoming
 local overlays = setmetatable({}, { __mode = "k" })
 
 local function hideOverlay(o)
-    if o then pcall(function() o.clip:Hide() end) end
+    if not o then return end
+    pcall(function()
+        o.clip:Hide()
+        if o.others then o.others.clip:Hide() end
+        if o.hot then o.hot.clip:Hide() end
+    end)
 end
 
 local function usableBar(frame)
@@ -127,8 +139,27 @@ local function healthBarHeight(healthBar)
     return height
 end
 
--- The overlay for one health bar, created once and reused. Creation can run in combat, where
--- the client may refuse a child of a protected bar: the build is wrapped and nothing is
+-- One band of the overlay: a clipping frame and the status bar inside it.
+local function newLayer(healthBar, levelOffset, withLabel)
+    local clip = CreateFrame("Frame", nil, healthBar)
+    clip:SetClipsChildren(true)
+    clip:SetFrameLevel((healthBar:GetFrameLevel() or 0) + levelOffset)
+    local bar = CreateFrame("StatusBar", nil, clip)
+    bar:SetStatusBarTexture(WHITE)
+    -- The frame's own HealthBarMask keeps the segment inside the visible bar.
+    if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(bar:GetStatusBarTexture(), healthBar, true) end
+    local layer = { clip = clip, bar = bar }
+    if withLabel then
+        layer.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        layer.label:SetPoint("LEFT", bar:GetStatusBarTexture(), "RIGHT", 2, 0)
+    end
+    clip:Hide()
+    return layer
+end
+
+-- The overlay for one health bar, created once and reused: the other healers' band at the back, your own
+-- direct heal over it, and your heals over time after the direct heal's end. Creation can run in combat,
+-- where the client may refuse a child of a protected bar: the build is wrapped and nothing is
 -- cached on failure, so the next tick retries.
 local function overlayFor(healthBar)
     if type(healthBar) ~= "table" then return nil end
@@ -137,17 +168,11 @@ local function overlayFor(healthBar)
     if o then return o end
     if ask(InCombatLockdown) == true and ask(healthBar.IsProtected, healthBar) == true then return nil end
     local ok, built = pcall(function()
-        local clip = CreateFrame("Frame", nil, healthBar)
-        clip:SetClipsChildren(true)
-        clip:SetFrameLevel((healthBar:GetFrameLevel() or 0) + 2)
-        local bar = CreateFrame("StatusBar", nil, clip)
-        bar:SetStatusBarTexture(WHITE)
-        -- The frame's own HealthBarMask keeps the segment inside the visible bar.
-        if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(bar:GetStatusBarTexture(), healthBar, true) end
-        local label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        label:SetPoint("LEFT", bar:GetStatusBarTexture(), "RIGHT", 2, 0)
-        clip:Hide()
-        return { clip = clip, bar = bar, label = label, unit = nil, height = nil, colors = nil }
+        local others = newLayer(healthBar, 1, false)
+        local own = newLayer(healthBar, 2, true)
+        local hot = newLayer(healthBar, 3, false)
+        return { clip = own.clip, bar = own.bar, label = own.label, others = others, hot = hot,
+            unit = nil, height = nil, colors = nil }
     end)
     if not ok or type(built) ~= "table" then return nil end
     overlays[healthBar] = built
@@ -165,29 +190,66 @@ local function layoutOverlay(o, healthBar)
     if o.layoutSignature == signature then return end
     o.layoutSignature = signature
     local fill = ask(healthBar.GetStatusBarTexture, healthBar)
-    if fill ~= nil and (type(fill) == "table" or type(fill) == "userdata") then
-        -- Secret-safe: the anchor is the health fill's moving right edge; no Lua math on it.
-        o.clip:ClearAllPoints()
-        o.clip:SetPoint("TOPLEFT", fill, "TOPRIGHT")
-        o.clip:SetPoint("BOTTOMRIGHT", healthBar, "BOTTOMRIGHT")
-    else
-        -- No fill texture to anchor to: draw across the whole bar (a plain left-to-right band).
-        o.clip:ClearAllPoints()
-        o.clip:SetAllPoints(healthBar)
+    local hasFill = fill ~= nil and (type(fill) == "table" or type(fill) == "userdata")
+    -- Secret-safe: the anchor is the health fill's moving right edge; no Lua math on it. Without a fill
+    -- texture the band is drawn across the whole bar (a plain left-to-right band).
+    local function anchorClip(clip, after)
+        clip:ClearAllPoints()
+        if after then
+            clip:SetPoint("TOPLEFT", after, "TOPRIGHT")
+            clip:SetPoint("BOTTOMRIGHT", healthBar, "BOTTOMRIGHT")
+        else
+            clip:SetAllPoints(healthBar)
+        end
     end
-    o.bar:ClearAllPoints()
-    o.bar:SetPoint("TOPLEFT", o.clip, "TOPLEFT")
-    o.bar:SetPoint("BOTTOMLEFT", o.clip, "BOTTOMLEFT")
-    o.bar:SetWidth(width)
-    o.bar:SetHeight(segmentHeight)
+    local function sizeBar(layer)
+        layer.bar:ClearAllPoints()
+        layer.bar:SetPoint("TOPLEFT", layer.clip, "TOPLEFT")
+        layer.bar:SetPoint("BOTTOMLEFT", layer.clip, "BOTTOMLEFT")
+        layer.bar:SetWidth(width)
+        layer.bar:SetHeight(segmentHeight)
+    end
+    anchorClip(o.clip, hasFill and fill or nil)
+    sizeBar(o)
+    if o.others then
+        anchorClip(o.others.clip, hasFill and fill or nil)
+        sizeBar(o.others)
+    end
+    if o.hot then
+        -- after the end of the direct heal: the own bar's fill reaches health + heal
+        local ownFill = ask(o.bar.GetStatusBarTexture, o.bar)
+        local after = (ownFill ~= nil and (type(ownFill) == "table" or type(ownFill) == "userdata")) and ownFill
+            or (hasFill and fill or nil)
+        anchorClip(o.hot.clip, after)
+        sizeBar(o.hot)
+    end
+end
+
+local function paintLayer(layer, color, opacity)
+    local r, g, b, a = colorOf(color, opacity)
+    pcall(function()
+        layer.bar:SetStatusBarColor(r, g, b, a)
+        layer.bar:SetStatusBarTexture(WHITE)
+    end)
 end
 
 local function paintOverlay(o)
-    local r, g, b, a = colorOf(db().fillColor, db().fillOpacity)
-    pcall(function()
-        o.bar:SetStatusBarColor(r, g, b, a)
-        o.bar:SetStatusBarTexture(WHITE)
-    end)
+    paintLayer(o, db().fillColor, db().fillOpacity)
+    if o.others then paintLayer(o.others, db().otherColor, db().otherOpacity) end
+    if o.hot then paintLayer(o.hot, db().hotColor, db().hotOpacity) end
+end
+
+-- Feeds one band: the value goes to the status bar untouched (it may be secret); a plain zero hides it.
+local function setLayer(layer, maxHealth, value)
+    if not layer then return end
+    if value == nil or (not isSecret(value) and (type(value) ~= "number" or value <= 0)) then
+        layer.clip:Hide()
+        return
+    end
+    layer.bar:SetMinMaxValues(0, maxHealth)
+    layer.bar:SetValue(value)
+    layer.bar:Show()
+    layer.clip:Show()
 end
 
 -- One unit's incoming heals on one health bar. Secret-safe: the reading (plain or secret) is
@@ -203,8 +265,23 @@ local function updateBar(unit, healthBar, enabled)
         if ok and not isSecret(dead) and dead == true then hideOverlay(o) return end
     end
     local incoming = readIncoming(unit, db().allHealers)
-    if incoming == nil then hideOverlay(o) return end
-    if not isSecret(incoming) and (type(incoming) ~= "number" or incoming <= 0) then hideOverlay(o) return end
+    local plainZero = incoming == nil or (not isSecret(incoming) and (type(incoming) ~= "number" or incoming <= 0))
+    -- The other healers' share: the client's total behind your own band (when "All healers" already
+    -- draws the total in your color there is nothing to add).
+    local everyone
+    if db().showOthers ~= false and not db().allHealers then
+        everyone = readIncoming(unit, true)
+        if everyone ~= nil and not isSecret(everyone) and (type(everyone) ~= "number" or everyone <= 0) then
+            everyone = nil
+        end
+    end
+    -- Where the client cannot tell the healers apart the two readings are equal: nothing of theirs to show.
+    if everyone ~= nil and not isSecret(everyone) and not isSecret(incoming) and type(incoming) == "number"
+        and everyone <= incoming then
+        everyone = nil
+    end
+    local hot = ns.Hots and ns.Hots.AmountFor(unit, db().hotHorizon) or nil
+    if plainZero and everyone == nil and hot == nil then hideOverlay(o) return end
     local maxHealth = ask(UnitHealthMax, unit)
     if maxHealth == nil then hideOverlay(o) return end
     if not o then
@@ -215,12 +292,21 @@ local function updateBar(unit, healthBar, enabled)
     local ok = pcall(function()
         layoutOverlay(o, healthBar)
         paintOverlay(o)
-        o.bar:SetMinMaxValues(0, maxHealth)
-        o.bar:SetValue(incoming)
-        o.bar:Show()
-        o.clip:Show()
-        o.label:SetShown(db().showText and not isSecret(incoming))
-        if db().showText and not isSecret(incoming) then
+        -- Your own band stays shown (empty) while a heal over time follows it, so that band has a fill
+        -- edge to start from.
+        if plainZero then
+            o.bar:SetMinMaxValues(0, maxHealth)
+            o.bar:SetValue(0)
+            o.bar:Show()
+            o.clip:Show()
+        else
+            setLayer(o, maxHealth, incoming)
+        end
+        setLayer(o.others, maxHealth, everyone)
+        setLayer(o.hot, maxHealth, hot)
+        local showLabel = db().showText and not plainZero and not isSecret(incoming)
+        o.label:SetShown(showLabel and true or false)
+        if showLabel then
             o.label:SetText(string.format("~%d", math.floor(incoming + 0.5)))
         end
     end)
@@ -459,19 +545,23 @@ if BIT.RegisterCommand then
 end
 
 -- The settings tab's sample: the very same overlay, on a mock bar, with plain numbers.
-function ns.DrawSample(healthBar, maxHealth, heal)
+function ns.DrawSample(healthBar, maxHealth, heal, others, hot)
     if not settings then return false end
     local o = overlayFor(healthBar)
     if not o then return false end
     local ok = pcall(function()
         layoutOverlay(o, healthBar)
         paintOverlay(o)
-        o.bar:SetMinMaxValues(0, maxHealth)
-        o.bar:SetValue(heal)
-        o.bar:Show()
-        o.clip:Show()
-        o.label:SetShown(settings.showText)
-        if settings.showText then o.label:SetText(string.format("~%d", math.floor(heal + 0.5))) end
+        setLayer(o, maxHealth, heal)
+        if not heal or heal <= 0 then
+            o.bar:SetMinMaxValues(0, maxHealth)
+            o.bar:SetValue(0)
+            o.clip:Show()
+        end
+        setLayer(o.others, maxHealth, settings.showOthers ~= false and not settings.allHealers and others or nil)
+        setLayer(o.hot, maxHealth, settings.showHots ~= false and hot or nil)
+        o.label:SetShown((settings.showText and heal and heal > 0) and true or false)
+        if settings.showText and heal and heal > 0 then o.label:SetText(string.format("~%d", math.floor(heal + 0.5))) end
     end)
     return ok
 end
