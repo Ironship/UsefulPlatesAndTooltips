@@ -347,6 +347,7 @@ end
 local loggedUnread = {}
 function L.shouldLogUnread(spellID, desc)
     if type(desc) ~= "string" or desc == "" or looksEnglish(desc) then return false end
+    if not desc:find("%d") then return false end -- a DoT's text has an amount: "Summon a chauffeur" is not worth a log line
     if loggedUnread[spellID] then return false end
     loggedUnread[spellID] = true
     return true

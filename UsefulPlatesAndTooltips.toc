@@ -3,7 +3,7 @@
 ## Notes: Useful nameplate and tooltip info for WoW: Forever: cast/channel damage, DoT marks, incoming heals, shields, hunter range, combo points, stat comparisons and action bar numbers. Every part can be switched off. /upt
 ## Notes-deDE: Nützliche Infos zu Namensplaketten und Tooltips für WoW: Forever: Zauber- und Kanalschaden, DoT-Markierungen, eingehende Heilung, Schilde, Jägerreichweite, Combopunkte, Wertevergleiche und Zahlen auf den Aktionsleisten. Jeder Teil lässt sich abschalten. /upt
 ## Author: Ironship
-## Version: 0.9.84
+## Version: 0.9.85
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 

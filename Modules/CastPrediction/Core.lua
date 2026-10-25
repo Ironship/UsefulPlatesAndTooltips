@@ -336,6 +336,19 @@ local function clampFactor(factor)
     return factor
 end
 
+-- Whether this spell's hits teach its factor. Forever: every school. Retail: direct physical hits only. A Retail
+-- description holds the player's own numbers (spell power, talents), not the armor of the target, which takes a share
+-- off a direct physical hit and is not readable for an enemy: a hunter's Steady Shot read 86 and hit for 60, 61 and 60,
+-- the next one read 101 and hit for 69, then 115 for 80 and 81 (a saved Retail log): 0.70 each time. Magic is not
+-- reduced by armor, so there the description stays as it is.
+local function learnsFrom(spellID)
+    if not settings or not settings.learn then return false end
+    if not isRetail() then return true end
+    local cached = viewCache[spellID]
+    local view = cached and cached.view
+    return type(view) == "table" and view.school == "physical"
+end
+
 -- The factor one spell is scaled by: its own hits (a running mean, weighted as that many samples) pulled toward 1
 -- by LEARN_SHRINK samples' worth.
 local function factorFor(spellID)
@@ -352,7 +365,7 @@ end
 -- ...; an aura the client will not show, or a Forever combat with hidden auras, adds nothing).
 local function predictionFor(view, spellID)
     if not view then return nil end
-    local factor = isRetail() and 1 or factorFor(spellID)
+    local factor = (not isRetail() or view.school == "physical") and factorFor(spellID) or 1
     local min, max = view.min * factor, view.max * factor
     local talentPercent = 0
     if ns.Talents and type(ns.Talents.MultiplierFor) == "function" then
@@ -387,7 +400,7 @@ end
 -- so that /upt castpred learned can show a spell that never learns. A cast whose own hit did match is never counted
 -- for the other damage of its school that lands meanwhile (a DoT's tick).
 local function noteRefused(spellID)
-    if not settings or not settings.learn or isRetail() then return end
+    if not learnsFrom(spellID) then return end
     local entry = learnedEntry(spellID)
     if not entry then
         entry = { factor = 1, samples = 0, v = LEARN_SCHEMA }
@@ -402,7 +415,7 @@ end
 -- been (ratio * applied), which is what the running mean takes in. (Blending the ratio itself into the factor,
 -- as the first versions did, settles on the square root of the truth.)
 local function noteHit(spellID, amount, isCrit, expected, applied)
-    if not settings or not settings.learn or isRetail() then return end -- on Retail the numbers already hold everything
+    if not learnsFrom(spellID) then return end -- Retail: physical only, see learnsFrom
     local view = viewCache[spellID] and viewCache[spellID].view
     if type(amount) ~= "number" or amount <= 0 then return end
     if isCrit then return end
