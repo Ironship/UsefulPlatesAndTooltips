@@ -528,6 +528,19 @@ local function regenPerSpirit()
   return charFact("regen", computeRegen)
 end
 
+-- Health a second, out of combat, per point of Spirit: what the character sheet's Spirit tooltip adds up
+-- (GetHealthRegenFromSpirit, times the 0.75 it takes for a character standing; Blizzard_UIPanels_Game/Camelot/
+-- PaperDollFrameStats.lua), over the Spirit it comes from. It takes the regeneration to be proportional to
+-- Spirit, as mana's is on Forever (a quarter of it, whatever the class); health's was not measured. A field of the
+-- module table, not a local: this file is at Lua's limit of local variables.
+function M.ComputeHealthRegen()
+  local _, spirit = ask(UnitStat, "player", 5)
+  spirit = num(spirit)
+  local fromSpirit = num(ask(GetHealthRegenFromSpirit))
+  if not (spirit and fromSpirit and spirit > 0) then return nil end
+  return fromSpirit * 0.75 / spirit
+end
+
 local function attackPower(stat, n)
   local v = num(ask(GetAttackPowerForStat, stat, math.abs(n)))
   if not v or v == 0 then return nil end
@@ -968,6 +981,11 @@ function M.WorthParts(key, n)
   elseif key == "ITEM_MOD_SPIRIT_SHORT" then
     local per = usesMana() and regenPerSpirit()
     if per and per > 0 then addPart(parts, "regen", math.floor(per * n * 50 + 0.5) / 10) end
+    local healthPer = charFact("hpregen", M.ComputeHealthRegen)
+    if healthPer and healthPer > 0 then
+      local regen = math.floor(healthPer * n * 50 + 0.5) / 10
+      if regen ~= 0 then addPart(parts, "hpregen", regen) end -- "+0 health" says nothing
+    end
   elseif key == "ITEM_MOD_HEALTH_SHORT" then
     -- flat health on the item (an enchant or a gem gives it), not through Stamina
     addPart(parts, "health", n)
@@ -1002,7 +1020,7 @@ local WORTH_WORDS = {
   armor = "armor", ap = "attack power", crit = "crit", dodge = "dodge", health = "health", mana = "mana",
   spellcrit = "spell crit", regen = "mana per 5 sec. when not casting", hit = "hit", haste = "haste",
   expertise = "expertise", parry = "parry", block = "block", blockvalue = "block value", defense = "defense",
-  healing = "healing", spellpower = "spell power",
+  healing = "healing", spellpower = "spell power", hpregen = "health per 5 sec. out of combat",
 }
 local PERCENT_KINDS = { crit = true, dodge = true, spellcrit = true, hit = true, haste = true, expertise = true,
   parry = true, block = true }
@@ -1011,7 +1029,7 @@ local WORTH_SHORT = {
   armor = "armor", ap = "AP", crit = "crit", dodge = "dodge", health = "health", mana = "mana",
   spellcrit = "spell crit", regen = "mana/5s", hit = "hit", haste = "haste", expertise = "expertise",
   parry = "parry", block = "block", blockvalue = "block value", defense = "defense", healing = "healing",
-  spellpower = "spell power",
+  spellpower = "spell power", hpregen = "health/5s",
 }
 local function worthValue(kind, value) return PERCENT_KINDS[kind] and percent(value) or signed(value) end
 
@@ -1256,6 +1274,7 @@ local ICONS = {
   block = "Interface\\Icons\\Ability_Defend", blockvalue = "Interface\\Icons\\INV_Shield_05",
   defense = "Interface\\Icons\\Ability_Warrior_ShieldWall",
   healing = "Interface\\Icons\\Spell_Holy_Heal", spellpower = "Interface\\Icons\\Spell_Nature_Lightning",
+  hpregen = "Interface\\Icons\\INV_Misc_Bandage_15",
 }
 M.ICONS = ICONS
 local DIVIDER = "|TInterface\\Common\\UI-TooltipDivider-Transparent:8:200|t"
@@ -2011,7 +2030,7 @@ local PROBED_FUNCTIONS = {
   "UnitRangedAttackPower", "UnitDefense", "UnitDefenseSkill", "UnitResistance", "UnitClass", "UnitLevel", "GetShapeshiftFormID",
   "GetItemStats", "GetInventoryItemLink",
   "GetCritChanceFromStat", "GetSpellCritChanceFromStat", "GetDodgeChanceFromAttribute", "UnitHPPerStamina",
-  "GetManaRegenFromSpirit", "GetRangedAttackPowerForStat",
+  "GetManaRegenFromSpirit", "GetRangedAttackPowerForStat", "GetHealthRegen", "GetHealthRegenFromSpirit",
 }
 
 local function plain(v)
@@ -2072,6 +2091,9 @@ function M.Probe()
   v.UnitHPPerStamina = record(UnitHPPerStamina, "player")
   v.GetUnitHealthModifier = record(GetUnitHealthModifier, "player")
   v.GetManaRegen = record(GetManaRegen)
+  v.GetManaRegenFromSpirit = record(GetManaRegenFromSpirit)
+  v.GetHealthRegen = record(GetHealthRegen)
+  v.GetHealthRegenFromSpirit = record(GetHealthRegenFromSpirit)
   v.GetSpellBonusDamage2 = record(GetSpellBonusDamage, 2)
   v.GetSpellBonusHealing = record(GetSpellBonusHealing)
   p.values = v
@@ -2662,13 +2684,15 @@ BIT.RegisterTab("StatsInfo", {
     legend:heading("What the icons stand for")
     local words = {}
     for _, kind in ipairs({ "armor", "ap", "crit", "hit", "haste", "expertise", "dodge", "parry", "block", "blockvalue", "defense",
-      "health", "mana", "spellcrit", "regen", "healing", "spellpower" }) do
+      "health", "mana", "spellcrit", "regen", "hpregen", "healing", "spellpower" }) do
       words[#words + 1] = icon(ICONS[kind], 12) .. " " .. WORTH_WORDS[kind]
     end
     legend:body(table.concat(words, "    "))
     legend:body("Under each difference: what the stats give this character -- the game's own numbers, "
       .. "worked out as its character sheet works them out. Green is up, red is down.")
     legend:body("Armor is 2 per Agility and mana regeneration a quarter of Spirit, as measured on Forever. "
+      .. "Health regeneration from Spirit is the character sheet's own number (standing, out of combat), taken "
+      .. "per point of Spirit: it assumes the two are proportional. "
       .. "In combat the game may hide these numbers; then the line is left out.")
 
     -- Ratings: how the spec numbers come about, and what they do not claim.
