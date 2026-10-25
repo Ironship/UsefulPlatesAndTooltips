@@ -18,7 +18,7 @@ The same marker (and kill icon) can sit on your focus frame, Blizzard's or Elles
 
 Description parsing covers English, German, Spanish, French, Korean, Brazilian Portuguese and Chinese (simplified and traditional), after Does It Die; the non-German languages are from Forever's own tooltips and not yet verified on a client in those languages. Other unit frame addons: name their target, focus or player health bar (and a spot for the kill icon, and a nameplate bar the automatic search misses) under DoTInfo > Behavior, with a Pick button that takes the frame you click, or by `/upt frame target ElvUF_Target.Health` and `/upt pick target`. ShieldsInfo and HealPrediction use the same frames. A hidden replacement frame hides the marks with it; with nothing set, nothing changes. After Does It Die's custom frames.
 
-`/dotinfo check` reads every spell in your spellbook and lists the ones whose text mentions seconds but gives no DoT (full texts go to the saved log), so a client in another language can show what is still unread. In Forever, `/dotinfo ticks` (Behavior tab > View) lists the tick sizes learned from your casts next to what the tooltips predict.
+`/dotinfo check` reads every spell in your spellbook and lists the ones whose text mentions seconds but gives no DoT (full texts go to the saved log), so a client in another language can show what is still unread. In Forever, `/dotinfo ticks` (Behavior tab > View) lists the tick sizes learned from your casts next to what the tooltips predict. The check also keeps its findings in the saved settings (`census`, one entry per class, 80 of each at most): the unread texts, cut to 320 bytes, and the DoTs it read with the total and duration their text gave, to set against the learned tick sizes.
 
 ![simulation](https://i.imgur.com/rI5Kdyv.gif)
 
@@ -45,6 +45,8 @@ Shows the damage of the spell you are casting on the enemy's health bar and name
 The fill covers health backwards from its current edge: 20 damage at 60/100 HP covers 60 down to 40. It follows health changes and clips overkill inside the bar. Action targeting works without clicking a target, and the prediction stays on the original enemy if the reticle moves.
 
 The estimate also holds the talents and effects the description leaves out (Forever): Fire Power, Piercing Ice, Arcane Instability, Shadow Mastery, Aftermath, Darkness, Searing Light, Moonfury and the rest of the curated list, and, while the client shows the aura, Arcane Power, Power Infusion, Arcane Blast stacks, Improved Scorch, Curse of the Elements, Demonic Sacrifice, Improved Shadow Bolt, Shadow and Flame, Decimation, Incinerate against your Immolate, Power in Light, Shadow Weaving, Shadowform, Stormstrike, Lava Burst against your Flame Shock, Rage of the Farseer and Eureka!. Talent ranks are matched by spell id as well as name, so a client in another language reads them. Auras are hidden in combat on Forever, so they apply out of combat only; the hit calibration carries the rest.
+
+What the hits teach is a running mean of what each hit says the factor should have been, pulled toward 1 by two hits' worth in what a cast shows, with a memory of about nine hits. (Versions up to 0.9.83 blended each hit's ratio to the already scaled prediction into the factor and so settled on the square root of the truth, 0.89 where 0.80 was right; factors saved by them are squared once on the first load.) A cast whose hit matched nothing the estimate expects, while damage of its school landed within reach of it, is tallied, and `/upt castpred learned` lists the learned factors with their hits and that tally, so a spell whose factor is too far from 1 to be learned shows. `/upt castpred census` reads the whole talent tree into the saved settings (`census`): each talent's live text (cut to 90 bytes, 240 for the talents the lists use or that it flags), marking the talents with a percent next to damage or healing that the lists do not use; `/upt castpred census clear` removes it. Nothing is read or kept until you ask.
 
 The direct hit is separate from DoTInfo's damage-over-time marker. For rank-1 Fireball, the unmodified average is 18 damage on impact plus 2 over time. Critical strikes, procs and resists can change the result. `/upt cast` opens the settings and preview.
 
@@ -87,6 +89,8 @@ Bars built on LibActionButton (Bartender4, ElvUI and others) get the numbers too
 ### StatsInfo
 
 In an item's tooltip: how it compares with what you wear, what each difference is worth to your character, and how each spec of your class rates the item. Ratings use ForeverSim weights. Tanks also get survival and threat.
+
+Spirit is worth mana per 5 seconds (read from the client, so it is right for any class) and, as the character sheet's Spirit tooltip works it out, health per 5 seconds out of combat, standing: a warrior or rogue, who has no mana, sees the health. The health figure takes the regeneration to be proportional to Spirit, as the mana one is; that is not measured.
 
 Every healer (Restoration druid or shaman, Holy priest or paladin) gets a score marked `(approx.)`. It is a heuristic, because ForeverSim does not simulate healing. **Work in progress.**
 

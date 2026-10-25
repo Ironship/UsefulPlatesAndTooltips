@@ -28,8 +28,16 @@ local RECHECK = 5 -- re-read a spell's description no more often than this
 -- as "landed", they just never teach the estimate).
 local LEARN_TOLERANCE = 0.35
 local CRIT_MIN_RATIO, CRIT_MAX_RATIO = 1.3, 2.3
-local LEARN_RATE = 1 / 3
+-- The learned factor of a spell is the running mean of what its hits say (each hit a sample of the true factor),
+-- weighted 1/n until LEARN_FLOOR, so a long-lived factor still follows gear and buff changes (a smaller floor
+-- steadies it, a larger one follows a change sooner: 0.2 is about nine hits' memory). LEARN_SHRINK is how many
+-- samples' worth of "no information" (a factor of 1) a cast's number is pulled toward: one hit of a spell that rolls
+-- 14-23 must not swing the estimate by the full roll.
+local LEARN_FLOOR = 0.2
+local LEARN_SHRINK = 2
 local LEARN_MIN_FACTOR, LEARN_MAX_FACTOR = 0.25, 4
+local LEARN_SCHEMA = 2 -- entries saved by the first versions carry no `v`: see ensureDB
+local LEARNED_LINES_MAX = 40 -- chat lines /upt castpred learned prints
 local COMBAT_FRAME = 0.05 -- two UNIT_COMBAT events this close are one hit on several unit tokens
 local MAX_LOG = 500
 
@@ -315,14 +323,27 @@ local function learnedEntry(spellID)
     return entry
 end
 
-local function factorFor(spellID)
+-- How many hits the factor of a spell rests on, nil when none (a spell only refused has an entry and no hits).
+local function learnedSamples(spellID)
     local entry = learnedEntry(spellID)
-    if not entry or not settings or not settings.learn then return 1 end
-    local factor = tonumber(entry.factor)
-    if not factor then return 1 end
-    if factor < LEARN_MIN_FACTOR then factor = LEARN_MIN_FACTOR end
-    if factor > LEARN_MAX_FACTOR then factor = LEARN_MAX_FACTOR end
+    local samples = entry and tonumber(entry.samples)
+    return samples and samples > 0 and samples or nil
+end
+
+local function clampFactor(factor)
+    if factor < LEARN_MIN_FACTOR then return LEARN_MIN_FACTOR end
+    if factor > LEARN_MAX_FACTOR then return LEARN_MAX_FACTOR end
     return factor
+end
+
+-- The factor one spell is scaled by: its own hits (a running mean, weighted as that many samples) pulled toward 1
+-- by LEARN_SHRINK samples' worth.
+local function factorFor(spellID)
+    if not settings or not settings.learn then return 1 end
+    local entry = learnedEntry(spellID)
+    local own, samples = entry and tonumber(entry.factor), entry and tonumber(entry.samples) or 0
+    if not own or samples <= 0 then return 1 end
+    return clampFactor((own * samples + LEARN_SHRINK) / (samples + LEARN_SHRINK))
 end
 
 -- The prediction the marker shows: { min, max, value } scaled by what earlier hits taught, by
@@ -358,14 +379,29 @@ local function predictionFor(view, spellID)
         value = (min + max) / 2
     end
     return { min = min, max = max, value = value, factor = factor, talentPercent = talentPercent,
-        auraPercent = auraPercent, samples = (learnedEntry(spellID) or {}).samples }
+        auraPercent = auraPercent, samples = learnedSamples(spellID) }
 end
 
--- A non-crit hit of `amount` teaches the factor; a hit outside the range is refused (someone
--- else's damage, or a wildly different rank). Crits only prove the cast landed. expected is the
--- scaled prediction the marker is showing; comparing against it keeps the factor honest even
--- after earlier hits already moved it.
-local function noteHit(spellID, amount, isCrit, expected)
+-- A cast the estimate cannot learn from: damage of its school landed within reach of the prediction, yet no hit
+-- matched it (a factor too far from 1 for the window), or a hit matched but fell outside the window. Only counted,
+-- so that /upt castpred learned can show a spell that never learns. A cast whose own hit did match is never counted
+-- for the other damage of its school that lands meanwhile (a DoT's tick).
+local function noteRefused(spellID)
+    if not settings or not settings.learn or isRetail() then return end
+    local entry = learnedEntry(spellID)
+    if not entry then
+        entry = { factor = 1, samples = 0, v = LEARN_SCHEMA }
+        settings.learned[spellID] = entry
+    end
+    entry.refused = (tonumber(entry.refused) or 0) + 1
+end
+
+-- A non-crit hit of `amount` teaches the factor; a hit outside the window is refused (someone
+-- else's damage, or a wildly different rank). Crits only prove the cast landed. expected is the middle of the
+-- predicted range and applied the factor the prediction was scaled by: the hit says what the factor should have
+-- been (ratio * applied), which is what the running mean takes in. (Blending the ratio itself into the factor,
+-- as the first versions did, settles on the square root of the truth.)
+local function noteHit(spellID, amount, isCrit, expected, applied)
     if not settings or not settings.learn or isRetail() then return end -- on Retail the numbers already hold everything
     local view = viewCache[spellID] and viewCache[spellID].view
     if type(amount) ~= "number" or amount <= 0 then return end
@@ -375,21 +411,54 @@ local function noteHit(spellID, amount, isCrit, expected)
     local ratio = amount / expected
     -- Outside the window it is someone else's damage or a wildly different rank; refuse it
     -- (crits already left above: only the marked CRITICAL flag is trusted for those).
-    if ratio < 1 - LEARN_TOLERANCE or ratio > 1 + LEARN_TOLERANCE then return end
+    if ratio < 1 - LEARN_TOLERANCE or ratio > 1 + LEARN_TOLERANCE then
+        noteRefused(spellID)
+        return
+    end
     local entry = learnedEntry(spellID)
     if not entry then
-        entry = { factor = 1, samples = 0 }
+        entry = { factor = 1, samples = 0, v = LEARN_SCHEMA }
         settings.learned[spellID] = entry
     end
-    local factor = tonumber(entry.factor) or 1
-    local smoothed = factor * (1 - LEARN_RATE) + ratio * LEARN_RATE
-    if smoothed < LEARN_MIN_FACTOR then smoothed = LEARN_MIN_FACTOR end
-    if smoothed > LEARN_MAX_FACTOR then smoothed = LEARN_MAX_FACTOR end
-    entry.factor = smoothed
-    entry.samples = (tonumber(entry.samples) or 0) + 1
+    local target = clampFactor(ratio * (tonumber(applied) or 1))
+    local samples = (tonumber(entry.samples) or 0) + 1
+    local own = tonumber(entry.factor) or 1
+    if samples == 1 then
+        own = target
+    else
+        own = own + (target - own) * math.max(1 / samples, LEARN_FLOOR)
+    end
+    entry.factor = clampFactor(own)
+    entry.samples = samples
+    entry.v = LEARN_SCHEMA
     trace(string.format("LEARN %s: hit %d vs expected %d -> factor %.2f (%d sample(s))",
         spellName(spellID) or tostring(spellID), math.floor(amount + 0.5), math.floor(expected + 0.5),
-        smoothed, entry.samples))
+        entry.factor, entry.samples))
+end
+
+-- What the hits have taught, one chat line per spell: the factor (a cast shows it pulled toward 1 by two hits'
+-- worth), how many hits it rests on, and how many hits were too far from the estimate to learn from.
+function ns.LearnedLines()
+    local lines = {}
+    if not settings or type(settings.learned) ~= "table" then return lines end
+    local ids = {}
+    for id, entry in pairs(settings.learned) do
+        if type(entry) == "table" and type(id) == "number" then ids[#ids + 1] = id end
+    end
+    table.sort(ids)
+    for index, id in ipairs(ids) do
+        if index > LEARNED_LINES_MAX then
+            lines[#lines + 1] = string.format("... and %d more", #ids - LEARNED_LINES_MAX)
+            break
+        end
+        local entry = settings.learned[id]
+        local refused = tonumber(entry.refused) or 0
+        lines[#lines + 1] = string.format("%s (%d): x%.2f from %d hit(s)%s", spellName(id) or "?", id,
+            tonumber(entry.factor) or 1, tonumber(entry.samples) or 0,
+            refused > 0 and string.format(", %d hit(s) too far from the estimate to learn from", refused) or "")
+    end
+    if #lines == 0 then lines[1] = "Nothing learned yet: cast damage spells at an enemy." end
+    return lines
 end
 
 function ns.resetLearned()
@@ -611,9 +680,18 @@ local function onUnitCombat(unit, action, flag, amount, school)
         trace(string.format("HIT absorbed on %s; marker holds until it fades", tostring(unit)))
         return true
     end
-    if not withinRange and not withinCrit then return end
+    if not withinRange and not withinCrit then
+        -- Kept for the end of the cast: it counts only if no hit of the cast matches (see housekeep).
+        local middle = (prediction.min + prediction.max) / 2
+        if middle > 0 and amount >= middle * 0.2 and amount <= middle * 3 then castInProgress.nearMiss = true end
+        return
+    end
     castInProgress.landedAt = nowHit
-    if withinRange then noteHit(castInProgress.spellID, amount, isCrit, prediction.value) end
+    -- Against the middle of the range, not the value the marker shows: with the "min" or "max" estimate that would
+    -- teach every hit as a shift of the factor.
+    if withinRange then
+        noteHit(castInProgress.spellID, amount, isCrit, (prediction.min + prediction.max) / 2, prediction.factor)
+    end
     trace(string.format("HIT %s %d%s matched to the cast (expected %d-%d)",
         tostring(castInProgress.name), math.floor(amount + 0.5), isCrit and " CRIT" or "",
         math.floor(castInProgress.prediction.min + 0.5), math.floor(castInProgress.prediction.max + 0.5)))
@@ -633,7 +711,10 @@ local function housekeep(now)
     elseif castInProgress.landedAt then
         if now - castInProgress.landedAt > LANDED_GRACE then dropCast("impact faded") end
     elseif castInProgress.succeededAt then
-        if now - castInProgress.succeededAt > PROJECTILE_GRACE then dropCast("no hit seen") end
+        if now - castInProgress.succeededAt > PROJECTILE_GRACE then
+            if castInProgress.nearMiss then noteRefused(castInProgress.spellID) end
+            dropCast("no hit seen")
+        end
     elseif castInProgress.stoppedAt then
         if now - castInProgress.stoppedAt > CAST_STOP_GRACE then dropCast("stopped without succeeding") end
     elseif now - castInProgress.startedAt > CAST_MAX_SECONDS then
@@ -1354,6 +1435,17 @@ function ns.ensureDB()
         settings.markerStyleVersion = 2
     end
     if type(settings.learned) ~= "table" then settings.learned = {} end
+    -- Entries saved by the first versions (no `v`) hold the square root of the factor they were meant to find: the old
+    -- update blended each hit's ratio to the already scaled prediction into the factor. Squared they are the factor,
+    -- as far as it was learned, and worth a few hits only.
+    for _, entry in pairs(settings.learned) do
+        if type(entry) == "table" and entry.v == nil then
+            local factor = tonumber(entry.factor)
+            if factor then entry.factor = clampFactor(factor * factor) end
+            entry.samples = math.min(tonumber(entry.samples) or 0, 5)
+            entry.v = LEARN_SCHEMA
+        end
+    end
     if type(settings.log) ~= "table" then settings.log = {} end
     if type(settings.talentForce) ~= "table" then settings.talentForce = {} end
     if type(settings.auraForce) ~= "table" then settings.auraForce = {} end
@@ -1493,6 +1585,35 @@ if BIT.RegisterCommand then
             print("Health bar marker " .. (settings.showMarker and "ON" or "OFF") .. ".")
         elseif cmd == "reset" then
             ns.resetLearned()
+        elseif cmd == "census" or cmd == "census clear" then
+            if not ns.Talents or type(ns.Talents.Census) ~= "function" then
+                print("Talents file not loaded.")
+            elseif cmd == "census clear" then
+                ns.Talents.ClearCensus()
+                print("The talent census is cleared from the saved settings.")
+            else
+                local census, why = ns.Talents.Census()
+                if not census then
+                    print("No census: " .. tostring(why))
+                else
+                    print(string.format("%d talents read; %d carry a percent next to damage or healing that the lists do not use. "
+                        .. "Kept in the saved settings (CastPrediction, census) until /upt castpred census clear.",
+                        #census.nodes, census.candidates))
+                    if census.unread > 0 then
+                        print(string.format("%d talents have no text yet (not loaded): run it again in a minute.", census.unread))
+                    end
+                    if census.truncated then print("The tree is bigger than the census keeps: the last talents are missing.") end
+                    local shown = 0
+                    for _, node in ipairs(census.nodes) do
+                        if node.c and shown < 12 then
+                            shown = shown + 1
+                            print(string.format("  %s %d/%d: %s", tostring(node.n), node.r or 0, node.m or 0, node.t))
+                        end
+                    end
+                end
+            end
+        elseif cmd == "learned" then
+            for _, line in ipairs(ns.LearnedLines()) do print(line) end
         elseif cmd == "talents" then
             if ns.Talents and type(ns.Talents.ProbeLines) == "function" then
                 for _, line in ipairs(ns.Talents.ProbeLines()) do print(line) end
@@ -1510,9 +1631,9 @@ if BIT.RegisterCommand then
             print("Debug " .. (settings.debug and "ON" or "OFF") .. ".")
         elseif cmd == "help" then
             print("/upt castpred - open the settings; line - toggle the marker; talents - what the talent tree "
-                .. "answers; auras - what buffs/debuffs are readable; reset - forget learned factors; debug - echo the trace log")
+                .. "answers; auras - what buffs/debuffs are readable; learned - what the hits taught; census - read the whole talent tree into the saved settings (census clear removes it); reset - forget learned factors; debug - echo the trace log")
         else
-            print("CastPrediction: /upt castpred [line|talents|auras|reset|debug]")
+            print("CastPrediction: /upt castpred [line|talents|auras|learned|census|census clear|reset|debug]")
         end
     end)
 end
