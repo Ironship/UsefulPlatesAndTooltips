@@ -3,7 +3,7 @@
 ## Notes: Retail test build: cast/channel damage, DoT estimates, incoming heals, rogue aura icons/timers, resource sounds/markers, absorb overlays and spell damage numbers. /upt
 ## Notes-deDE: Retail-Testversion: Zauber- und Kanalschaden, DoT-Schätzungen, eingehende Heilung, Aurasymbole und Timer für Schurken, Ressourcentöne und -markierungen, Absorptionsanzeigen und Zauberschadenszahlen. /upt
 ## Author: Ironship
-## Version: 0.9.97-retail
+## Version: 0.9.98-retail
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 

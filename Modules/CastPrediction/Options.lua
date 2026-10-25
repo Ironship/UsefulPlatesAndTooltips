@@ -386,7 +386,8 @@ local function buildPredictionTab(parent)
         "Show casts and channels. Instant spells are hidden unless this option is switched off."), y)
     y = place(checkRow(parent, "Learn from hits", "learn",
         "Every non-crit hit that matches the cast bends the estimate toward what you actually deal. "
-        .. "On Retail the description already holds your spell power, so nothing is learned there."), y)
+        .. "On Retail the description already holds your spell power, so only physical hits are learned there: "
+        .. "the target's armor takes a share off them that the description does not say."), y)
     y = place(checkRow(parent, "Manual spell power", "manualPower",
         "Use your own number instead of the client's reading, for testing or when the client hides it."), y)
     y = place(sliderRow(parent, "Spell power", "manualPowerValue", 0, 1200, 10, nil,
