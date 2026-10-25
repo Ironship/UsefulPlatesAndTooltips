@@ -133,6 +133,7 @@ local function collectTree()
 
     local found, any = {}, false
     local byId = {}
+    local list = {} -- every node with its tree position, for the census
     local function spellIDOf(nodeID, nodeInfo)
         local id = nodeInfo.spellID
         if type(id) == "number" and not isSecret(id) then return id end
@@ -169,6 +170,7 @@ local function collectTree()
                             -- by spell id too: a name is localised, the id is not
                             if spellID and type(rank) == "number" and not isSecret(rank) then
                                 byId[spellID] = { rank = rank, maxRank = maxRank, spellID = spellID }
+                                list[#list + 1] = { id = spellID, name = name, rank = rank, maxRank = maxRank }
                             end
                         end
                     end
@@ -177,7 +179,7 @@ local function collectTree()
         end
     end
     if not any then return nil end
-    return found, byId
+    return found, byId, list
 end
 Talents._collectTree = collectTree
 
@@ -291,6 +293,106 @@ function Talents.MultiplierFor(name, school, class)
         end
     end
     return 1 + percent, percent, table.concat(notes, ", "), unknown
+end
+
+---------------------------------------------------------------------------------------------
+-- The census: what the talent tree says about talents the list does not know
+---------------------------------------------------------------------------------------------
+
+local CENSUS_MAX_NODES, CENSUS_MAX_TEXT, CENSUS_SHORT_TEXT = 400, 240, 90
+
+-- A percent next to a word for damage or healing, in English and German (the clients tried so far): the text of a
+-- talent that probably moves a cast's numbers. A guess made only to put such talents first in the census: every
+-- talent's text is kept, so a talent it misses is still there to be read.
+local function looksLikeMultiplier(text)
+    local lower = text:lower()
+    if not lower:find("%d+%.?%d*%s*%%") then return false end
+    for _, word in ipairs({ "damage", "healing", "schaden", "heilung", "heilt", "wirkung", "effectiveness" }) do
+        if lower:find(word, 1, true) then return true end
+    end
+    return false
+end
+Talents.LooksLikeMultiplier = looksLikeMultiplier
+
+-- `text` cut to at most `limit` bytes without splitting a UTF-8 character (a German umlaut is two bytes, a Korean or
+-- Chinese character three): a half character in the saved file is not text.
+local function cutText(text, limit)
+    if #text <= limit then return text end
+    local cut = limit
+    while cut > 0 do
+        local nextByte = text:byte(cut + 1)
+        if not nextByte or nextByte < 0x80 or nextByte >= 0xC0 then break end
+        cut = cut - 1
+    end
+    return text:sub(1, cut)
+end
+Talents.CutText = cutText
+
+-- Talent ids acted on outside this file's list (DoTInfo's Ignite and Deep Wounds, ProcDots.lua).
+local OTHER_KNOWN_IDS = { [11119] = "DOTINFO_IGNITE", [12834] = "DOTINFO_DEEP_WOUNDS" }
+
+-- Every spell id the lists already act on (this file's talents, Auras.lua's talent ranks), to tell new from known.
+local function knownIds()
+    local known = {}
+    for id, key in pairs(OTHER_KNOWN_IDS) do known[id] = key end
+    for _, entry in ipairs(Talents.LIST) do
+        for _, id in ipairs(entry.ids or {}) do known[id] = entry.key end
+    end
+    return known
+end
+
+-- Reads the whole tree with each talent's live description and keeps it in settings.census[CLASS] (SavedVariables, so
+-- it can be read from the file afterwards: which talents carry a percent the lists do not use is then a matter of
+-- reading one table). Only on request (/upt castpred census): it takes some tens of kilobytes of the saved file, which
+-- is paid for by whoever asks. Returns the census table, or nil with a reason. A tree whose texts are mostly not
+-- loaded yet is not kept; one with a few missing is kept with their count (unread).
+function Talents.Census()
+    if isRetail() then return nil, "Retail descriptions already hold the talents" end
+    local settings = ns._settings and ns._settings()
+    if not settings then return nil, "settings not ready" end
+    local okCollect, found, _, list = pcall(collectTree)
+    if not okCollect or not found or not list or #list == 0 then return nil, "the talent tree cannot be read" end
+    local spent = 0
+    for _, node in ipairs(list) do spent = spent + (node.rank or 0) end
+    local okBuild, version, build = pcall(GetBuildInfo)
+    local class = playerClass()
+    local known, nodes, candidates, waiting, truncated = knownIds(), {}, 0, 0, false
+    for _, node in ipairs(list) do
+        if #nodes >= CENSUS_MAX_NODES then
+            truncated = true
+            break
+        end
+        local text = spellDescription(node.id)
+        if text then
+            text = text:gsub("%s+", " ")
+            local entry = { id = node.id, n = node.name, r = node.rank, m = node.maxRank }
+            if known[node.id] then
+                entry.k = known[node.id]
+            elseif looksLikeMultiplier(text) then
+                entry.c = true
+                candidates = candidates + 1
+            end
+            -- The whole text for what the lists use or may need to; a start of it for the rest, which keeps the saved
+            -- file small (a tree has a hundred and more talents).
+            entry.t = cutText(text, (entry.k or entry.c) and CENSUS_MAX_TEXT or CENSUS_SHORT_TEXT)
+            nodes[#nodes + 1] = entry
+        else
+            waiting = waiting + 1
+        end
+    end
+    if waiting > #list / 2 then return nil, "the descriptions are not loaded yet; try again in a minute" end
+    local census = { class = class, build = okBuild and tostring(build) or nil, version = okBuild and tostring(version) or nil,
+        points = spent, candidates = candidates, unread = waiting, truncated = truncated, nodes = nodes }
+    -- One census per class: the settings are shared by every character of the account.
+    if type(settings.census) ~= "table" then settings.census = {} end
+    settings.census[tostring(class)] = census
+    return census
+end
+
+-- Removes what Census kept (the whole table, every class).
+function Talents.ClearCensus()
+    local settings = ns._settings and ns._settings()
+    if settings then settings.census = nil end
 end
 
 -- The probe: what the class's trees answer for the curated talents, with the live description
