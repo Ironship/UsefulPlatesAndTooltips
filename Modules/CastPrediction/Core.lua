@@ -140,22 +140,42 @@ local function read(fn, ...)
     if ok and not isSecret(value) then return value end
 end
 
--- A stable key for the mob behind a unit token, nil when it cannot be tracked. A secret GUID only
--- affects that one token: another token naming the same mob still identifies it (UnitIsUnit).
+-- A plate keeps its key until removal, even if one token's GUID becomes hidden.
+local plateKeys, plateSerial = {}, 0
+local function plateToken(unit)
+    if unit:match("^nameplate%d+$") then return unit end
+    local plate = read(C_NamePlate and C_NamePlate.GetNamePlateForUnit, unit)
+    if type(plate) == "table" then
+        local token = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+        if not isSecret(token) and type(token) == "string" and token:match("^nameplate%d+$") then return token end
+    end
+    for i = 1, 40 do
+        local token = "nameplate" .. i
+        if read(UnitIsUnit, token, unit) == true then return token end
+    end
+end
+
 local warnedSecretGuid = false
 local function unitKey(unit)
-    local ok, guid = pcall(UnitGUID, unit)
-    if ok and not isSecret(guid) then return guid end
-    if ok and isSecret(guid) and type(UnitIsUnit) == "function" then
-        for i = 1, 40 do
-            local plateUnit = "nameplate" .. i
-            local sameOK, same = pcall(UnitIsUnit, plateUnit, unit)
-            if sameOK and not isSecret(same) and same == true then
-                local guidOK, plateGUID = pcall(UnitGUID, plateUnit)
-                if guidOK and not isSecret(plateGUID) and plateGUID then return plateGUID end
+    if isSecret(unit) or type(unit) ~= "string" or read(UnitExists, unit) ~= true then return end
+    local guid = read(UnitGUID, unit)
+    local token = plateToken(unit)
+    if token then
+        if not plateKeys[token] then
+            local plateGUID = read(UnitGUID, token)
+            if type(plateGUID) == "string" then
+                plateKeys[token] = plateGUID
+            elseif type(guid) == "string" then
+                plateKeys[token] = guid
+            else
+                plateSerial = plateSerial + 1
+                plateKeys[token] = "cast-plate:" .. plateSerial
             end
         end
+        return plateKeys[token]
     end
+    if type(guid) == "string" then return guid end
+    if unit ~= "target" and read(UnitIsUnit, unit, "target") == true then return unitKey("target") end
     if unit ~= "target" then return nil end
     if not warnedSecretGuid then
         warnedSecretGuid = true
@@ -248,6 +268,12 @@ end
 -- when the spell has no direct damage in its description (a pure DoT, a heal, a utility spell).
 -- Cached; a text that cannot be read now leaves the last reading in use.
 local viewCache = {}
+local function invalidateView()
+    for _, cached in pairs(viewCache) do cached.checked = -math.huge end
+    bonusReadAt = -math.huge
+end
+ns.InvalidateView = invalidateView
+
 local function buildView(spellID, channel)
     if isSecret(spellID) or type(spellID) ~= "number" then return false end
     local cacheKey = channel and (spellID .. ":channel") or spellID
@@ -260,11 +286,8 @@ local function buildView(spellID, channel)
     local text = getDescription(spellID)
     if not text then
         requestLoad(spellID)
-        if cached then
-            cached.checked = GetTime()
-            return cached.view
-        end
-        return false
+        text = cached and cached.text
+        if not text then return false end
     end
     -- A selected enemy does not establish who stands inside a ground/area channel.
     if channel then
@@ -532,10 +555,13 @@ local function onCastSent(targetName, castGUID, spellID)
     if not token then return end
     local unit = selectedEnemy()
     local key = unit and unitKey(unit) or nil
+    local hardTarget = unit == "target"
     local named = not isSecret(targetName) and type(targetName) == "string" and targetName ~= ""
     if named and unit and read(UnitName, unit) ~= targetName then key = nil end
     for _, other in ipairs({ "focus", "mouseover", "softenemy" }) do
-        if read(UnitExists, other) == true and read(UnitCanAttack, "player", other) ~= false
+        if not (other == "softenemy" and hardTarget)
+            and read(UnitExists, other) == true and read(UnitCanAttack, "player", other) ~= false
+            and read(UnitIsDeadOrGhost, other) ~= true
             and (not named or read(UnitName, other) == targetName) and unitKey(other) ~= key then
             key = nil
         end
@@ -656,7 +682,8 @@ end
 -- sits in the predicted band is this cast landing; it calibrates the estimate. Crits match the
 -- band too (their ratio is inside the tolerated one) but never teach it.
 local function onUnitCombat(unit, action, flag, amount, school)
-    if not castInProgress or castInProgress.channel or not castInProgress.succeededAt then return end
+    if not castInProgress or castInProgress.channel or not castInProgress.succeededAt
+        or castInProgress.landedAt then return end
     if isSecret(action) then return end
     local key = unitKey(unit)
     if not key or key ~= castInProgress.key then return end
@@ -1117,17 +1144,14 @@ end
 -- the range (a lethal cue must not lie: only damage the spell is certain to reach counts).
 local function drawMarker(damage, maxHealth, health, state)
     local killValue = number(state.min) or damage
-    local ok = pcall(function()
-        if not layoutDamage(marker, markerClip, healthBar) then error("health bar layout unavailable") end
-        marker:SetMinMaxValues(0, maxHealth)
-        marker:SetValue(damage)
-        killBar:SetMinMaxValues(0, health)
-        killBar:SetValue(killValue)
-    end)
-    if not ok then
+    if not layoutDamage(marker, markerClip, healthBar) then
         hideAll()
         return false
     end
+    marker:SetMinMaxValues(0, maxHealth)
+    marker:SetValue(damage)
+    killBar:SetMinMaxValues(0, health)
+    killBar:SetValue(killValue)
     applyAppearance(state)
     markerClip:SetShown(settings.showMarker)
     marker:SetShown(settings.showMarker)
@@ -1300,15 +1324,12 @@ end
 local function drawPlate(w, damage, maxHealth, health, state)
     keepPlateAbove(w)
     applyPlateStyle(w, state)
-    local ok = pcall(function()
-        if not layoutDamage(w.marker, w.clip, w.healthBar) then error("health bar layout unavailable") end
-        w.marker:SetMinMaxValues(0, maxHealth)
-        w.marker:SetValue(damage)
-    end)
-    if not ok then
+    if not layoutDamage(w.marker, w.clip, w.healthBar) then
         hidePlateWidgets(w)
         return false
     end
+    w.marker:SetMinMaxValues(0, maxHealth)
+    w.marker:SetValue(damage)
     w.marker:SetShown(settings.showMarker)
     w.clip:SetShown(settings.showMarker)
     w.displayDamage = settings.showMarker and damage or 0
@@ -1420,20 +1441,24 @@ local reportedErrors = {}
 local function refresh()
     local now = GetTime()
     housekeep(now)
-    local ok = pcall(updateMarker, now)
-    if not ok then
-        dropCast("display error")
-        hideAll()
-    end
+    updateMarker(now)
     refreshPlates(now)
 end
 
 local function safeRefresh()
     local ok, err = pcall(refresh)
-    if not ok and not reportedErrors[err] then
-        reportedErrors[err] = true
-        trace("ERROR in display update: " .. tostring(err))
-        print("Display error (logged): " .. tostring(err))
+    if not ok then
+        dropCast("display error")
+        local cleanupOK, cleanupError = pcall(function()
+            hideAll()
+            for _, w in pairs(widgetsByPlate) do hidePlateWidgets(w) end
+        end)
+        if not cleanupOK then err = tostring(err) .. "; cleanup: " .. tostring(cleanupError) end
+        if not reportedErrors[err] then
+            reportedErrors[err] = true
+            trace("ERROR in display update: " .. tostring(err))
+            print("Display error (logged): " .. tostring(err))
+        end
     end
 end
 
@@ -1493,6 +1518,12 @@ frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player")
 frame:RegisterEvent("UNIT_COMBAT")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+for _, event in ipairs({ "UNIT_AURA", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_REGEN_ENABLED",
+    "SPELL_TEXT_UPDATE", "SPELL_DATA_LOAD_RESULT", "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED" }) do
+    pcall(frame.RegisterEvent, frame, event)
+end
 -- Never register COMBAT_LOG_EVENT_UNFILTERED: Forever forbids it and shows a "blocked" popup.
 
 frame:SetScript("OnEvent", function(self, event, ...)
@@ -1515,15 +1546,40 @@ frame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_ENTERING_WORLD" then
         dropCast("loading screen")
         wipe(recipients)
-        bonusReadAt = 0
-        viewCache = {}
+        wipe(plateKeys)
+        invalidateView()
         if ns.Talents then ns.Talents.Invalidate() end
         safeRefresh()
 
     elseif event == "PLAYER_SPECIALIZATION_CHANGED" then
+        invalidateView()
         if ns.Talents then ns.Talents.Invalidate() end
         dropCast("specialization changed")
         safeRefresh()
+
+    elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
+        local token = ...
+        if isSecret(token) or type(token) ~= "string" then return end
+        local old = plateKeys[token]
+        plateKeys[token] = nil
+        if old and old:match("^cast%-plate:") then
+            for _, sent in pairs(recipients) do
+                if sent.key == old then sent.key = nil end
+            end
+            if castInProgress and castInProgress.key == old then dropCast("nameplate recycled") end
+        end
+        safeRefresh()
+
+    elseif event == "UNIT_AURA" then
+        local unit = ...
+        if not isSecret(unit) and unit == "player" then invalidateView() end
+
+    elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_REGEN_ENABLED"
+        or event == "SPELL_TEXT_UPDATE" or event == "SPELL_DATA_LOAD_RESULT" or event == "SPELLS_CHANGED"
+        or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
+        invalidateView()
+        if ns.Talents and (event == "SPELLS_CHANGED" or event == "PLAYER_TALENT_UPDATE"
+            or event == "TRAIT_CONFIG_UPDATED") then ns.Talents.Invalidate() end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
         dropCast("target changed")

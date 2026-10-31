@@ -68,6 +68,7 @@ local function updatePreview()
 end
 
 local function changed()
+    ns.InvalidateView()
     refreshControls()
     updatePreview()
 end

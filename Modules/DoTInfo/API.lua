@@ -20,8 +20,15 @@ for i = 1, 40 do WATCHED[#WATCHED + 1] = "nameplate" .. i end
 
 local api = {}
 local callbacks = {} -- owner -> function
-local lastSeen = {} -- unit token -> "mob key|total|count" when last reported
+local lastSeen = {} -- unit token -> "mob key|identity version|total|count" when last reported
+local identityVersions = {} -- Forever's reusable fallback keys need their lifecycle too.
 local reportedErrors = {}
+
+function ns.apiIdentityChanged(unit)
+    if type(unit) ~= "string" or (type(issecretvalue) == "function" and issecretvalue(unit)) then return end
+    local key = unit == "target" and unit or (unit:match("^nameplate%d+$") and ("plate:" .. unit))
+    if key then identityVersions[key] = (identityVersions[key] or 0) + 1 end
+end
 
 local function trackedKey(unit)
     if type(unit) ~= "string" or not ns.db then return nil end
@@ -49,6 +56,10 @@ function api.GetDoTs(unit)
             damage = math.floor(entry.damage + 0.5), appliedAt = entry.appliedAt, expiresAt = entry.expiresAt,
             provisional = entry.provisional or false }
     end
+    table.sort(result, function(a, b)
+        if a.appliedAt ~= b.appliedAt then return a.appliedAt < b.appliedAt end
+        return a.name < b.name
+    end)
     return result
 end
 
@@ -75,7 +86,7 @@ local function fire(unit)
     end
 end
 
--- After every refresh (0.2s, and on casts and ticks): report each watched unit whose numbers changed.
+-- After every refresh (0.1s, and on casts and ticks): report each watched unit whose numbers or identity changed.
 function ns.afterRefresh()
     if next(callbacks) == nil then
         if next(lastSeen) then wipe(lastSeen) end
@@ -87,7 +98,7 @@ function ns.afterRefresh()
         local key = exists == true and trackedKey(unit)
         if key then
             local total, count = api.GetRemainingDamage(unit)
-            if count > 0 then state = key .. "|" .. total .. "|" .. count end
+            state = key .. "|" .. (identityVersions[key] or 0) .. "|" .. total .. "|" .. count
         end
         if state ~= lastSeen[unit] then
             lastSeen[unit] = state

@@ -37,8 +37,8 @@ DoTs waiting for their first tick (when the addon isn't sure they landed) aren't
 ### `DoT.RegisterCallback(owner, func)` / `DoT.UnregisterCallback(owner)`
 
 `func(event, unit)` runs when the remaining damage on `target`, `focus` or a `nameplateN` changes, or that unit now
-shows another mob. `event` is `"DOTS_CHANGED"`. `owner` is any value identifying you (your addon's name, a frame);
-registering again with the same owner replaces the function. Changes are checked every 0.2 seconds and on casts and
+shows another mob, including changes between mobs with no tracked DoTs. `event` is `"DOTS_CHANGED"`. `owner` is any value identifying you (your addon's name, a frame);
+registering again with the same owner replaces the function. Changes are checked every 0.1 seconds and on casts and
 ticks. Errors in your function are caught and written to the addon's DoT log; they don't stop other callbacks.
 
 ## Drawing it: the health is secret

@@ -92,7 +92,7 @@ end
 function ns.CheckSpellbook(trace)
     local ids = spellbookIDs()
     if #ids == 0 then print("DoTInfo check: the spellbook could not be read.") return end
-    local read, unread, waiting, parsed = {}, {}, 0, {}
+    local read, unread, waiting, parsed, errors = {}, {}, 0, {}, 0
     for _, id in ipairs(ids) do
         local okN, name, desc = pcall(function()
             local n = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id) or (GetSpellInfo and GetSpellInfo(id))
@@ -104,7 +104,11 @@ function ns.CheckSpellbook(trace)
             -- Retail reads only its own list of spells
         elseif type(name) == "string" and type(desc) == "string" and desc ~= "" then
             local ok, total, school, duration = pcall(ns.ReadSpellText, id, desc)
-            if ok and total then
+            if not ok then
+                errors = errors + 1
+                trace(string.format("CHECK ERROR %s (id %d): %s", name, id, tostring(total)))
+                unread[#unread + 1] = { id = id, name = name, desc = desc }
+            elseif total then
                 read[#read + 1] = string.format("%s (%d over %ss)", name, total, tostring(duration))
                 parsed[#parsed + 1] = { id = id, total = total, duration = duration }
             elseif ok and school ~= true and mentionsSeconds(desc) and desc:find("%d") then
@@ -117,8 +121,8 @@ function ns.CheckSpellbook(trace)
     end
     local locale = (GetLocale and GetLocale()) or "?"
     storeCensus(locale, #ids, parsed, unread, waiting)
-    print(string.format("DoTInfo check (%s): %d spells, %d read as a DoT, %d mention seconds but give no DoT%s.", locale,
-        #ids, #read, #unread, waiting > 0 and (", " .. waiting .. " texts not loaded yet, run it again") or ""))
+    print(string.format("DoTInfo check (%s): %d spells, %d read as a DoT, %d unread (including %d parser errors)%s.", locale,
+        #ids, #read, #unread, errors, waiting > 0 and (", " .. waiting .. " texts not loaded yet, run it again") or ""))
     if #read > 0 then print("Read: " .. table.concat(read, ", ")) end
     trace(string.format("CHECK %s: %d spells, %d read, %d unread", locale, #ids, #read, #unread))
     for i, entry in ipairs(unread) do

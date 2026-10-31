@@ -187,9 +187,11 @@ local function layoutOverlay(o, healthBar)
     local fraction = (tonumber(db().heightPercent) or 45) / 100
     local segmentHeight = math.max(2, math.floor(height * fraction + 0.5))
     local signature = width .. ":" .. height .. ":" .. segmentHeight
-    if o.layoutSignature == signature then return end
-    o.layoutSignature = signature
     local fill = ask(healthBar.GetStatusBarTexture, healthBar)
+    if isSecret(fill) then fill = nil end
+    local ownFill = ask(o.bar.GetStatusBarTexture, o.bar)
+    if isSecret(ownFill) then ownFill = nil end
+    if o.layoutSignature == signature and o.healthFill == fill and o.ownFill == ownFill then return end
     local hasFill = fill ~= nil and (type(fill) == "table" or type(fill) == "userdata")
     -- Secret-safe: the anchor is the health fill's moving right edge; no Lua math on it. Without a fill
     -- texture the band is drawn across the whole bar (a plain left-to-right band).
@@ -217,12 +219,12 @@ local function layoutOverlay(o, healthBar)
     end
     if o.hot then
         -- after the end of the direct heal: the own bar's fill reaches health + heal
-        local ownFill = ask(o.bar.GetStatusBarTexture, o.bar)
         local after = (ownFill ~= nil and (type(ownFill) == "table" or type(ownFill) == "userdata")) and ownFill
             or (hasFill and fill or nil)
         anchorClip(o.hot.clip, after)
         sizeBar(o.hot)
     end
+    o.layoutSignature, o.healthFill, o.ownFill = signature, fill, ownFill
 end
 
 local function paintLayer(layer, color, opacity)
@@ -289,7 +291,7 @@ local function updateBar(unit, healthBar, enabled)
         if not o then return end
     end
     o.unit = unit
-    local ok = pcall(function()
+    local ok, err = pcall(function()
         layoutOverlay(o, healthBar)
         paintOverlay(o)
         -- Your own band stays shown (empty) while a heal over time follows it, so that band has a fill
@@ -310,7 +312,15 @@ local function updateBar(unit, healthBar, enabled)
             o.label:SetText(string.format("~%d", math.floor(incoming + 0.5)))
         end
     end)
-    if not ok then hideOverlay(o) end
+    if not ok then
+        o.layoutSignature = nil
+        hideOverlay(o)
+        if o.lastError ~= err then
+            o.lastError = err
+            trace("ERROR in display update: " .. tostring(err))
+            print("Display error: " .. tostring(err))
+        end
+    end
 end
 ns.UpdateBar = updateBar
 
@@ -420,22 +430,24 @@ end
 
 local function updateAll()
     if not settings then return end
-    updateBar("player", playerBar(), settings.player)
-    updateBar("target", targetBar(), settings.target)
-    local anyGroup = settings.party or settings.raid
     local seen = {}
-    if anyGroup then
+    local function update(unit, bar, enabled)
+        if type(bar) == "table" then seen[bar] = true end
+        updateBar(unit, bar, enabled)
+    end
+    update("player", playerBar(), settings.player)
+    update("target", targetBar(), settings.target)
+    if settings.party or settings.raid then
         for _, entry in ipairs(groupBars()) do
             local isRaid = entry.unit:match("^raid%d+$") ~= nil
-            local wanted = isRaid and settings.raid or settings.party
-            seen[entry.bar] = true
-            updateBar(entry.unit, entry.bar, wanted)
+            local wanted
+            if isRaid then wanted = settings.raid else wanted = settings.party end
+            update(entry.unit, entry.bar, wanted)
         end
     end
-    -- A bar whose group membership is gone (or switched off): hide its overlay.
+    -- Replaced primary bars and departed group bars must both leave the display.
     for healthBar, o in pairs(overlays) do
-        local isGroup = o.unit and (o.unit:match("^party%d+$") or o.unit:match("^raid%d+$"))
-        if isGroup and not seen[healthBar] then hideOverlay(o) end
+        if not seen[healthBar] then hideOverlay(o) end
     end
 end
 ns.UpdateAll = updateAll
@@ -450,7 +462,6 @@ local UNIT_EVENTS = {
     UNIT_MAXHEALTH = true,
 }
 
-local dirty = true
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -477,15 +488,13 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     if UNIT_EVENTS[event] then
         -- The events fire for every unit and every change; one bounded pass on the tick keeps
         -- the group scans off the event path (a 40-man health tick storm stays cheap).
-        dirty = true
         return
     end
     -- PLAYER_ENTERING_WORLD / GROUP_ROSTER_UPDATE / PLAYER_TARGET_CHANGED
-    dirty = false
     updateAll()
 end)
 
--- The tick: what the events marked dirty gets drawn here, bounded to one pass per interval.
+-- Periodic updates also advance HoTs and discover late or replaced frames.
 local sinceUpdate = 0
 frame:SetScript("OnUpdate", function(self, elapsed)
     if not settings then return end

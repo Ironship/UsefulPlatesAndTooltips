@@ -57,15 +57,17 @@ function Frames.Resolve(path)
   path = strtrim(path)
   if path == "" then return nil end
   local ok, object = pcall(function()
-    local object
+    local object, first = nil, true
     for part in path:gmatch("[^%.]+") do
-      if object == nil then
+      if first then
         object = _G[part]
+        first = false
       elseif type(object) == "table" then
         object = object[part]
       else
         return nil
       end
+      if object == nil then return nil end
     end
     return object
   end)

@@ -320,8 +320,7 @@ local function usableNow(entry)
   if not entry.link then return false end
   if entry.apiUsable == false then return false end
   if entry.apiUsable == true then return true end
-  local usable = ask(C_Item and C_Item.IsUsableItem, entry.link)
-  return not isSecret(usable) and usable == true
+  return M.CanEquipItem(entry.link) == true
 end
 
 -- An upgrade by THIS module's own evaluator (never another addon's weights): the same

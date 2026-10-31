@@ -20,19 +20,40 @@ end
 
 local function ask(fn, ...)
     if type(fn) ~= "function" then return nil end
-    local ok, a = pcall(fn, ...)
+    local ok, a, b = pcall(fn, ...)
     if not ok or isSecret(a) then return nil end
-    return a
+    if isSecret(b) then return nil end
+    return a, b
 end
 
--- A name without its realm: the cast event names a cross-realm player "Name-Realm", the unit frame "Name".
 local function plainName(name)
     if isSecret(name) or type(name) ~= "string" or name == "" then return nil end
-    return (name:gsub("%-.*$", ""))
+    return (name:gsub("%s+", ""))
 end
 
-local sent = {}    -- [castGUID or spellID] = { name, at }
-local active = {}  -- [name] = { [spellID] = { total, duration, at } }
+local function fullName(unit)
+    local name, realm = ask(UnitFullName or UnitName, unit)
+    name = plainName(name)
+    if not name then return end
+    if name:find("-", 1, true) then return name end
+    realm = plainName(realm) or plainName(ask(GetNormalizedRealmName)) or plainName(ask(GetRealmName))
+    if realm then return name .. "-" .. realm end
+end
+
+local function unitIdentity(unit)
+    local guid = ask(UnitGUID, unit)
+    local playerName = ask(UnitIsPlayer, unit) == true and fullName(unit) or nil
+    return type(guid) == "string" and guid or playerName, playerName
+end
+
+local sent = {}    -- [castGUID or spellID] = { key, name (player alias, realm included), at }
+local active = {}  -- [GUID or player full name] = { [spellID] = { total, duration, at } }
+local reportedErrors = {}
+local function report(message)
+    if reportedErrors[message] then return end
+    reportedErrors[message] = true
+    BIT.Say("HealPrediction: " .. message)
+end
 
 local function settings()
     return ns._settings and ns._settings() or nil
@@ -44,15 +65,35 @@ local function spellData()
     return module
 end
 
--- Who the cast went to: the name the client sent, or, for a cast without one, the target when it is a
--- friend and yourself otherwise (the game retargets a beneficial spell to you when the target is hostile).
-local function recipientName(targetName)
+-- Resolve bare names against known friendlies; same-name players on different realms are ambiguous.
+local function recipientKey(targetName)
+    if isSecret(targetName) then return end
     local named = plainName(targetName)
-    if named then return named end
-    if ask(UnitExists, "target") == true and ask(UnitCanAssist, "player", "target") == true then
-        return plainName(ask(UnitName, "target"))
+    if named then
+        local found, alias, ambiguous
+        local function consider(unit)
+            if ask(UnitExists, unit) ~= true or ask(UnitCanAssist, "player", unit) ~= true then return end
+            local name = fullName(unit)
+            if name and (name == named or (not named:find("-", 1, true) and name:match("^[^-]+") == named)) then
+                local key, playerName = unitIdentity(unit)
+                if not key then ambiguous = true return end
+                if found and found ~= key and (not alias or alias ~= playerName) then ambiguous = true end
+                if not found or key ~= playerName then found, alias = key, playerName end
+            end
+        end
+        for _, unit in ipairs({ "player", "target", "focus", "mouseover" }) do consider(unit) end
+        for i = 1, 4 do consider("party" .. i) end
+        for i = 1, 40 do consider("raid" .. i) end
+        if ambiguous then return end
+        if found then return found, alias end
+        if named:find("-", 1, true) then return named, named end
+        return
     end
-    return plainName(ask(UnitName, "player"))
+    -- ponytail: an unnamed cast uses the game's default target/self assumption, not a macro parser.
+    if ask(UnitExists, "target") == true and ask(UnitCanAssist, "player", "target") == true then
+        return unitIdentity("target")
+    end
+    return unitIdentity("player")
 end
 
 local function token(castGUID, spellID)
@@ -61,41 +102,57 @@ local function token(castGUID, spellID)
 end
 
 function Hots.OnSent(targetName, castGUID, spellID)
+    local db = settings()
+    if ns.off or not db or db.showHots == false then return end
     local key = token(castGUID, spellID)
     if not key then return end
     local now = GetTime()
     for old, entry in pairs(sent) do
         if now - entry.at > MAX_PENDING_SECONDS then sent[old] = nil end
     end
-    sent[key] = { name = recipientName(targetName), at = now }
+    if type(key) == "number" and sent[key] then
+        sent[key].ambiguous = true
+        return
+    end
+    local recipient, name = recipientKey(targetName)
+    sent[key] = { key = recipient, name = name, at = now }
 end
 
 function Hots.OnSucceeded(castGUID, spellID)
-    local db = settings()
-    if not db or db.showHots == false or isSecret(spellID) or type(spellID) ~= "number" then return end
     local key = token(castGUID, spellID)
     local entry = key and sent[key]
     if key then sent[key] = nil end
-    if not entry or not entry.name then return end
+    local db = settings()
+    if ns.off or not db or db.showHots == false or isSecret(spellID) or type(spellID) ~= "number" then return end
+    if not entry or entry.ambiguous or GetTime() - entry.at > MAX_PENDING_SECONDS then return end
     local module = spellData()
     if not module then return end
     local ok, view = pcall(module.Compute, spellID)
-    if not ok or type(view) ~= "table" or type(view.hot) ~= "table" then return end
+    if not ok then report("HoT estimate failed for spell " .. spellID .. ": " .. tostring(view)) return end
+    if type(view) ~= "table" or type(view.hot) ~= "table" then return end
     -- A spell that also hurts is not a heal over time on a friend; the direct part of a heal is the client's.
     if view.direct or view.dot then return end
+    if not entry.key then report("HoT recipient unavailable or ambiguous for spell " .. spellID) return end
     local total, duration = tonumber(view.hot.total), tonumber(view.hot.duration)
-    if not total or not duration or total <= 0 or duration <= 0 then return end
-    active[entry.name] = active[entry.name] or {}
-    active[entry.name][spellID] = { total = total, duration = duration, at = GetTime() }
+    if not total or not duration or total <= 0 or duration <= 0
+        or total ~= total or duration ~= duration or total == math.huge or duration == math.huge then
+        report("Invalid HoT estimate for spell " .. spellID)
+        return
+    end
+    local list = active[entry.key] or (entry.name and active[entry.name]) or {}
+    active[entry.key] = list
+    list[spellID] = { total = total, duration = duration, at = GetTime() }
+    if entry.name then active[entry.name] = list end
 end
 
 -- The healing still to come from your own heals over time on this unit's frame, over the next
 -- `horizon` seconds of each effect; nil when there is none.
 function Hots.AmountFor(unit, horizon)
     local db = settings()
-    if not db or db.showHots == false or not next(active) then return nil end
-    local name = plainName(ask(UnitName, unit))
-    local list = name and active[name]
+    if ns.off or not db or db.showHots == false or not next(active) then return nil end
+    if ask(UnitCanAssist, "player", unit) ~= true then return nil end
+    local key, name = unitIdentity(unit)
+    local list = (key and active[key]) or (name and active[name])
     if not list then return nil end
     horizon = tonumber(horizon) or 4
     local now, sum = GetTime(), 0
@@ -107,7 +164,11 @@ function Hots.AmountFor(unit, horizon)
             sum = sum + hot.total * math.min(left, horizon) / hot.duration
         end
     end
-    if next(list) == nil then active[name] = nil end
+    if next(list) == nil then
+        for alias, value in pairs(active) do
+            if value == list then active[alias] = nil end
+        end
+    end
     if sum <= 0 then return nil end
     return sum
 end
@@ -117,7 +178,8 @@ function Hots.Reset()
 end
 
 local frame = CreateFrame("Frame")
-for _, event in ipairs({ "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "PLAYER_ENTERING_WORLD", "PLAYER_DEAD" }) do
+for _, event in ipairs({ "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED",
+    "UNIT_SPELLCAST_INTERRUPTED", "PLAYER_ENTERING_WORLD", "PLAYER_DEAD" }) do
     pcall(frame.RegisterEvent, frame, event)
 end
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
@@ -127,7 +189,10 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         return
     elseif event == "UNIT_SPELLCAST_SENT" then
         Hots.OnSent(arg2, arg3, arg4) -- unit, target, castGUID, spellID
-    else
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
         Hots.OnSucceeded(arg2, arg3)  -- unit, castGUID, spellID
+    else
+        local key = token(arg2, arg3)
+        if key then sent[key] = nil end
     end
 end)

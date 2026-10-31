@@ -2661,6 +2661,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         safeRefresh()
 
     elseif ns.Retail and (event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED") then
+        if ns.apiIdentityChanged then ns.apiIdentityChanged(...) end
         local old
         if event == "NAME_PLATE_UNIT_ADDED" then old = ns.Retail.AddPlate(...)
         elseif event == "NAME_PLATE_UNIT_REMOVED" then old = ns.Retail.RemovePlate(...)
@@ -2673,6 +2674,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         safeRefresh()
 
     elseif event == "NAME_PLATE_UNIT_ADDED" or event == "NAME_PLATE_UNIT_REMOVED" then
+        if ns.apiIdentityChanged then ns.apiIdentityChanged(...) end
         -- Forever: a plate token goes to the next mob that gets a plate, so DoTs keyed by it ("plate:nameplateN",
         -- used while mob GUIDs are secret) belonged to the mob it showed before.
         local token = ...
@@ -2688,6 +2690,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
+        if ns.apiIdentityChanged then ns.apiIdentityChanged("target") end
         if ns.Retail then
             local old = ns.Retail.TargetChanged()
             if old then
