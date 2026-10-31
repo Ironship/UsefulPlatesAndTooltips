@@ -1383,13 +1383,14 @@ local function dotBreakdown(key)
                     or ((dot.predictionOnly or (dot.unsure and dot.normalTicks == 0)) and 1 or 0),
                     appliedAt = dot.appliedAt }
             end
-            table.insert(list, { name = name, school = dot.school, appliedAt = dot.appliedAt,
-                damage = remainingDamage(dot), familyID = dot.familyID, segmentOrder = dot.segmentOrder,
+            table.insert(list, { name = name, spellID = dot.spellID, school = dot.school, appliedAt = dot.appliedAt,
+                expiresAt = dot.expiresAt, damage = remainingDamage(dot), familyID = dot.familyID, segmentOrder = dot.segmentOrder,
                 refreshDue = refreshDueFor(name, dot) })
         end
     end
     if cast and not isWaiting(cast.dot) then
-        table.insert(list, { name = cast.name, school = cast.dot.school, appliedAt = cast.dot.appliedAt,
+        table.insert(list, { name = cast.name, spellID = cast.spellID, school = cast.dot.school, appliedAt = cast.dot.appliedAt,
+            expiresAt = cast.dot.expiresAt,
             segmentOrder = { rank = 3, appliedAt = cast.dot.appliedAt },
             damage = remainingDamage(cast.dot), familyID = cast.dot.familyID, provisional = true, refreshDue = refreshDueFor(cast.name, cast.dot) })
     end
@@ -2327,6 +2328,14 @@ local function safeRefresh()
         reportedErrors[err] = true
         trace("ERROR in display update: " .. tostring(err))
         print("Display error (logged): " .. tostring(err))
+    end
+    -- API.lua: tells other addons which units' numbers changed.
+    if ns.afterRefresh then
+        local apiOk, apiErr = pcall(ns.afterRefresh)
+        if not apiOk and not reportedErrors[apiErr] then
+            reportedErrors[apiErr] = true
+            trace("ERROR in API update: " .. tostring(apiErr))
+        end
     end
     if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(TargetFrame) end
 end

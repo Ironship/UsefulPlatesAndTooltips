@@ -180,6 +180,17 @@ local function autoHealthBar(plate)
   return bar, path or "no visible health bar found"
 end
 
+-- Threat Plates parents its plate frame to WorldFrame, so the search above never reaches it: the plate only
+-- references it as plate.TPFrame (Active while Threat Plates draws the unit), with the bar at .visual.Healthbar
+-- (.healthbar in older versions). Adapted from Does It Die v0.8.4.
+local function threatPlatesBar(plate)
+  local tp = plate.TPFrame
+  if type(tp) ~= "table" or tp.Active ~= true or type(tp.visual) ~= "table" then return end
+  local bar = tp.visual.Healthbar
+  if not visibleHealthBar(bar) then bar = tp.visual.healthbar end
+  if visibleHealthBar(bar) then return bar end
+end
+
 -- Prefer known integrations, then visible Blizzard bars, then a cached search of addon fields.
 function Plate.HealthBar(plate)
   if type(plate) ~= "table" then return nil, "no nameplate" end
@@ -223,6 +234,8 @@ function Plate.HealthBar(plate)
       end
     end
   end
+  local tpOk, tpBar = pcall(threatPlatesBar, plate)
+  if tpOk and tpBar then return tpBar, "ThreatPlates.TPFrame.visual.Healthbar" end
   local ok, bar, path = pcall(function()
     local unitFrame = plate.UnitFrame
     if type(unitFrame) ~= "table" then return end
