@@ -47,7 +47,7 @@ local function unitIdentity(unit)
 end
 
 local sent = {}    -- [castGUID or spellID] = { key, name (player alias, realm included), at }
-local active = {}  -- [GUID or player full name] = { [spellID] = { total, duration, at } }
+local active = {}  -- [GUID or player full name] = { [spell name or ID] = { total, duration, at } }
 local reportedErrors = {}
 local function report(message)
     if reportedErrors[message] then return end
@@ -61,7 +61,7 @@ end
 
 local function spellData()
     local module = BIT.modules and BIT.modules.SpellDamageInfo
-    if type(module) ~= "table" or type(module.Compute) ~= "function" then return nil end
+    if type(module) ~= "table" or type(module.ComputeHot) ~= "function" then return nil end
     return module
 end
 
@@ -127,13 +127,11 @@ function Hots.OnSucceeded(castGUID, spellID)
     if not entry or entry.ambiguous or GetTime() - entry.at > MAX_PENDING_SECONDS then return end
     local module = spellData()
     if not module then return end
-    local ok, view = pcall(module.Compute, spellID)
-    if not ok then report("HoT estimate failed for spell " .. spellID .. ": " .. tostring(view)) return end
-    if type(view) ~= "table" or type(view.hot) ~= "table" then return end
-    -- A spell that also hurts is not a heal over time on a friend; the direct part of a heal is the client's.
-    if view.direct or view.dot then return end
+    local ok, hot, family = pcall(module.ComputeHot, spellID)
+    if not ok then report("HoT estimate failed for spell " .. spellID .. ": " .. tostring(hot)) return end
+    if type(hot) ~= "table" then return end
     if not entry.key then report("HoT recipient unavailable or ambiguous for spell " .. spellID) return end
-    local total, duration = tonumber(view.hot.total), tonumber(view.hot.duration)
+    local total, duration = tonumber(hot.total), tonumber(hot.duration)
     if not total or not duration or total <= 0 or duration <= 0
         or total ~= total or duration ~= duration or total == math.huge or duration == math.huge then
         report("Invalid HoT estimate for spell " .. spellID)
@@ -141,7 +139,8 @@ function Hots.OnSucceeded(castGUID, spellID)
     end
     local list = active[entry.key] or (entry.name and active[entry.name]) or {}
     active[entry.key] = list
-    list[spellID] = { total = total, duration = duration, at = GetTime() }
+    if isSecret(family) or type(family) ~= "string" or family == "" then family = spellID end
+    list[family] = { total = total, duration = duration, at = GetTime() }
     if entry.name then active[entry.name] = list end
 end
 
@@ -156,10 +155,10 @@ function Hots.AmountFor(unit, horizon)
     if not list then return nil end
     horizon = tonumber(horizon) or 4
     local now, sum = GetTime(), 0
-    for spellID, hot in pairs(list) do
+    for family, hot in pairs(list) do
         local left = hot.at + hot.duration - now
         if left <= 0 then
-            list[spellID] = nil
+            list[family] = nil
         else
             sum = sum + hot.total * math.min(left, horizon) / hot.duration
         end
@@ -179,12 +178,21 @@ end
 
 local frame = CreateFrame("Frame")
 for _, event in ipairs({ "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_FAILED",
-    "UNIT_SPELLCAST_INTERRUPTED", "PLAYER_ENTERING_WORLD", "PLAYER_DEAD" }) do
+    "UNIT_SPELLCAST_INTERRUPTED", "PLAYER_ENTERING_WORLD", "PLAYER_DEAD", "PLAYER_EQUIPMENT_CHANGED",
+    "PLAYER_REGEN_ENABLED", "UNIT_AURA" }) do
     pcall(frame.RegisterEvent, frame, event)
 end
 frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
     if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_DEAD" then
         Hots.Reset()
+    end
+    if event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_EQUIPMENT_CHANGED"
+        or event == "PLAYER_REGEN_ENABLED" or (event == "UNIT_AURA" and not isSecret(unit) and unit == "player") then
+        local db = settings()
+        local module = spellData()
+        if not ns.off and db and db.showHots ~= false and module and module.RefreshHealingBonus then
+            module.RefreshHealingBonus()
+        end
     elseif isSecret(unit) or unit ~= "player" then
         return
     elseif event == "UNIT_SPELLCAST_SENT" then

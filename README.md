@@ -48,6 +48,8 @@ The estimate also holds the talents and effects the description leaves out (Fore
 
 What the hits teach is a running mean of what each hit says the factor should have been, pulled toward 1 by two hits' worth in what a cast shows, with a memory of about nine hits. (Versions up to 0.9.83 blended each hit's ratio to the already scaled prediction into the factor and so settled on the square root of the truth, 0.89 where 0.80 was right; factors saved by them are squared once on the first load.) On Retail only direct physical hits are learned from: the description holds the player's own numbers but not the target's armor, which took 30% off a hunter's Steady Shot in a saved log. A cast whose hit matched nothing the estimate expects, while damage of its school landed within reach of it, is tallied, and `/upt castpred learned` lists the learned factors with their hits and that tally, so a spell whose factor is too far from 1 to be learned shows. `/upt castpred census` reads the whole talent tree into the saved settings (`census`): each talent's live text (cut to 90 bytes, 240 for the talents the lists use or that it flags), marking the talents with a percent next to damage or healing that the lists do not use; `/upt castpred census clear` removes it. Nothing is read or kept until you ask.
 
+Penance's damage channel uses the three bolts stated in its description: the immediate bolt is already spent, then the remaining two bolts disappear at their scheduled times. Channel timing changes update the schedule. Scripted volleys without linked coefficient data use description amounts, not an invented spell-power share.
+
 Only the first matched impact can calibrate a cast; later damage cannot add samples or restart its fade. This is still a heuristic: `UNIT_COMBAT` does not identify the attacker or spell. Cached estimates are refreshed after spell, talent, equipment, player-aura and manual spell-power changes, retaining the last readable description when the client hides it.
 
 The direct hit is separate from DoTInfo's damage-over-time marker. For rank-1 Fireball, the unmodified average is 18 damage on impact plus 2 over time. Critical strikes, procs and resists can change the result. `/upt cast` opens the settings and preview.
@@ -55,6 +57,10 @@ The direct hit is separate from DoTInfo's damage-over-time marker. For rank-1 Fi
 ### HealPrediction
 
 Incoming healing on target, party and raid frames, drawn from the current health edge. It uses the client's `UnitGetIncomingHeals` reading. The other healers' share is a second band behind yours (the client's total is drawn first and your own heal over it); "All healers" draws the total in your color instead. Heals over time that you cast (Rejuvenation, Renew, Regrowth's tick part) are not part of the client's reading, so the amount their description promises is drawn after your direct heal for the next few seconds of the effect, as an estimate that runs out with the effect's time. HoT recipients use readable GUIDs, with realm-qualified player names as the fallback: ambiguous bare names or unreadable identities are not assigned to a same-named player. Without a recipient name, the existing friendly-target/self assumption remains. Failed, interrupted or more than 15-second-old pending casts are discarded; dispels are still not observed. `/upt heals` opens the settings.
+
+Own HoT estimates work even when SpellDamageInfo is disabled or its action-button spell-power estimate is off. Recasting another rank of the same named HoT replaces the old estimate; different HoTs still add together. Wild Growth is estimated only on the known primary target, with a linear approximation of its front-loaded healing: nearby party recipients are not guessed. Lightwell clicks, Tranquility/Mend Pet channels and conditional heals do not create persistent target HoTs.
+
+HealPrediction retains readable healing power on login, equipment/player-aura changes and leaving combat, independently of SpellDamageInfo's event loop. If healing power has never been readable in this session, the estimate can only use the description's base amount.
 
 ### HunterRange
 
@@ -82,11 +88,31 @@ Casters get a sound when mana climbs to a set level: 100% by default, 80% for wa
 
 Damage and healing numbers on your action buttons and in spell tooltips.
 
+Holy Shock, Penance and Holy Nova show both their damage and healing amounts, in separate colors (not a claim that both hit the selected target). Binding Heal's amount and spell-power share are per recipient rather than the sum of both healing effects. Dark Sacrifice shows its total health cost and mana gain; its tooltip retains the health-cost duration.
+
 Forever's native gamepad crossbar also gets the numbers, including after changing pages. Total mode includes the direct hit and DoT; Direct mode shows only the hit.
 
 Bars built on LibActionButton (Bartender4, ElvUI and others) get the numbers too, for spells, macros and items on their buttons; this is new and not yet checked in the game with those addons.
 
 ![damage prediction](https://i.imgur.com/ySumj4S.png) ![healing prediction](https://i.imgur.com/xvGpoTg.png)
+
+#### Spell coverage audit
+
+This pass compared 3052 English/German client descriptions across all nine Forever classes, using the [SpellDamageInfo client snapshot](https://github.com/Ironship/SpellDamageInfo/blob/main/tests/fixtures/forever_client_texts.json) and the [spellbook list](https://github.com/Ironship/SpellDamageInfo/blob/main/tests/fixtures/forever_spellbook_all.json). Current mechanics were checked against [ForeverDB](https://foreverdb.net/spells), build 1.60.1.70707. These are parser and estimate checks, not in-game confirmation; Forever's custom spells are not treated as TBC or Retail versions.
+
+| Class | Representative readings checked | Prediction boundary |
+| --- | --- | --- |
+| Priest | Renew, Lesser/Flash/Greater Heal, Prayer of Healing, Binding Heal, Penance, Holy Nova, Dark Sacrifice | Renew is tracked; direct/group/channel heals remain the client's projection. Lightwell and Contingency Plan need an actual trigger, not just their cast. |
+| Druid | Rejuvenation, Regrowth, Healing Touch, Wild Growth, Tranquility, Moonfire, Wrath | Targeted HoTs are tracked; Wild Growth's other recipients and Tranquility's party/channel are not guessed. |
+| Shaman | Riptide, Healing Wave, Lesser Healing Wave, Chain Heal, Healing Stream Totem, Lightning Bolt | Riptide's HoT is tracked; Chain Heal bounces and totem pulses are not target HoTs. |
+| Paladin | Holy Light, Flash of Light, Holy Shock, Lay on Hands, Seal of Light | Native direct healing; reactive seal/Vigil effects are not treated as heals at cast time. |
+| Hunter | Mend Pet, Serpent Sting, Arcane Shot, Multi-Shot, Aimed Shot | Mend Pet is a pet channel, not a HoT on the selected friendly. |
+| Mage | Fireball, Frostbolt, Frostfire Bolt, Arcane Missiles, Blizzard | Damage readings; ground/area channels do not establish a selected recipient. |
+| Warlock | Shadow Bolt, Immolate, Corruption, Drain Life, Siphon Life, Health Funnel, Life Tap | Drains and pet health transfers are not friendly-target HoTs. |
+| Rogue | Eviscerate, Rupture, Garrote, Sinister Strike, poisons | Weapon/combo readings remain separate; no generic friendly-target HoTs. |
+| Warrior | Heroic Strike, Execute, Rend, Shield Slam, Bloodthirst | Weapon/rage readings remain separate; no generic friendly-target HoTs. |
+
+HoT dispels, Lifebloom-style stacking/blooms, talent-modified healing, exact Wild Growth tick weights and hidden group recipients remain unverified or deliberately unsupported. A parsed tooltip number alone is not proof of correct live prediction.
 
 ### StatsInfo
 

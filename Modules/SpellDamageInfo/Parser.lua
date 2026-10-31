@@ -1306,6 +1306,10 @@ local function specialEN(t)
   -- Life Tap: "Converts 58 Health into 58 Mana for you."
   local hc, mg = match(t, "converts (" .. NUM .. ") health into (" .. NUM .. ") mana")
   if hc then return { healthCost = num(hc), manaGain = num(mg) } end
+  -- Dark Sacrifice consumes the stated health over time, not a healing effect.
+  local seconds
+  hc, seconds, mg = match(t, "cannibalize (" .. NUM .. ") of your own health over (" .. NUM .. ") sec%.? to gain (" .. NUM .. ") mana")
+  if hc then return { healthCost = num(hc), manaGain = num(mg), healthCostDuration = num(seconds) } end
   return nil
 end
 
@@ -1554,6 +1558,41 @@ englishNumbers = function(text)
   return t
 end
 
+-- A readable amount is not proof that casting the spell starts a HoT on the selected friendly.
+local function healingInfo(text, lang)
+  local t
+  t, lang = prepare(text, lang)
+  local info = {}
+  if find(t, "and the caster", 1, true) or find(t, "und den zaubernden", 1, true) then
+    info.targets = 2
+  end
+  if find(t, "channel", 1, true) or find(t, "while you focus", 1, true)
+    or find(t, "kanalisier", 1, true) or find(t, "fokussiert", 1, true)
+    or find(t, "instantly and every", 1, true) or find(t, "sofort sowie", 1, true) then
+    info.reason = "channel"
+  elseif find(t, "click", 1, true) or find(t, "anklicken", 1, true)
+    or find(t, "next time", 1, true) or find(t, "n" .. AE .. "chste", 1, true)
+    or find(t, "chance", 1, true) then
+    info.reason = "trigger"
+  elseif find(t, "stack", 1, true) or find(t, "stapel", 1, true)
+    or find(t, "expires", 1, true) or find(t, "abl" .. AE .. "uft", 1, true) then
+    info.reason = "stack-or-expiration"
+  elseif find(t, "your pet", 1, true) or find(t, "euer tier", 1, true) or find(t, "eurem tier", 1, true)
+    or find(t, "begleiter", 1, true) then
+    info.reason = "pet"
+  elseif find(t, "heals the target", 1, true) or find(t, "heals a friendly target", 1, true)
+    or find(t, "heals the friendly target", 1, true) or find(t, "heal your target", 1, true)
+    or find(t, "heilt das ziel", 1, true) or find(t, "heilt beim ziel", 1, true)
+    or find(t, "heilt ein befreundetes ziel", 1, true)
+    or find(t, "heilt ein verb" .. UE .. "ndetes ziel", 1, true)
+    or find(t, "heilt das verb" .. UE .. "ndete ziel", 1, true) then
+    info.target = true
+  else
+    info.reason = "unknown-recipient"
+  end
+  return info
+end
+
 -- Read(text, lang, noWeapon) runs every reader once and decides, in one place, what the addon
 -- shows for the spell (show):
 --   "weapon"     the weapon or attack power view (not with noWeapon: Retail's descriptions
@@ -1582,6 +1621,11 @@ function Parser.Read(text, lang, noWeapon)
     proc = Parser.ProcChance(text, lang) or false,
     lang = lang,
   }
+  e.healing = healingInfo(text, lang)
+  if e.healing.targets then
+    if e.parsed then e.parsed.healTargets = e.healing.targets end
+    if e.special then e.special.healTargets = e.healing.targets end
+  end
   if e.weapon and not noWeapon then
     e.show = "weapon"
   elseif e.isJudgement then

@@ -4,8 +4,8 @@
 --
 -- The number comes straight from the client (UnitGetIncomingHeals): on both clients this is the
 -- native projection the raid frames themselves use, fed by the healer's own addon-visible casts
--- or by the game's own bookkeeping. This module never computes heals from spell descriptions and
--- never guesses: it only redraws what the client reports, and everything the client reports as a
+-- or by the game's own bookkeeping. Direct healing only redraws what the client reports; own
+-- targeted HoTs are separate description-based estimates. Everything the client reports as a
 -- secret value flows into StatusBar setters untouched, exactly like ShieldsInfo's absorb bars.
 --
 -- v1 draws the player's OWN incoming heals (UnitGetIncomingHeals(unit, "player")); the switch

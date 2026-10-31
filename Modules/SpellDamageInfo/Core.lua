@@ -246,6 +246,14 @@ end
 -- return secret values; then the last value read out of combat stays in use.
 local bonus = { damage = {}, heal = nil }
 
+local function readHealingBonus()
+  if type(GetSpellBonusHealing) == "function" then
+    local ok, v = pcall(GetSpellBonusHealing)
+    if ok and not isSecret(v) and type(v) == "number" then bonus.heal = v end
+  end
+end
+ns.RefreshHealingBonus = readHealingBonus
+
 local function readBonus()
   if type(GetSpellBonusDamage) == "function" then
     for i = 2, 7 do
@@ -253,10 +261,7 @@ local function readBonus()
       if ok and not isSecret(v) and type(v) == "number" then bonus.damage[i] = v end
     end
   end
-  if type(GetSpellBonusHealing) == "function" then
-    local ok, v = pcall(GetSpellBonusHealing)
-    if ok and not isSecret(v) and type(v) == "number" then bonus.heal = v end
-  end
+  readHealingBonus()
 end
 
 -- The player's weapons and the stats the weapon abilities need, as the client reports them:
@@ -541,6 +546,7 @@ local function withEstimate(parsed, spellID, pet, castTime, noBonus)
   if pet or not db.estimate or isRetail() then return Estimate.Apply(parsed, nil, nil, nil) end
   local coef = spellCoefficients(spellID)
   if coef == false or (noBonus and not coef) then return Estimate.Apply(parsed, nil, nil, nil) end
+  if parsed.hits and not coef then return Estimate.Apply(parsed, nil, nil, nil) end
   if castTime == nil then castTime = getCastTime(spellID) end
   return Estimate.Apply(parsed, castTime, Estimate.DamageBonus(parsed.school, bonus.damage), bonus.heal, coef)
 end
@@ -564,7 +570,9 @@ end
 local function specialView(s, spellID, pet, noBonus)
   if s.healPercent then return not pet and percentHealView(s) or nil end
   if s.absorb then return { absorb = s.absorb } end
-  if s.healthCost then return { healthCost = s.healthCost, manaGain = s.manaGain } end
+  if s.healthCost then
+    return { healthCost = s.healthCost, manaGain = s.manaGain, healthCostDuration = s.healthCostDuration }
+  end
   if s.healMaxHealth then
     local mh = weaponStats.maxHealth
     if pet or not mh then return nil end
@@ -652,6 +660,24 @@ function ns.Compute(spellID, pet)
   -- a chance effect: the number is what one trigger does
   if view and proc then view.proc = proc end
   return view
+end
+
+-- HealPrediction consumes this independently of action-button options or the module's event loop.
+function ns.ComputeHot(spellID)
+  local entry = getEntry(spellID)
+  if not entry or not entry.healing.target then return nil end
+  local parsed = entry.show == "special" and entry.special or (entry.show == "parsed" and entry.parsed)
+  if not parsed or not parsed.hot or parsed.direct or parsed.dot or parsed.transfer or parsed.petHeal
+    or parsed.hits or parsed.every or entry.proc then return nil end
+  readHealingBonus()
+  local coef = spellCoefficients(spellID)
+  local view
+  if isRetail() or coef == false then
+    view = Estimate.Apply(parsed, nil, nil, nil)
+  else
+    view = Estimate.Apply(parsed, getCastTime(spellID), nil, bonus.heal, coef)
+  end
+  return view and view.hot, spellName(spellID)
 end
 
 -- The use-effect spell of an item (a potion's "Use:" spell), or nil when the item
@@ -1278,9 +1304,9 @@ local function buttonText(view, reduction)
     local mainColor = view.petHeal and Format.REDUCTION_COLOR or Format.HEAL_COLOR
     return mainText, mainColor, sideText, Format.WEAPON_COLOR, "stacked"
   end
-  -- Drain Life and other health transfers: one amount damages the target and heals the caster.
-  -- Two stacked labels like Life Tap: the damage in gold above, the healing in green below.
-  if view and (view.transfer or view.percentSelfHeal) then
+  -- Two stacked labels: damage in gold, healing in green. Only simultaneous self-heals get "+".
+  if view and (view.transfer or view.percentSelfHeal
+      or ((view.direct or view.dot) and (view.heal or view.hot))) then
     local value = Estimate.ButtonValue(view, db.button)
     if value and value >= 0.5 then
       local healValue
@@ -1289,7 +1315,8 @@ local function buttonText(view, reduction)
       else
         healValue = (view.hot and view.hot.total or 0) + (view.heal and (view.heal.min + view.heal.max) / 2 or 0)
       end
-      local sideText = (healValue and healValue >= 0.5) and ("+" .. Format.Short(healValue)) or nil
+      local prefix = (view.transfer or view.percentSelfHeal) and "+" or ""
+      local sideText = (healValue and healValue >= 0.5) and (prefix .. Format.Short(healValue)) or nil
       return Format.Short(value), Format.DAMAGE_COLOR, sideText, Format.HEAL_COLOR, "stacked"
     end
   end

@@ -88,6 +88,11 @@ function Estimate.Apply(parsed, castTime, damageBonus, healBonus, coef)
     local cDirect, cPeriodic
     if type(coef) == "table" then
       cDirect, cPeriodic = tableShares(coef, directPart, periodicPart, dKey, oKey)
+      -- Generated coefficients sum distinct effects. Binding Heal has one heal per recipient,
+      -- while the parsed range (and the tooltip/button value) is per recipient.
+      if dKey == "h" and cDirect and parsed.healTargets then
+        cDirect = cDirect / parsed.healTargets
+      end
     elseif directPart and castTime == nil then
       usable = false
     elseif usable then
@@ -117,6 +122,7 @@ function Estimate.Apply(parsed, castTime, damageBonus, healBonus, coef)
   -- A health cost and regeneration get no spell power: the description's own figures, as they
   -- are (a pet transfer's cost in healthCost, a transfer's flag beside its two ends)
   view.healthCost, view.petHeal, view.hp5, view.transfer = parsed.healthCost, parsed.petHeal, parsed.hp5, parsed.transfer
+  view.healTargets = parsed.healTargets
   return view
 end
 

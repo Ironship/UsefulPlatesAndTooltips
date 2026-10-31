@@ -297,7 +297,9 @@ local function buildView(spellID, channel)
         end
     end
     local entry = module.Parser.Read(text, module.DescriptionLang and module.DescriptionLang() or nil, isRetail())
-    local parsed = entry and entry.parsed
+    local parsed = entry and (entry.show == "special" and entry.special or entry.parsed)
+    if parsed and ((parsed.hits and not channel) or parsed.perAttack or parsed.perBlock
+        or parsed.perStrike or parsed.every or parsed.first) then return false end
     local view = false
     if parsed and (parsed.direct or (channel and parsed.dot)) then
         local castTime = getCastTime(spellID)
@@ -311,6 +313,8 @@ local function buildView(spellID, channel)
             bonus = module.Estimate.DamageBonus(parsed.school, bonusDamage)
         end
         -- On Retail the description's numbers already hold the player's spell power.
+        -- A scripted volley has no reliable cast-time coefficient for its triggered bolts.
+        if parsed.hits and not coef then bonus = nil end
         local applied = module.Estimate.Apply(parsed, castTime, bonus, nil, coef)
         local direct = applied and applied.direct
         local periodic = channel and applied and applied.dot
@@ -323,6 +327,7 @@ local function buildView(spellID, channel)
                 name = spellName(spellID) or parsed.name,
                 castTime = castTime,
                 estimated = applied.estimated and true or false,
+                channelHits = channel and parsed.hits or nil,
             }
         end
     end
@@ -624,6 +629,7 @@ local function onCastStart(castGUID, spellID, channel)
         channel = channel and true or nil,
         endsAt = endsAt,
         channelDuration = channel and (endsAt - startedAt) or nil,
+        channelHits = view.channelHits,
         totalPrediction = channel and prediction or nil,
         castGUID = (not isSecret(castGUID) and type(castGUID) == "string") and castGUID or nil,
     }
@@ -742,9 +748,13 @@ local function housekeep(now)
     if not castInProgress then return end
     if castInProgress.channel then
         local cast = castInProgress
-        -- shortcut: remaining damage follows time; use discrete ticks when their schedule is known.
+        -- ponytail: channels without a known tick schedule use time; known schedules use discrete ticks.
         local remaining = math.min(1, math.max(0, (cast.endsAt - now) / cast.channelDuration))
         if remaining <= 0 then return dropCast("channel finished") end
+        if cast.channelHits and cast.channelHits > 1 then
+            -- Penance's first bolt lands at channel start; only the later scheduled bolts remain.
+            remaining = math.ceil(remaining * (cast.channelHits - 1)) / cast.channelHits
+        end
         local total = cast.totalPrediction
         cast.prediction = { min = total.min * remaining, max = total.max * remaining,
             value = total.value * remaining }
@@ -1602,8 +1612,13 @@ frame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "UNIT_SPELLCAST_CHANNEL_UPDATE" then
         local _, castGUID, spellID = ...
         if castInProgress and castInProgress.channel and sameCast(castInProgress, castGUID, spellID) then
-            local _, endsAt = channelTimes(castInProgress.spellID)
-            if endsAt then castInProgress.endsAt = endsAt else dropCast("channel timing unavailable") end
+            local startedAt, endsAt = channelTimes(castInProgress.spellID)
+            if endsAt then
+                castInProgress.startedAt, castInProgress.endsAt = startedAt, endsAt
+                castInProgress.channelDuration = endsAt - startedAt
+            else
+                dropCast("channel timing unavailable")
+            end
             safeRefresh()
         end
 

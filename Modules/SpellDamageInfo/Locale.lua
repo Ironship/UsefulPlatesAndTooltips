@@ -82,6 +82,7 @@ Locales.en = {
   HITS = " in %d hits",
   FIRST = " for the first %d enemies",
   HEAL_MAX = " (your maximum health)",
+  PER_TARGET = " (per recipient)",
   PER_RAGE = "Plus %s for each extra point of rage",
   FINISHER_CURRENT_NOTE = "At the current %d combo points, attack power not included; the others: %s",
   FINISHER_STATIC_NOTE = "Combo points not readable: static preview, attack power not included; %s",
@@ -222,6 +223,7 @@ Locales.de = {
   HITS = " in %d Treffern",
   FIRST = " f\195\188r die ersten %d Gegner",
   HEAL_MAX = " (Eure maximale Gesundheit)",
+  PER_TARGET = " (pro Empf\195\164nger)",
   PER_RAGE = "Plus %s f\195\188r jeden zus\195\164tzlichen Wutpunkt",
   FINISHER_CURRENT_NOTE = "Bei den aktuellen %d Combopunkten, ohne Angriffskraft; die \195\188brigen: %s",
   FINISHER_STATIC_NOTE = "Combopunkte nicht ablesbar: statische Vorschau, ohne Angriffskraft; %s",
@@ -527,6 +529,9 @@ function Format.TooltipLines(view, L)
   if view.healthCost then
     -- Health Funnel's cost goes to the pet: a red cost line naming it, not a heal
     local text = "-" .. Format.Thousands(view.healthCost, L) .. " HP" .. (view.petHeal and (" (" .. L.PET .. ")") or "")
+    if view.healthCostDuration then
+      text = string.format(L.OVER, text, Format.Seconds(view.healthCostDuration, L))
+    end
     local c = view.petHeal and REDUCTION_COLOR or HEAL_COLOR
     lines[1] = { text, c[1], c[2], c[3] }
     if view.manaGain and view.manaGain >= 0.5 then
@@ -543,7 +548,8 @@ function Format.TooltipLines(view, L)
   elseif view.every then note = string.format(L.EVERY, Format.Seconds(view.every, L))
   elseif view.hits then note = string.format(L.HITS, view.hits)
   elseif view.first then note = string.format(L.FIRST, view.first)
-  elseif view.healMax then note = L.HEAL_MAX end
+  elseif view.healMax then note = L.HEAL_MAX
+  elseif view.healTargets then note = L.PER_TARGET end
   local function add(label, body, added, color)
     lines[#lines + 1] = { label .. ": " .. body .. note .. suffix(added, L), color[1], color[2], color[3] }
   end

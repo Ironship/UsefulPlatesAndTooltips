@@ -150,9 +150,11 @@ local function buildSettings(parent)
         "A second band behind yours for the part of the client's total that is not yours. Where the client "
         .. "cannot tell healers apart the band simply stays hidden."), y)
     y = place(checkRow(parent, "My heals over time", "showHots",
-        "Rejuvenation, Renew and the like are not part of the client's projection. After you cast one, "
+        "Rejuvenation, Renew, Regrowth and Riptide are not part of the client's projection. After you cast one, "
         .. "the amount its description promises is drawn after your direct heal for the next few seconds of "
-        .. "the effect. An estimate: a dispelled or cancelled effect keeps showing until its time is up."), y)
+        .. "the effect. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on "
+        .. "its known primary target, not guessed party recipients. Channels, pet heals and triggered heals are "
+        .. "not treated as target HoTs. A dispelled effect keeps showing until its time is up."), y)
     y = place(sliderRow(parent, "Heal over time horizon", "hotHorizon", 1, 15, 1,
         function(value) return math.floor(value + 0.5) .. " s" end,
         "How many seconds of each heal over time are drawn ahead."), y, 40)
@@ -180,9 +182,9 @@ local function buildSettings(parent)
         "Echo the module's notes while it reads and draws."), y)
     y = noteRow(parent, y, "The number is the client's own incoming-heal projection "
         .. "(UnitGetIncomingHeals) - the same one Blizzard's raid frames use. This module only "
-        .. "redraws it: no heal math, no crit guesses, no addon messages. WoW: Forever may hide "
-        .. "some values in combat; a hidden value draws nothing rather than a guess. /upt healprobe "
-        .. "prints what is readable.")
+        .. "redraws direct heals; your own targeted HoTs are separate estimates from readable descriptions "
+        .. "and spell power, independent of SpellDamageInfo's display settings. No crit guesses or addon "
+        .. "messages. Hidden native values go unchanged to the bars. /upt healprobe prints what is readable.")
     return y
 end
 
