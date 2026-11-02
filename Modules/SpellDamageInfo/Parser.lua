@@ -570,6 +570,11 @@ function Parser.ParseHealthPercent(text, lang)
   if lang == "de" then
     duration, percent = match(t, "euch im verlauf von (" .. NUM .. ") sek%.? um (" .. NUM .. ")%s*%% eurer maximalen gesundheit heilt")
     if not percent then
+      local manaPercent
+      duration, percent, manaPercent = match(t, "stellt im verlauf von (" .. NUM .. ") sek%.? (" .. NUM
+        .. ")%% gesundheit und (" .. NUM .. ")%% mana wieder her")
+    end
+    if not percent then
       duration, percent = match(t, "stellt im verlauf von (" .. NUM .. ") sek%.? (" .. NUM .. ")%s*%% eurer maximalen gesundheit wieder her")
       if not percent then
         duration, percent = match(t, "regeneriert im verlauf von (" .. NUM .. ") sek%.? (" .. NUM .. ")%s*%% eurer maximalen gesundheit")
@@ -583,6 +588,11 @@ function Parser.ParseHealthPercent(text, lang)
       or percent
   else
     percent, duration = match(t, "heals you for (" .. NUM .. ")%s*%% of your maximum health over (" .. NUM .. ") sec")
+    if not percent then
+      local manaPercent
+      percent, manaPercent, duration = match(t, "restores (" .. NUM .. ")%% health and (" .. NUM
+        .. ")%% mana over (" .. NUM .. ") sec")
+    end
     if not percent then
       percent, duration = match(t, "restores (" .. NUM .. ")%s*%% of your maximum health over (" .. NUM .. ") sec")
       if not percent then
