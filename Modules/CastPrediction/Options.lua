@@ -417,7 +417,7 @@ local function buildPredictionTab(parent)
     y = section(parent, y, "AURAS (READ WHEN VISIBLE)")
     y = place(checkRow(parent, "Include auras", "useAuras",
         "Buffs on you and debuffs on the target that the description does not hold: Arcane Power, "
-        .. "Power Infusion, Arcane Blast stacks, Improved Scorch, Curse of the Elements."), y)
+        .. "Power Infusion, Improved Scorch, Curse of the Elements."), y)
     if ns.Auras and ns.Auras.LIST then
         for _, entry in ipairs(ns.Auras.LIST) do
             if (entry.class == nil or entry.class == playerClass) and ns.Auras.AppliesHere(entry) then

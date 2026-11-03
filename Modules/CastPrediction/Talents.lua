@@ -62,10 +62,10 @@ end
 -- spells: name-limited talents (only these spells' casts). verify: the magnitude still needs a
 -- live tooltip read; it is reported by the probe but never applied until confirmed here.
 Talents.LIST = {
+    -- Build 70753 reworked it: 3% per Fire effect on the target, up to 12% (it was a flat 2% a point). The
+    -- count of effects is not read yet, so it is held back until it is.
     { key = "MAGE_FIRE_POWER", class = "MAGE", en = "Fire Power", ids = { 11124 }, perRank = 0.02, maxRank = 5,
-        schools = { fire = true } },
-    { key = "MAGE_PIERCING_ICE", class = "MAGE", en = "Piercing Ice", ids = { 11151 }, perRank = 0.02, maxRank = 3,
-        schools = { frost = true, frostfire = true } },
+        verify = true, schools = { fire = true } },
     { key = "MAGE_ARCANE_INSTABILITY", class = "MAGE", en = "Arcane Instability", ids = { 15058 }, perRank = 0.01,
         maxRank = 3, schools = { arcane = true, fire = true, frost = true, frostfire = true } },
     { key = "WARLOCK_SHADOW_MASTERY", class = "WARLOCK", en = "Shadow Mastery", ids = { 18271 }, perRank = 0.01,
@@ -89,7 +89,7 @@ Talents.LIST = {
         verify = true, spells = { ["Lightning Bolt"] = true, ["Chain Lightning"] = true, ["Earth Shock"] = true } },
     { key = "SHAMAN_CALL_OF_FLAME", class = "SHAMAN", en = "Call of Flame", ids = { 16038 }, perRank = 0.02,
         maxRank = 3, verify = true,
-        spells = { ["Lava Burst"] = true, ["Fire Nova"] = true, ["Flame Shock"] = true } },
+        spells = { ["Fire Nova"] = true, ["Flame Shock"] = true } },
     { key = "WARLOCK_AGONIZING_FLAMES", class = "WARLOCK", en = "Agonizing Flames", ids = { 17927 },
         byRank = { 0.03, 0.07, 0.10 }, maxRank = 3, verify = true, spells = { ["Immolate"] = true } },
     -- Ranks that only matter together with an aura (Auras.lua reads them through `talent`); never applied here.
@@ -97,6 +97,8 @@ Talents.LIST = {
     { key = "WARLOCK_IMPROVED_SHADOW_BOLT", class = "WARLOCK", en = "Improved Shadow Bolt", ids = { 17793 },
         perRank = 0.04, maxRank = 5, auraOnly = true },
     -- Shadow and Flame 2% a point on Shadow Bolt and Incinerate while its 20 s buffs (1293816, 426311) are up.
+    -- Blizzard's launch notes of 3 Nov say 4% a point; build 70753 still has the 2% (10 over five ranks), so 0.04
+    -- waits for a build or a live description that shows it.
     { key = "WARLOCK_SHADOW_AND_FLAME", class = "WARLOCK", en = "Shadow and Flame", ids = { 426316 },
         perRank = 0.02, maxRank = 5, auraOnly = true },
     -- Decimation 3/6% on Shadow Bolt and Searing Pain while its buff (440873) is up (target under 35%).
