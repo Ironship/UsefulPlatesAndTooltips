@@ -389,7 +389,7 @@ end
 
 -- The prediction the marker shows: { min, max, value } scaled by what earlier hits taught, by
 -- the passive talent percents the client reports (Forever only; Retail descriptions hold them),
--- and by readable buffs and target debuffs (Arcane Power, Arcane Blast stacks, Improved Scorch,
+-- and by readable buffs and target debuffs (Arcane Power, Improved Scorch,
 -- ...; an aura the client will not show, or a Forever combat with hidden auras, adds nothing).
 local function predictionFor(view, spellID)
     if not view then return nil end
