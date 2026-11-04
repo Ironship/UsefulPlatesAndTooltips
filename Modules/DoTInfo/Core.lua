@@ -62,9 +62,10 @@ do
     TICK_SHAPES["Curse of Agony"] = agony
 end
 
--- Descriptions that don't name their school.
+-- Descriptions that don't name their school (Siphon Life's, and in Chinese also Corruption's, Fireball's and
+-- Pyroblast's periodic part). Ported from Does It Die v0.8.3.
 local SCHOOL_BY_NAME = {
-    ["Siphon Life"] = 32,
+    ["Siphon Life"] = 32, ["Corruption"] = 32, ["Fireball"] = 4, ["Pyroblast"] = 4,
 }
 
 -- Read like DoTs but aren't one on the current target: ground/area effects, channels, traps, and
