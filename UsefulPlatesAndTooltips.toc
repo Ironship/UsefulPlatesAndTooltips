@@ -22,6 +22,7 @@ Core\Preview.lua
 Modules\SpellDamageInfo\Locale.lua
 Modules\SpellDamageInfo\SpellIDs.lua
 Modules\SpellDamageInfo\SpellCoefficients.lua
+Modules\SpellDamageInfo\SpellCoefficientsLinked.lua
 Modules\SpellDamageInfo\Parser.lua
 Modules\SpellDamageInfo\Estimate.lua
 Modules\SpellDamageInfo\Core.lua
