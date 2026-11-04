@@ -133,6 +133,7 @@ L.SPELL_IDS = {
     ["Drain Life"] = 689, ["Drain Soul"] = 1120, ["Drain Mana"] = 5138, ["Health Funnel"] = 755,
     ["Mind Flay"] = 15407, ["Arcane Missiles"] = 5143, ["Starshards"] = 10797,
     ["Immolation Trap"] = 13795, ["Explosive Trap"] = 13813, ["Wyvern Sting"] = 19386,
+    ["Black Arrow"] = 3674,
 }
 
 ---------------------------------------------------------------------------
