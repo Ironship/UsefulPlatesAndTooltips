@@ -1,6 +1,6 @@
 # DoT API
 
-For addon authors: show Useful Plates and Tooltips' DoT estimate (how much damage the player's DoTs still have to
+For addon authors: show DoesItDiePlus' DoT estimate (how much damage the player's DoTs still have to
 deal) on your own unit frames or nameplates. Available when the addon is installed and its DoTInfo module is on. Add
 `## OptionalDeps: UsefulPlatesAndTooltips` to your `.toc` and check that the global exists before using it.
 Adapted from the [Does It Die](https://www.curseforge.com/wow/addons/does-it-die) API (Joe Greive, MIT); the global

@@ -1,4 +1,4 @@
-# Useful Plates and Tooltips — Retail
+# DoesItDiePlus — Retail
 
 Wersja testowa zawiera **DoTInfo, ResourceDing, ShieldsInfo, SpellDamageInfo, CastPrediction i HealPrediction**, ich ustawienia oraz wspólny wygląd. Nie ładuje Range, HunterRangeFinder ani StatsInfo. Manifest Mainline obejmuje Retail 12.1.0 (`120100`), 12.1.5 (`120105`) oraz 12.1.7 PTR (`120107`).
 

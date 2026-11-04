@@ -1,6 +1,8 @@
-# Useful Plates and Tooltips
+# DoesItDiePlus
 
-Settings support native gamepads and ConsolePort. Assign Open settings under Options → Key Bindings → AddOns → Useful Plates and Tooltips. LB/RB switches module tabs, the D-pad selects controls, A / Cross activates the selected control, left/right adjusts sliders and B / Circle closes the window. The gold outline shows focus and scrolls into view. With ConsolePort active, its interface cursor and configured hints handle navigation.
+DoesItDiePlus, formerly Useful Plates and Tooltips, is an extended take on [Does It Die](https://www.curseforge.com/wow/addons/does-it-die) by Joe Greive: its DoT-damage marker plus cast and heal prediction, shields, hunter range, resource sounds, action-button damage numbers and tooltip item comparisons. The name changed in 0.9.90; the folder name (`UsefulPlatesAndTooltips`), the `/upt` command and your saved settings stay as they were, so updating keeps your configuration.
+
+Settings support native gamepads and ConsolePort. Assign Open settings under Options → Key Bindings → AddOns → DoesItDiePlus. LB/RB switches module tabs, the D-pad selects controls, A / Cross activates the selected control, left/right adjusts sliders and B / Circle closes the window. The gold outline shows focus and scrolls into view. With ConsolePort active, its interface cursor and configured hints handle navigation.
 
 It shows DoT marks, shields and range on nameplates, damage and healing numbers on action buttons, and item comparisons in tooltips. Every part can be switched off.
 
@@ -143,4 +145,4 @@ Third-party parts keep their own MIT notices:
 *   **SpellDamageInfo's options window** is adapted from Does It Die by Joe Greive; see `Modules/SpellDamageInfo/LICENSE-SpellDamageInfo.txt`.
 *   **Stat weights** come from [ForeverSim](https://github.com/laurencestokes/foreversim) (MIT), built on [WoWSims](https://github.com/wowsims/forever) and Elliot Wood's Forever sim; see `Modules/StatsInfo/LICENSE-ForeverSim.txt`.
 
-On clients with the modern Settings API, the UPT, DoTInfo and SpellDamageInfo launchers use native settings-list buttons. Select the add-on, move right with the D-pad and confirm to open its window. Older clients retain the canvas page.
+On clients with the modern Settings API, the DoesItDiePlus, DoTInfo and SpellDamageInfo launchers use native settings-list buttons. Select the add-on, move right with the D-pad and confirm to open its window. Older clients retain the canvas page.
