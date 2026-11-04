@@ -8,7 +8,7 @@ Current differences. What my addon has:
 
 ## CastPrediction
 
-<img width="400" height="200" alt="{3045F908-1D52-4E85-8F2D-19C7AF79044C}" src="https://github.com/user-attachments/assets/8d6dc029-3979-47fb-b450-7cf5a0375956" />
+<img width="400" height="400" alt="{3045F908-1D52-4E85-8F2D-19C7AF79044C}" src="https://github.com/user-attachments/assets/8d6dc029-3979-47fb-b450-7cf5a0375956" />
 
 ## Heal prediction and shields on nameplates
 
