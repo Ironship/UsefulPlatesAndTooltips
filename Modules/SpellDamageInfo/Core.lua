@@ -602,7 +602,8 @@ local function specialView(s, spellID, pet, noBonus)
     -- power (Power Word: Shield 10%; the other shields carry their own term in the description). Retail: as written.
     local amount = s.absorb
     if not pet and not isRetail() and type(spellID) == "number" then
-      if db.talents and BIT.TalentMods then
+      -- Rank 1 of Power Word: Shield (id 17) writes the talent into its own description, so it is already in the number.
+      if db.talents and BIT.TalentMods and spellID ~= 17 then
         local ok, percent = pcall(BIT.TalentMods.Percent, spellID, nil, "a", true)
         if ok and type(percent) == "number" and percent > 0 then amount = amount * (1 + percent) end
       end

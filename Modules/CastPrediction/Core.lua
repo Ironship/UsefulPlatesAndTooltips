@@ -1483,6 +1483,12 @@ function ns.ensureDB()
         settings.markerStyleVersion = 2
     end
     if type(settings.learned) ~= "table" then settings.learned = {} end
+    -- Factors learned before the talent engine (0.9.91) made up for talents the prediction did not know; with the
+    -- engine the same talents would count twice until the hits had taught the factor again.
+    if settings.talentEngine ~= 1 then
+        settings.learned = {}
+        settings.talentEngine = 1
+    end
     -- Entries saved by the first versions (no `v`) hold the square root of the factor they were meant to find: the old
     -- update blended each hit's ratio to the already scaled prediction into the factor. Squared they are the factor,
     -- as far as it was learned, and worth a few hits only.
