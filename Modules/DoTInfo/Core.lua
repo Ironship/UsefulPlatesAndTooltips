@@ -50,6 +50,7 @@ local KNOWN_TICK_INTERVALS = {
     ["Holy Fire"] = 2,
     ["Rip"] = 2,
     ["Rupture"] = 2,
+    ["Black Arrow"] = 2, -- the description gives the total over 30 sec only
 }
 
 -- DoTs whose ticks aren't even: each tick is the average tick times its factor (factors average 1, so the
@@ -101,6 +102,7 @@ ns.locale.addNames(NAME_TABLES)
 local SCHOOL_MASKS = {
     Physical = 1, Holy = 2, Fire = 4, Nature = 8, Frost = 16, Shadow = 32, Arcane = 64,
     Frostfire = 4 + 16, -- Forever's Frostfire Bolt: combined schools report as the OR of their masks
+    Shadowflame = 4 + 32, -- Forever's Shadowflame (SpellMisc.SchoolMask 36)
 }
 
 -- User options (edited in the options panel, saved in UsefulPlatesAndTooltips_DoTInfoDB).
@@ -338,12 +340,19 @@ local function parseDot(desc, comboPoints)
     end
     if total and duration > 0 then return total, school, duration end
 
+    -- Black Arrow: "causing 150 Shadow damage and draining 150 mana over 30 sec" (the damage and the mana drain share the time).
+    local drained, drainWords, drainSecs = desc:match("(%d+)%s*([%a ]-)%s*damage and draining %d+ mana over (%d+%.?%d*) sec")
+    if drained and tonumber(drainSecs) > 0 then
+        return tonumber(drained), schoolFromWords(drainWords), tonumber(drainSecs)
+    end
+
     local amount, words, every = desc:match("(%d+)%s*([%a ]-)%s*damage every (%d+%.?%d*) sec")
     if not amount then
         amount, every = desc:match("(%d+) health.-every (%d+%.?%d*) sec")
         words = ""
     end
-    local lasts = desc:match("[Ll]asts (%d+%.?%d*) sec")
+    -- Saber Slash states the time after the interval: "to bleed for 100 damage every 2 sec for 12 sec".
+    local lasts = desc:match("[Ll]asts (%d+%.?%d*) sec") or desc:match("damage every %d+%.?%d* sec for (%d+%.?%d*) sec")
     if amount and every and lasts then
         every, lasts = tonumber(every), tonumber(lasts)
         if every > 0 and lasts > 0 then
@@ -1472,6 +1481,7 @@ local SCHOOL_COLORS = {
     [8] = { 0.35, 1, 0.35 },    -- Nature
     [16] = { 0.45, 0.8, 1 },    -- Frost
     [20] = { 0.75, 0.6, 1 },    -- Frostfire
+    [36] = { 0.85, 0.4, 0.7 },  -- Shadowflame
     [32] = { 0.7, 0.35, 1 },    -- Shadow
     [64] = { 1, 0.55, 1 },      -- Arcane
 }
