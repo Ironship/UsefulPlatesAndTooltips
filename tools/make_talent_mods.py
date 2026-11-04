@@ -37,7 +37,7 @@ CLASS_MASK = {1: "WARRIOR", 2: "PALADIN", 4: "HUNTER", 8: "ROGUE", 16: "PRIEST",
               1024: "DRUID"}
 NOT_CLASS_LINE = re.compile(r"^(Pet|Beast Training|Mounts|Companions|Meditation|Racial|Orc Racial|Comprehension|Runes|GENERIC)")
 SKIP = re.compile(r"Weapon Specialization|Wand Specialization|Lone Wolf|Bestial Wrath|Death Wish|Arcane Power|Power Infusion|"
-                  r"Shadowform|Bastion|^Ice Barrier$|Decimation|Frost Warding|Improved Power Word: Shield|"
+                  r"Shadowform|Bastion|^Ice Barrier$|Decimation|Frost Warding|"
                   r"Improved Health Funnel|Ranged Weapon")
 OPS = {"0": "d", "22": "o", "8": "both", "3": 0, "12": 1, "23": 2}
 
@@ -95,6 +95,8 @@ def main():
                 parts[i] = "d"
             elif e["Effect"] in ("6", "27", "35", "65") and e["EffectAura"] in ("3", "53", "8"):
                 parts[i] = "o"
+            elif e["Effect"] in ("6", "27", "35", "65") and e["EffectAura"] == "69":
+                parts[i] = "a"
         if parts:
             parts_of[r["Spell"]] = parts
 
@@ -221,7 +223,7 @@ def main():
         "-- Per talent: id = the talent's spell id, max = its ranks, mods:",
         "--   k=\"s\"  every spell of the schools in the mask m (1 physical, 2 holy, 4 fire, 8 nature, 16 frost, 32 shadow, 64 arcane)",
         "--   k=\"d\"  the direct damage or healing of the spell ids in ids (a list of ids and id ranges)",
-        "--   k=\"o\"  the periodic damage or healing of those spells, k=\"b\" both",
+        "--   k=\"o\"  the periodic damage or healing of those spells, k=\"b\" both, k=\"a\" the amount an absorb shield takes",
         "-- p[rank] = the percent that rank adds. Left out on purpose: talents that need a weapon, a shield, a form, a proc or",
         "-- a cooldown (Death Wish, Weapon Specialization, Shadowform, Decimation...), which the aura rules or nothing handle.",
         "",
@@ -233,6 +235,19 @@ def main():
         out.append(f"  {cls} = {{")
         out += by_class[cls]
         out.append("  },")
+    out.append("}")
+    # spell power an absorb shield gets (Power Word: Shield 10%); other shields carry the term in their description
+    shares = {}
+    for e in (x for v in effects.values() for x in v):
+        if e["EffectAura"] == "69" and e["Effect"] in ("6", "27", "35", "65") and e["SpellID"] in parts_of:
+            share = float(e["EffectBonusCoefficient"] or 0)
+            if share > 0:
+                shares[int(e["SpellID"])] = round(share, 3)
+    out.append("")
+    out.append("-- The share of spell power an absorb shield gets (Power Word: Shield); the other shields write their own")
+    out.append("-- spell power term into the description, which the client works out.")
+    out.append("BIT.AbsorbShares = {")
+    out.append("  " + ",".join("[%d]=%g" % (k, shares[k]) for k in sorted(shares)))
     out.append("}")
     (root / "Core" / "TalentModsData.lua").write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
     print(f"Core/TalentModsData.lua: {kept} talents of {len(best)} with a damage or healing modifier (build {build})")

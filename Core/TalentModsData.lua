@@ -7,7 +7,7 @@
 -- Per talent: id = the talent's spell id, max = its ranks, mods:
 --   k="s"  every spell of the schools in the mask m (1 physical, 2 holy, 4 fire, 8 nature, 16 frost, 32 shadow, 64 arcane)
 --   k="d"  the direct damage or healing of the spell ids in ids (a list of ids and id ranges)
---   k="o"  the periodic damage or healing of those spells, k="b" both
+--   k="o"  the periodic damage or healing of those spells, k="b" both, k="a" the amount an absorb shield takes
 -- p[rank] = the percent that rank adds. Left out on purpose: talents that need a weapon, a shield, a form, a proc or
 -- a cooldown (Death Wish, Weapon Specialization, Shadowform, Decimation...), which the aura rules or nothing handle.
 
@@ -63,6 +63,8 @@ BIT.TalentModData = {
   PRIEST = {
     {id=15259,en="Darkness",max=5,mods={
       {k="s",m=32,p={2,4,6,8,10}}}},
+    {id=14748,en="Improved Power Word: Shield",max=3,mods={
+      {k="a",ids="17,592,600,3747,6065-6066,10898-10901",p={7,14,20}}}},
     {id=14908,en="Improved Renew",max=3,mods={
       {k="o",ids="139,6074-6078,10927-10929,25315,425268-425277",p={5,10,15}}}},
     {id=14909,en="Searing Light",max=2,mods={
@@ -120,4 +122,10 @@ BIT.TalentModData = {
     {id=12797,en="Improved Revenge",max=3,mods={
       {k="d",ids="6572,6574,7379,11600-11601,25288",p={20,40,60}}}},
   },
+}
+
+-- The share of spell power an absorb shield gets (Power Word: Shield); the other shields write their own
+-- spell power term into the description, which the client works out.
+BIT.AbsorbShares = {
+  [17]=0.1,[592]=0.1,[600]=0.1,[3747]=0.1,[6065]=0.1,[6066]=0.1,[10898]=0.1,[10899]=0.1,[10900]=0.1,[10901]=0.1
 }
