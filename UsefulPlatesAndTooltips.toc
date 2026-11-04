@@ -41,7 +41,6 @@ Modules\DoTInfo\Locale_frFR.lua
 Modules\DoTInfo\Locale_koKR.lua
 Modules\DoTInfo\Locale_ptBR.lua
 Modules\DoTInfo\Locale_zhCN.lua
-Modules\DoTInfo\DotPeriods.lua
 Modules\DoTInfo\Core.lua
 Modules\DoTInfo\ProcDots.lua
 Modules\DoTInfo\RogueEffects.lua

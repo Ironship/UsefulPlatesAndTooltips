@@ -769,8 +769,7 @@ end
 
 -- A DoT as it stands the moment it's applied, before any tick.
 local function newDot(spellID, tickKey, name, total, school, duration, statedInterval, now)
-    local interval = statedInterval or (not ns.Retail and ns.DOT_PERIODS and ns.DOT_PERIODS[spellID])
-        or KNOWN_TICK_INTERVALS[name] or DEFAULT_TICK_INTERVAL
+    local interval = statedInterval or KNOWN_TICK_INTERVALS[name] or DEFAULT_TICK_INTERVAL
     local dot = {
         spellID = spellID,
         familyID = ns.RogueEffects and ns.RogueEffects.Family(spellID),
@@ -2553,8 +2552,7 @@ function ns.learnedTickList()
             if ok and entry.name and type(desc) == "string" and not isSecret(desc) then
                 local total, school, duration, stated = parseDot(desc, points or 1)
                 if total then
-                    local interval = stated or (not ns.Retail and ns.DOT_PERIODS and ns.DOT_PERIODS[spellID])
-                        or KNOWN_TICK_INTERVALS[entry.name] or DEFAULT_TICK_INTERVAL
+                    local interval = stated or KNOWN_TICK_INTERVALS[entry.name] or DEFAULT_TICK_INTERVAL
                     entry.ticks = math.max(1, math.floor(duration / interval + 0.5))
                     entry.interval, entry.duration = interval, duration
                     entry.school = SCHOOL_BY_NAME[entry.name] or school
