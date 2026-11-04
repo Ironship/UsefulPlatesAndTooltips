@@ -803,7 +803,7 @@ local function createWindow()
   applyWindowPoint()
   if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "UsefulPlatesAndTooltipsSettings") end
 
-  window:SetTitle("Useful Plates and Tooltips")
+  window:SetTitle("DoesItDiePlus")
   local close = window.CloseButton
   if type(close) ~= "table" then
     close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
@@ -901,7 +901,7 @@ BIT.commands = {} -- word -> function(rest), from the modules (/upt probe)
 
 function BIT.RegisterCommand(word, fn) BIT.commands[word] = fn end
 
-BINDING_HEADER_USEFULPLATESANDTOOLTIPS = "Useful Plates and Tooltips"
+BINDING_HEADER_USEFULPLATESANDTOOLTIPS = "DoesItDiePlus"
 BINDING_NAME_USEFULPLATESANDTOOLTIPS_SETTINGS = "Open settings"
 function UsefulPlatesAndTooltips_ToggleSettings() BIT.OpenSettings() end
 
@@ -930,12 +930,12 @@ local function registerOptionsPage()
     -- Keep Blizzard's panel open so its native gamepad binding teardown stays native.
     if not (window and window:IsShown()) then BIT.OpenSettings() end
   end
-  if UI.RegisterSettingsLauncher("Useful Plates and Tooltips",
+  if UI.RegisterSettingsLauncher("DoesItDiePlus",
       "Open the settings window. You can also type /upt.", openSettings) then return end
   local panel = CreateFrame("Frame")
   local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", 16, -16)
-  title:SetText("Useful Plates and Tooltips")
+  title:SetText("DoesItDiePlus")
   local text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
   text:SetText("The settings have their own window. You can also type /upt.")
@@ -943,9 +943,9 @@ local function registerOptionsPage()
   open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
   if type(Settings) == "table" and type(Settings.RegisterCanvasLayoutCategory) == "function"
     and type(Settings.RegisterAddOnCategory) == "function" then
-    Settings.RegisterAddOnCategory(Settings.RegisterCanvasLayoutCategory(panel, "Useful Plates and Tooltips"))
+    Settings.RegisterAddOnCategory(Settings.RegisterCanvasLayoutCategory(panel, "DoesItDiePlus"))
   elseif type(InterfaceOptions_AddCategory) == "function" then
-    panel.name = "Useful Plates and Tooltips"
+    panel.name = "DoesItDiePlus"
     InterfaceOptions_AddCategory(panel)
   end
 end

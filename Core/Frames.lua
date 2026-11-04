@@ -254,7 +254,7 @@ local function createPickFrame()
     end
     local what = picker.kind == "bar" and "the health bar" or "where the kill icon should go"
     local text = candidate and (Frames.PathOf(candidate) or "(this frame has no name to save)") or "nothing under the mouse"
-    pickLabel:SetText("Useful Plates and Tooltips: click " .. what .. " (right-click to cancel)\n|cff33ff4d" .. text .. "|r")
+    pickLabel:SetText("DoesItDiePlus: click " .. what .. " (right-click to cancel)\n|cff33ff4d" .. text .. "|r")
   end
 
   -- Runs 20 times a second over frames we do not own: an error stops picking (reported once) instead of repeating.

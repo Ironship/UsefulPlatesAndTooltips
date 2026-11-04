@@ -26,9 +26,9 @@ end
 
 local function say(msg)
   if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
-    DEFAULT_CHAT_FRAME:AddMessage("|cff66bbffUseful Plates and Tooltips|r: " .. tostring(msg))
+    DEFAULT_CHAT_FRAME:AddMessage("|cff66bbffDoesItDiePlus|r: " .. tostring(msg))
   elseif print then
-    print("Useful Plates and Tooltips: " .. tostring(msg))
+    print("DoesItDiePlus: " .. tostring(msg))
   end
 end
 BIT.Say = say
