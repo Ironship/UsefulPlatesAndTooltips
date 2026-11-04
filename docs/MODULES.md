@@ -94,6 +94,8 @@ Holy Shock, Penance and Holy Nova show both their damage and healing amounts, in
 
 Forever's native gamepad crossbar also gets the numbers, including after changing pages. Total mode includes the direct hit and DoT; Direct mode shows only the hit.
 
+On Forever the numbers include your talents: 38 talents that add a percent to a school or to named spells (Moonfury, Shadow Mastery, Aftermath, Improved Renew, Spiritual Healing, Concussion and more) are read from the talent tree, with the value of every rank taken from the client's data (`tools/make_talent_mods.py`). Forever's descriptions leave talents out; Retail's already hold them, so there nothing is added. Switch it off with "Include talents" in the SpellDamageInfo settings; `/upt castpred talents` lists what is read.
+
 Bars built on LibActionButton (Bartender4, ElvUI and others) get the numbers too, for spells, macros and items on their buttons; this is new and not yet checked in the game with those addons.
 
 ![damage prediction](https://i.imgur.com/ySumj4S.png) ![healing prediction](https://i.imgur.com/xvGpoTg.png)

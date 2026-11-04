@@ -22,6 +22,7 @@ local DEFAULTS = {
   skipUtilityBars = true,   -- no numbers on the stance bar or the pet bar
   interfaceLang = "auto",  -- interface language: "auto", "en", "de"
   weapon = true,        -- potential damage of weapon abilities and attack power spells, in blue
+  talents = true,       -- add the percent your talents give a spell (Forever's descriptions leave talents out)
 }
 local BUTTON_MODES = { total = true, direct = true, off = true }
 local POSITIONS = { bottom = true, center = true, top = true }
@@ -538,17 +539,44 @@ local function spellName(spellID)
   return nil
 end
 
+-- The talents of Forever (Core/TalentMods.lua): their percent on the direct and the over-time part of a view. Forever's
+-- descriptions leave talents out; Retail's already hold them, so there nothing is added. The spell's numbers (base and
+-- spell power) are scaled together, as the game does with a "spell mod".
+local function scaleRange(r, factor)
+  if r then r.min, r.max = r.min * factor, r.max * factor; if r.added then r.added = r.added * factor end end
+end
+local function scalePeriodic(p, factor)
+  if p then p.total = p.total * factor; if p.added then p.added = p.added * factor end end
+end
+local function applyTalents(view, spellID, pet)
+  local mods = BIT.TalentMods
+  if not view or pet or not db.talents or not mods or isRetail() or type(spellID) ~= "number" then return view end
+  local ok, dDirect, dPeriodic, hDirect, hPeriodic = pcall(function()
+    return (mods.Percent(spellID, view.school, "d", false)), (mods.Percent(spellID, view.school, "o", false)),
+      (mods.Percent(spellID, nil, "d", true)), (mods.Percent(spellID, nil, "o", true))
+  end)
+  if not ok then return view end
+  if view.direct and dDirect > 0 then scaleRange(view.direct, 1 + dDirect) end
+  if view.dot and dPeriodic > 0 then scalePeriodic(view.dot, 1 + dPeriodic) end
+  if view.heal and hDirect > 0 then scaleRange(view.heal, 1 + hDirect) end
+  if view.hot and hPeriodic > 0 then scalePeriodic(view.hot, 1 + hPeriodic) end
+  if dDirect > 0 or dPeriodic > 0 or hDirect > 0 or hPeriodic > 0 then
+    view.talents = { direct = dDirect, dot = dPeriodic, heal = hDirect, hot = hPeriodic }
+  end
+  return view
+end
+
 -- The client's own share of spell power where SpellCoefficients has the spell, Classic's rules
 -- otherwise. A totem or trap (false there) shows the description's own number, as a pet's spell
 -- does. noBonus: a chance effect; the cast time rule would give it a share of spell power it does
 -- not get, so without the tables' share for what it triggers it shows the description's number.
 local function withEstimate(parsed, spellID, pet, castTime, noBonus)
-  if pet or not db.estimate or isRetail() then return Estimate.Apply(parsed, nil, nil, nil) end
+  if pet or not db.estimate or isRetail() then return applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet) end
   local coef = spellCoefficients(spellID)
-  if coef == false or (noBonus and not coef) then return Estimate.Apply(parsed, nil, nil, nil) end
-  if parsed.hits and not coef then return Estimate.Apply(parsed, nil, nil, nil) end
+  if coef == false or (noBonus and not coef) then return applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet) end
+  if parsed.hits and not coef then return applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet) end
   if castTime == nil then castTime = getCastTime(spellID) end
-  return Estimate.Apply(parsed, castTime, Estimate.DamageBonus(parsed.school, bonus.damage), bonus.heal, coef)
+  return applyTalents(Estimate.Apply(parsed, castTime, Estimate.DamageBonus(parsed.school, bonus.damage), bonus.heal, coef), spellID, pet)
 end
 
 local function percentHealView(parsed)
@@ -599,7 +627,7 @@ local function finisherView(f, spellID, pet)
   if picked then
     local parsed = { school = "physical" }
     if f.kind == "dot" then parsed.dot = picked else parsed.direct = picked end
-    view = Estimate.Apply(parsed, nil, nil, nil)
+    view = applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet)
     if view then view.finisherAt = { n = n, known = true } end
   elseif known and n == 0 then
     -- zero combo points (or no selected target): the button hides the amount, the tooltip
@@ -677,6 +705,7 @@ function ns.ComputeHot(spellID)
   else
     view = Estimate.Apply(parsed, getCastTime(spellID), nil, bonus.heal, coef)
   end
+  if view then view = applyTalents(view, spellID, false) end
   return view and view.hot, spellName(spellID)
 end
 
@@ -2235,6 +2264,7 @@ local function loadSettings()
   if type(db.tooltip) ~= "boolean" then db.tooltip = DEFAULTS.tooltip end
   if type(db.reduction) ~= "boolean" then db.reduction = DEFAULTS.reduction end
   if type(db.weapon) ~= "boolean" then db.weapon = DEFAULTS.weapon end
+  if type(db.talents) ~= "boolean" then db.talents = DEFAULTS.talents end
   -- Not a setting: Reset leaves it alone. Rebuilt into the lookup noteMiss uses.
   if type(db.misses) ~= "table" then db.misses = {} end
   missSeen, missCount = {}, 0

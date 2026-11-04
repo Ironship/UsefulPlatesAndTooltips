@@ -8,6 +8,8 @@
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
 Core\Init.lua
+Core\TalentModsData.lua
+Core\TalentMods.lua
 Core\PlateLayout.lua
 Core\Orbs.lua
 Core\Appearance.lua
