@@ -597,7 +597,22 @@ end
 
 local function specialView(s, spellID, pet, noBonus)
   if s.healPercent then return not pet and percentHealView(s) or nil end
-  if s.absorb then return { absorb = s.absorb } end
+  if s.absorb then
+    -- Forever: a talent (Improved Power Word: Shield) raises the base amount, and the shield gets its share of spell
+    -- power (Power Word: Shield 10%; the other shields carry their own term in the description). Retail: as written.
+    local amount = s.absorb
+    if not pet and not isRetail() and type(spellID) == "number" then
+      if db.talents and BIT.TalentMods then
+        local ok, percent = pcall(BIT.TalentMods.Percent, spellID, nil, "a", true)
+        if ok and type(percent) == "number" and percent > 0 then amount = amount * (1 + percent) end
+      end
+      local share = BIT.AbsorbShares and BIT.AbsorbShares[spellID]
+      if db.estimate and share and type(bonus.heal) == "number" and bonus.heal > 0 then
+        amount = amount + bonus.heal * share
+      end
+    end
+    return { absorb = amount }
+  end
   if s.healthCost then
     return { healthCost = s.healthCost, manaGain = s.manaGain, healthCostDuration = s.healthCostDuration }
   end
