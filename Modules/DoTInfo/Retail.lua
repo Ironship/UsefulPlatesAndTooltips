@@ -19,6 +19,12 @@ R.spells = {
     [63106] = {}, [445468] = {}, -- Siphon Life, Wither (Hellcaller's Corruption)
     [204197] = {}, [14914] = {}, -- Purge the Wicked, Holy Fire
     [202347] = {}, [217694] = {}, [271788] = {}, [204021] = {}, -- Stellar Flare, Living Bomb, Serpent Sting, Fiery Brand
+    -- Added from the client data of 12.1.5 (SpellEffect: a periodic damage aura on the target of the cast, a description that
+    -- reads "N damage over D sec"). Where a recast adds the rest to the new one or stacks, there is no Pandemic carry-over.
+    [114923] = {}, -- Nether Tempest
+    [1259790] = { pandemic = false }, [466930] = { pandemic = false }, -- Unstable Affliction, Black Arrow (Dark Ranger)
+    [217200] = { pandemic = false }, [274837] = { pandemic = false }, -- Barbed Shot, Feral Frenzy
+    [376103] = { pandemic = false }, [385408] = { pandemic = false }, [207407] = { pandemic = false }, -- Radiant Spark, Sepsis, Soul Carver
 }
 
 -- Aura IDs are deliberately separate: casting a weapon coating does not poison the target.
