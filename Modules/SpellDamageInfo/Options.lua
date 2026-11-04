@@ -425,6 +425,8 @@ local function buildSettings(area)
   local notRetail = function() return not ns.IsRetail() end
   place("estimate", checkbox(area, "estimate", L.OPT_ESTIMATE,
     { tooltip = L.OPT_ESTIMATE_TIP, retailNote = true, enabledIf = notRetail }))
+  place("talents", checkbox(area, "talents", L.OPT_TALENTS,
+    { tooltip = L.OPT_TALENTS_TIP, retailNote = true, enabledIf = notRetail }))
   place("tooltip", checkbox(area, "tooltip", L.OPT_TOOLTIP, { tooltip = L.OPT_TOOLTIP_TIP }))
   place("reduction", checkbox(area, "reduction", L.OPT_REDUCTION, { tooltip = L.OPT_REDUCTION_TIP }))
   place("weapon", checkbox(area, "weapon", L.OPT_WEAPON, { tooltip = L.OPT_WEAPON_TIP, retailNote = true, enabledIf = notRetail }))

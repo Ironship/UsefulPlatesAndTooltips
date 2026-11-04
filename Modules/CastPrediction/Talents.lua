@@ -61,44 +61,29 @@ end
 -- linear (Searing Light reads 2% then 5%). schools: which parsed schools it multiplies.
 -- spells: name-limited talents (only these spells' casts). verify: the magnitude still needs a
 -- live tooltip read; it is reported by the probe but never applied until confirmed here.
+-- The talents that simply add a percent to a spell or a school (Moonfury, Shadow Mastery, Darkness, Searing Light,
+-- Arcane Instability, Aftermath, Concussion, Call of Flame, Agonizing Flames and 29 more) are no longer listed here:
+-- they are read, with the value of every rank, from the client's tables (Core/TalentModsData.lua, applied by
+-- Core/TalentMods.lua, see Talents.MultiplierFor). This list keeps what those tables cannot express: talents that
+-- only matter together with an aura, and the ones whose magnitude depends on the state of the target.
 Talents.LIST = {
-    -- Build 70753 reworked it: 3% per Fire effect on the target, up to 12% (it was a flat 2% a point). The
-    -- count of effects is not read yet, so it is held back until it is.
-    { key = "MAGE_FIRE_POWER", class = "MAGE", en = "Fire Power", ids = { 11124 }, perRank = 0.02, maxRank = 5,
+    -- Since build 70753: 1% a rank (up to 3 ranks) for each Fire effect on the target, up to four effects (3% to 12%;
+    -- the client curve of build 70755). The count of effects is not read yet, so it is held back until it is.
+    { key = "MAGE_FIRE_POWER", class = "MAGE", en = "Fire Power", ids = { 11124 }, perRank = 0.01, maxRank = 3,
         verify = true, schools = { fire = true } },
-    { key = "MAGE_ARCANE_INSTABILITY", class = "MAGE", en = "Arcane Instability", ids = { 15058 }, perRank = 0.01,
-        maxRank = 3, schools = { arcane = true, fire = true, frost = true, frostfire = true } },
-    { key = "WARLOCK_SHADOW_MASTERY", class = "WARLOCK", en = "Shadow Mastery", ids = { 18271 }, perRank = 0.01,
-        maxRank = 5, schools = { shadow = true } },
-    -- Immolate's initial hit +10% a point (client curve, beta pass 17 Sep): the only part of Immolate this
-    -- module predicts.
-    { key = "WARLOCK_AFTERMATH", class = "WARLOCK", en = "Aftermath", ids = { 18119 }, perRank = 0.10, maxRank = 5,
-        spells = { ["Immolate"] = true } },
-    { key = "PRIEST_DARKNESS", class = "PRIEST", en = "Darkness", ids = { 15259 }, perRank = 0.02, maxRank = 5,
-        schools = { shadow = true } },
-    { key = "PRIEST_SEARING_LIGHT", class = "PRIEST", en = "Searing Light", ids = { 14909 }, byRank = { 0.02, 0.05 },
-        maxRank = 2, schools = { holy = true } },
-    { key = "DRUID_MOONFURY", class = "DRUID", en = "Moonfury", ids = { 16896 }, perRank = 0.02, maxRank = 5,
-        schools = { arcane = true, nature = true } },
-    { key = "PALADIN_CRUSADE", class = "PALADIN", en = "Crusade", perRank = 0.02, maxRank = 2,
-        schools = { holy = true, physical = true } },
-    { key = "PALADIN_SACRED_ARBITER", class = "PALADIN", en = "Sacred Arbiter", ids = { 1311087 }, perRank = 0.10,
+    -- Crusade: all damage +1% / +2% (client curve of build 70755; a further 1% / 2% against Demons and Undead is not applied).
+    { key = "PALADIN_CRUSADE", class = "PALADIN", en = "Crusade", ids = { 1311083 }, perRank = 0.01, maxRank = 2,
+        schools = { physical = true, holy = true, fire = true, nature = true, frost = true, frostfire = true,
+            shadow = true, arcane = true } },
+    { key = "PALADIN_SACRED_ARBITER", class = "PALADIN", en = "Sacred Arbiter", ids = { 1311087 }, perRank = 0.20,
         maxRank = 1, spells = { ["Holy Strike"] = true } },
-    -- Seen in the Forever trees, magnitude still to be confirmed from the live tooltip:
-    { key = "SHAMAN_CONCUSSION", class = "SHAMAN", en = "Concussion", ids = { 16035 }, perRank = 0.01, maxRank = 5,
-        verify = true, spells = { ["Lightning Bolt"] = true, ["Chain Lightning"] = true, ["Earth Shock"] = true } },
-    { key = "SHAMAN_CALL_OF_FLAME", class = "SHAMAN", en = "Call of Flame", ids = { 16038 }, perRank = 0.02,
-        maxRank = 3, verify = true,
-        spells = { ["Fire Nova"] = true, ["Flame Shock"] = true } },
-    { key = "WARLOCK_AGONIZING_FLAMES", class = "WARLOCK", en = "Agonizing Flames", ids = { 17927 },
-        byRank = { 0.03, 0.07, 0.10 }, maxRank = 3, verify = true, spells = { ["Immolate"] = true } },
     -- Ranks that only matter together with an aura (Auras.lua reads them through `talent`); never applied here.
     -- Improved Shadow Bolt 4% a point while the 12 s debuff (17794) is on the target (beta pass).
     { key = "WARLOCK_IMPROVED_SHADOW_BOLT", class = "WARLOCK", en = "Improved Shadow Bolt", ids = { 17793 },
         perRank = 0.04, maxRank = 5, auraOnly = true },
     -- Shadow and Flame 2% a point on Shadow Bolt and Incinerate while its 20 s buffs (1293816, 426311) are up.
-    -- Blizzard's launch notes of 3 Nov say 4% a point; build 70753 still has the 2% (10 over five ranks), so 0.04
-    -- waits for a build or a live description that shows it.
+    -- Build 70755 still has the 2% a rank in the effects the tooltip names (2, 4 ... 10; its other effects, 4 ... 20 and
+    -- 20 ... 100, are not the damage). Blizzard's launch notes of 3 Nov say 4%: 0.04 waits for a build that shows it.
     { key = "WARLOCK_SHADOW_AND_FLAME", class = "WARLOCK", en = "Shadow and Flame", ids = { 426316 },
         perRank = 0.02, maxRank = 5, auraOnly = true },
     -- Decimation 3/6% on Shadow Bolt and Searing Pain while its buff (440873) is up (target under 35%).
@@ -188,6 +173,7 @@ Talents._collectTree = collectTree
 local treeCache, idCache, treeCacheAt
 function Talents.Invalidate()
     treeCache, idCache, treeCacheAt = nil, nil, nil
+    if BIT.TalentMods then BIT.TalentMods.Invalidate() end
 end
 
 local function tree()
@@ -247,6 +233,11 @@ function Talents.NodeRank(ids, name)
     return nil
 end
 
+-- The ranks the generated talent list reads (Core/TalentMods.lua), by spell id, else by name.
+if BIT.TalentMods then
+    BIT.TalentMods.RankProvider = function(id, name) return Talents.NodeRank({ id }, name) end
+end
+
 -- The curated entry of a key (Auras.lua asks for the ranks behind its auras).
 function Talents.ByKey(key)
     for _, entry in ipairs(Talents.LIST) do
@@ -265,7 +256,7 @@ Talents.PlayerClass = playerClass
 -- The multiplier one cast sees on this client: 1 + percent of every applicable talent, or 1
 -- when nothing applies or the client is Retail (whose descriptions already hold talents).
 -- Returns multiplier, percent (0 when none), and a short note for the trace log.
-function Talents.MultiplierFor(name, school, class)
+function Talents.MultiplierFor(name, school, class, spellID)
     if isRetail() then return 1, 0 end
     local settings = ns._settings and ns._settings()
     if settings and settings.useTalents == false then return 1, 0 end
@@ -292,6 +283,14 @@ function Talents.MultiplierFor(name, school, class)
                     end
                 end
             end
+        end
+    end
+    -- The talents read from the client's tables: schools (Moonfury) and the direct part of the spells they reach.
+    if BIT.TalentMods and not (settings and settings.useTalents == false) then
+        local extra, text = BIT.TalentMods.Percent(spellID, school, "d", false)
+        if extra and extra > 0 then
+            percent = percent + extra
+            notes[#notes + 1] = text
         end
     end
     return 1 + percent, percent, table.concat(notes, ", "), unknown
@@ -423,6 +422,11 @@ function Talents.ProbeLines()
                 end
             end
         end
+    end
+    -- The talents read from the client's tables (Core/TalentMods.lua): rank and what it adds in total at that rank.
+    if BIT.TalentMods and BIT.TalentMods.Describe then
+        lines[#lines + 1] = "talents read from the client data (they add to Forever numbers; Retail adds nothing):"
+        for _, line in ipairs(BIT.TalentMods.Describe()) do lines[#lines + 1] = "    " .. line end
     end
     return lines
 end

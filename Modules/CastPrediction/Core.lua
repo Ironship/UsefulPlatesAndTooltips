@@ -397,7 +397,7 @@ local function predictionFor(view, spellID)
     local min, max = view.min * factor, view.max * factor
     local talentPercent = 0
     if ns.Talents and type(ns.Talents.MultiplierFor) == "function" then
-        local okTalents, mult, percent = pcall(ns.Talents.MultiplierFor, view.name, view.school)
+        local okTalents, mult, percent = pcall(ns.Talents.MultiplierFor, view.name, view.school, nil, spellID)
         if okTalents and type(mult) == "number" and mult > 0 then
             min, max = min * mult, max * mult
             talentPercent = type(percent) == "number" and percent or 0
