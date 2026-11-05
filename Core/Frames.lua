@@ -98,21 +98,44 @@ local function keyInParent(region, parent)
   end
 end
 
+-- The global name of `frame`, or nil.
+local function globalName(frame)
+  local name = plain(frame, "GetName")
+  if type(name) == "string" and not name:find(".", 1, true) and _G[name] == frame then return name end
+end
+
 -- A path that finds `region` again after a reload, or nil if it has no named ancestor to start from.
+-- The path is checked: it must resolve to `region` itself.
 function Frames.PathOf(region)
   local parts, current = {}, region
   for _ = 1, 12 do
-    local name = plain(current, "GetName")
-    if type(name) == "string" and not name:find(".", 1, true) and _G[name] == current then
+    local name = globalName(current)
+    if name then
       table.insert(parts, 1, name)
-      return table.concat(parts, ".")
+      local path = table.concat(parts, ".")
+      return Frames.Resolve(path) == region and path or nil
     end
     local parent = plain(current, "GetParent")
-    if not parent then return nil end
+    if not parent then break end
     local key = keyInParent(current, parent)
-    if not key then return nil end
+    if not key then break end
     table.insert(parts, 1, key)
     current = parent
+  end
+  -- A unit frame addon may move the bar into an unnamed holder (EllesmereUI's clip frame) and still keep it as a
+  -- field of its named frame. Look for the bar among the fields of each named ancestor.
+  local ancestor = plain(region, "GetParent")
+  for _ = 1, 12 do
+    if not ancestor then return nil end
+    local name = globalName(ancestor)
+    if name then
+      local key = keyInParent(region, ancestor)
+      if key then
+        local path = name .. "." .. key
+        if Frames.Resolve(path) == region then return path end
+      end
+    end
+    ancestor = plain(ancestor, "GetParent")
   end
 end
 
