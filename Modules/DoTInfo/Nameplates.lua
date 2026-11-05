@@ -130,10 +130,11 @@ local function fitMarker(w)
 end
 
 local function createWidgets(plate, healthBar)
-    local w = { healthBar = healthBar, plate = plate }
+    local host = BIT.Plate.WidgetHost(plate)
+    local w = { healthBar = healthBar, host = host, plate = plate }
 
     -- Marker: filled from the bar's left edge to the remaining DoT damage, on the mob's (secret) health scale.
-    w.marker = invisibleBar(plate)
+    w.marker = invisibleBar(host)
     fitMarker(w)
     w.span = w.marker:GetStatusBarTexture()
     w.fill = w.marker:CreateTexture(nil, "ARTWORK")
@@ -185,7 +186,7 @@ local function createWidgets(plate, healthBar)
 
     -- Kill icon: a clipped window; the icon rides the end of a very long bar with max = current health and
     -- value = remaining damage, so it only slides into the window when damage >= health.
-    w.iconWindow = CreateFrame("Frame", nil, plate)
+    w.iconWindow = CreateFrame("Frame", nil, host)
     w.iconWindow:SetClipsChildren(true)
     w.iconBar = invisibleBar(w.iconWindow)
     w.iconBar:SetPoint("RIGHT", w.iconWindow, "RIGHT")
@@ -348,6 +349,12 @@ end
 local function widgetsFor(plate, healthBar)
     local w = widgetsByPlate[plate]
     if w then
+        local host = BIT.Plate.WidgetHost(plate)
+        if w.host ~= host then
+            w.host = host
+            w.marker:SetParent(host)
+            w.iconWindow:SetParent(host)
+        end
         if w.healthBar == healthBar then
             fitMarker(w)
             return w

@@ -44,9 +44,9 @@ Channeling and casting prediction for normal spells.
 
 ### CastPrediction
 
-Shows the damage of the spell you are casting on the enemy's health bar and nameplate. Direct hits use a solid translucent fill; channels use vertical bands for the damage remaining. Colors follow the spell's school, matching DoTInfo.
+Shows the damage of the spell you are casting on the enemy's health bar and nameplate. Direct hits use a solid translucent fill; channels use vertical bands for the damage remaining. Colors follow the spell's school, matching DoTInfo. The Marker tab has separate switches for the target, focus, party, raid and nameplate frames. Copies appear only when a frame represents the cast's recipient; party/raid members are normally friendly, so outgoing damage predictions do not ordinarily appear on those frames.
 
-The fill covers health backwards from its current edge: 20 damage at 60/100 HP covers 60 down to 40. It follows health changes and clips overkill inside the bar. Action targeting works without clicking a target, and the prediction stays on the original enemy if the reticle moves. Hidden GUIDs use a nameplate-session key, discarded when the plate disappears; this does not require DoTInfo to be enabled. A live hard target takes precedence over a same-named soft target, while focus/mouseover ambiguity is still rejected.
+The fill covers health backwards from its current edge: 20 damage at 60/100 HP covers 60 down to 40. It follows health changes and clips overkill inside the bar. Action targeting works without clicking a target, and the prediction stays on the original enemy if the reticle moves. Hidden GUIDs use a nameplate-session key, discarded when the plate disappears; this does not require DoTInfo to be enabled. The cast's reported recipient is matched against target, focus, mouseover and nameplates.
 
 The estimate also holds the talents and effects the description leaves out (Forever): Arcane Instability, Shadow Mastery, Aftermath, Darkness, Searing Light, Moonfury and the rest of the curated list, and, while the client shows the aura, Arcane Power, Power Infusion, Ice Barrier, Improved Scorch, Curse of the Elements, Demonic Sacrifice, Improved Shadow Bolt, Shadow and Flame, Decimation, Incinerate against your Immolate, Power in Light, Shadow Weaving, Shadowform, Stormstrike, Rage of the Farseer and Eureka!. Talent ranks are matched by spell id as well as name, so a client in another language reads them. Auras are hidden in combat on Forever, so they apply out of combat only; the hit calibration carries the rest.
 
@@ -57,6 +57,10 @@ Penance's damage channel uses the three bolts stated in its description: the imm
 Only the first matched impact can calibrate a cast; later damage cannot add samples or restart its fade. This is still a heuristic: `UNIT_COMBAT` does not identify the attacker or spell. Cached estimates are refreshed after spell, talent, equipment, player-aura and manual spell-power changes, retaining the last readable description when the client hides it.
 
 The direct hit is separate from DoTInfo's damage-over-time marker. For rank-1 Fireball, the unmodified average is 18 damage on impact plus 2 over time. Critical strikes, procs and resists can change the result. `/upt cast` opens the settings and preview.
+
+### ShieldsInfo
+
+Shows remaining absorbs on the player, target, focus, party, raid and nameplate health bars. The Frames tab provides an independent checkbox for each category; party and raid are separate switches. The overlay uses the selected fill and opacity with the shared absorb color.
 
 ### HealPrediction
 

@@ -1,8 +1,8 @@
 -- UsefulPlatesAndTooltips module CastPrediction: while a damage spell with a cast time is on its
--- way to the target, show the damage it is expected to deal as a marker on the target's health
--- bar and nameplate -- the same idea as DoTInfo's remaining-DoT marker, for spells that are not
--- DoTs (Frostbolt, Fireball, Pyroblast, Shadow Bolt, Lightning Bolt, ...). Channels show the
--- damage remaining over their readable channel time; their ticks never calibrate a whole cast.
+-- way to the target, show the damage it is expected to deal as a marker on matching unit frames
+-- and the target's nameplate -- the same idea as DoTInfo's remaining-DoT marker, for spells that
+-- are not DoTs (Frostbolt, Fireball, Pyroblast, Shadow Bolt, Lightning Bolt, ...). Channels show
+-- the damage remaining over their readable channel time; their ticks never calibrate a whole cast.
 --
 -- A prediction, not a promise: the cast's damage is a range (the description's own numbers plus
 -- the player's spell power), and critical strikes, procs and partial resists cannot be predicted.
@@ -18,6 +18,7 @@ local ADDON_NAME, BIT = ...
 local ns = BIT.Module("CastPrediction")
 
 local UPDATE_INTERVAL = 0.1
+local MAX_PLATES = 40
 local CAST_MAX_SECONDS = 15 -- a lost end event never leaves a marker behind
 local CAST_STOP_GRACE = 0.5 -- STOP and SUCCEEDED can arrive in either order, a hair apart
 local PROJECTILE_GRACE = 1.5 -- keep the marker after a successful cast while the hit flies in
@@ -51,6 +52,11 @@ local SCHOOL_MASKS = {
 local DEFAULTS = {
     -- The marker on the target frame's health bar
     showMarker = true,
+    showTargetFrame = true,
+    showFocusFrame = true,
+    showPartyFrames = true,
+    showRaidFrames = true,
+    showNameplates = true,
     fillColor = "school",
     fillOpacity = 45,
     outlineStyle = "solid",
@@ -536,16 +542,45 @@ local function selectedEnemy()
     return hostileTarget("softenemy") and "softenemy" or nil
 end
 
--- Resolve the recorded recipient, even when action targeting has moved to another enemy.
-local function castUnit()
-    if not castInProgress then return end
-    for _, unit in ipairs({ "target", "softenemy" }) do
-        if read(UnitExists, unit) == true and unitKey(unit) == castInProgress.key then return unit end
+local function findRecipient(name)
+    if not isSecret(name) and type(name) == "string" and name ~= "" then
+        local found
+        local function consider(unit)
+            if not hostileTarget(unit) or read(UnitName, unit) ~= name then return true end
+            if found and read(UnitIsUnit, unit, found) ~= true then return false end
+            found = found or unit
+            return true
+        end
+        for _, unit in ipairs({ "target", "focus", "mouseover", "softenemy" }) do
+            if not consider(unit) then return nil end
+        end
+        for i = 1, MAX_PLATES do
+            local unit = "nameplate" .. i
+            if not consider(unit) then return nil end
+        end
+        return found
     end
-    for i = 1, 40 do
+    return selectedEnemy()
+end
+
+local function unitMatchesKey(unit, key)
+    if unitKey(unit) == key then return true end
+    return key == "target" and read(UnitIsUnit, unit, "target") == true
+end
+
+local function findUnitByKey(key)
+    if not key then return end
+    for _, unit in ipairs({ "target", "focus", "mouseover", "softenemy" }) do
+        if read(UnitExists, unit) == true and unitMatchesKey(unit, key) then return unit end
+    end
+    for i = 1, MAX_PLATES do
         local unit = "nameplate" .. i
-        if read(UnitExists, unit) == true and unitKey(unit) == castInProgress.key then return unit end
+        if read(UnitExists, unit) == true and unitMatchesKey(unit, key) then return unit end
     end
+end
+
+local function castUnit()
+    return castInProgress and findUnitByKey(castInProgress.key)
 end
 
 local recipients = {}
@@ -554,23 +589,20 @@ local function castToken(castGUID, spellID)
     return number(spellID)
 end
 
+local function recipientUnit(castGUID, spellID)
+    local token = castToken(castGUID, spellID)
+    local sent = token and recipients[token]
+    if sent then return findUnitByKey(sent.key) end
+    return selectedEnemy()
+end
+
 -- Snapshot SENT so a focus/mouseover macro or a selection change cannot mark the wrong mob.
 local function onCastSent(targetName, castGUID, spellID)
     local token = castToken(castGUID, spellID)
     if not token then return end
-    local unit = selectedEnemy()
+    local unit = findRecipient(targetName)
     local key = unit and unitKey(unit) or nil
-    local hardTarget = unit == "target"
-    local named = not isSecret(targetName) and type(targetName) == "string" and targetName ~= ""
-    if named and unit and read(UnitName, unit) ~= targetName then key = nil end
-    for _, other in ipairs({ "focus", "mouseover", "softenemy" }) do
-        if not (other == "softenemy" and hardTarget)
-            and read(UnitExists, other) == true and read(UnitCanAttack, "player", other) ~= false
-            and read(UnitIsDeadOrGhost, other) ~= true
-            and (not named or read(UnitName, other) == targetName) and unitKey(other) ~= key then
-            key = nil
-        end
-    end
+    if not unit then key = nil end
     local now = GetTime()
     for oldToken, sent in pairs(recipients) do
         if now - sent.at > CAST_MAX_SECONDS then recipients[oldToken] = nil end
@@ -605,7 +637,7 @@ end
 local function onCastStart(castGUID, spellID, channel)
     dropCast(nil)
     if isSecret(spellID) or type(spellID) ~= "number" then return end
-    local unit = selectedEnemy()
+    local unit = recipientUnit(castGUID, spellID)
     if not unit or not targetsSelected(castGUID, spellID, unit) then return end
     local key = unitKey(unit)
     if not key then return end
@@ -620,7 +652,6 @@ local function onCastStart(castGUID, spellID, channel)
     if not prediction then return end
     castInProgress = {
         key = key,
-        softTarget = unit == "softenemy",
         spellID = spellID,
         name = view.name or spellName(spellID) or "?",
         view = view,
@@ -651,7 +682,7 @@ local function onCastSucceeded(castGUID, spellID)
     end
     if settings.castOnly then return end
     local view = buildView(spellID)
-    local unit = selectedEnemy()
+    local unit = recipientUnit(castGUID, spellID)
     if not view or not unit or not targetsSelected(castGUID, spellID, unit) then return end
     local key = unitKey(unit)
     if not key then return end
@@ -659,7 +690,6 @@ local function onCastSucceeded(castGUID, spellID)
     if not prediction then return end
     castInProgress = {
         key = key,
-        softTarget = unit == "softenemy",
         spellID = spellID,
         name = view.name or spellName(spellID) or "?",
         view = view,
@@ -942,7 +972,7 @@ labelLayer:Hide()
 -- Where the marker is attached: the target frame's health bar and portrait (live), or the
 -- settings preview's mock frames. previewState is tried first: while the settings window is open
 -- out of combat, the preview keeps the marker (see Options.lua).
-local healthBar, skullAnchor
+local healthBar, skullAnchor, targetHost
 local previewHost, previewState
 local appliedSignature
 
@@ -961,6 +991,7 @@ function ns.setDisplayHost(host)
     previewHost = host
     healthBar = host and host.healthBar or nil
     skullAnchor = host and (host.portrait or host.layerFrame) or nil
+    targetHost = host and host.layerFrame or nil
     appliedSignature = nil
     if not host then
         marker:ClearAllPoints()
@@ -979,14 +1010,15 @@ function ns.setPreviewState(state)
 end
 
 local function attach()
-    local portrait, bar
+    local portrait, bar, frameHost
     if previewHost then
         portrait, bar = previewHost.portrait, previewHost.healthBar
+        frameHost = previewHost.layerFrame
     elseif BIT.Plate and BIT.Plate.UnitFrame then
-        local _, plateBar, platePortrait = BIT.Plate.UnitFrame("target")
-        bar, portrait = plateBar, platePortrait
+        frameHost, bar, portrait = BIT.Plate.UnitFrame("target")
     else
         local tf = TargetFrame
+        frameHost = tf
         local main = tf and tf.TargetFrameContent and tf.TargetFrameContent.TargetFrameContentMain
         bar = (main and main.HealthBarsContainer and main.HealthBarsContainer.HealthBar)
             or (main and main.HealthBar) or TargetFrameHealthBar or (tf and tf.healthbar)
@@ -994,8 +1026,16 @@ local function attach()
         portrait = (portraitHost and portraitHost.Portrait) or TargetFramePortrait or (tf and tf.portrait)
     end
     healthBar = bar
+    targetHost = frameHost or bar
     skullAnchor = portrait or healthBar
     if healthBar then
+        if not previewHost and not (type(InCombatLockdown) == "function" and InCombatLockdown()) then
+            local parent = markerClip.GetParent and markerClip:GetParent()
+            if parent ~= healthBar then
+                local ok = pcall(markerClip.SetParent, markerClip, healthBar)
+                if not ok then trace("ATTACH marker parent change failed") end
+            end
+        end
         marker:ClearAllPoints()
         marker:SetAllPoints(healthBar)
     end
@@ -1012,6 +1052,7 @@ local layerCheckedAt, lastStrata, lastLevel = 0, nil, nil
 local function topLayerOf(frame)
     local topStrata, topLevel = "BACKGROUND", 0
     local function visit(f, depth)
+        if f == markerClip then return end
         local ok, forbidden = pcall(function() return f.IsForbidden and f:IsForbidden() end)
         if not ok or isSecret(forbidden) or forbidden then return end
         local readOK, strata, level = pcall(function() return f:GetFrameStrata(), f:GetFrameLevel() end)
@@ -1043,7 +1084,7 @@ local function updateLayering(now)
         strata, level = "FULLSCREEN", 1
     else
         local ok
-        ok, strata, level = pcall(topLayerOf, healthBar or TargetFrame)
+        ok, strata, level = pcall(topLayerOf, targetHost or healthBar or TargetFrame)
         if not ok then return end
     end
     for i, frame in ipairs({ markerClip, marker, fillLayer, outlineLayer, labelLayer, killWindow, killBar }) do
@@ -1176,27 +1217,23 @@ end
 local function updateMarker(now)
     if previewState then
         local state = previewState
-        if not state.value or state.value <= 0 or (state.health or 1) <= 0 then return hideAll() end
+        if not settings.showTargetFrame or not state.value or state.value <= 0
+            or (state.health or 1) <= 0 then return hideAll() end
         updateLayering(now)
         local maxHealth = number(state.maxHealth) or math.max(state.health, 0.01)
         return drawMarker(state.value, maxHealth, math.max(state.health, 0.01), state)
     end
-    if castInProgress and (not hostileTarget() or unitKey("target") ~= castInProgress.key) then
+    if not castInProgress or not settings.showTargetFrame
+        or not unitMatchesKey("target", castInProgress.key) or not hostileTarget("target") then
         hideAll()
         return false
     end
-    if not castInProgress or castInProgress.landedAt then
-        if castInProgress and castInProgress.landedAt then
-            -- The hit landed: flash the marker where it was and let it fade out.
-            local prediction = castInProgress.prediction
-            return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
-                name = castInProgress.name, min = prediction.min, max = prediction.max,
-                value = prediction.value, school = castInProgress.view.school,
-            })
-        else
-            hideAll()
-        end
-        return marker:IsShown()
+    if castInProgress.landedAt then
+        local prediction = castInProgress.prediction
+        return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
+            name = castInProgress.name, min = prediction.min, max = prediction.max,
+            value = prediction.value, school = castInProgress.view.school,
+        })
     end
     if not UnitExists("target") or targetIsDead() then
         hideAll()
@@ -1216,15 +1253,244 @@ local function updateMarker(now)
 end
 
 ---------------------------------------------------------------------------------------------
+-- Other unit frames: focus and group frames can show the same prediction when they represent
+-- the cast's recipient. They own independent overlays so duplicate frames can be visible too.
+---------------------------------------------------------------------------------------------
+
+local frameWidgets = setmetatable({}, { __mode = "k" })
+local function targetKnownDead(unit)
+    return read(UnitIsDeadOrGhost, unit) == true
+end
+
+local function frameHealthBar(frame)
+    if type(frame) ~= "table" then return nil end
+    local container = frame.HealthBarContainer
+    local bar = type(container) == "table" and container.HealthBar
+    if type(bar) ~= "table" then bar = frame.HealthBar end
+    if type(bar) ~= "table" then bar = frame.healthBar end
+    if type(bar) ~= "table" then bar = frame.healthbar end
+    return type(bar) == "table" and bar or nil
+end
+
+local function frameUnit(frame)
+    if type(frame) ~= "table" then return nil end
+    local unit = frame.displayedUnit
+    if unit == nil then unit = frame.unit end
+    return not isSecret(unit) and type(unit) == "string" and unit or nil
+end
+
+local function collectPool(pool, out)
+    if type(pool) ~= "table" then return end
+    local function collect(candidate, unit)
+        if type(candidate) ~= "table" then return end
+        unit = unit or frameUnit(candidate)
+        local bar = frameHealthBar(candidate)
+        if unit and bar and (unit:match("^party%d+$") or unit:match("^raid%d+$")) then
+            out[#out + 1] = { unit = unit, bar = bar, host = candidate }
+        end
+    end
+    local objects = type(pool.memberUnitFrames) == "table" and pool.memberUnitFrames
+        or type(pool.activeObjects) == "table" and pool.activeObjects
+    if objects then
+        for key, value in pairs(objects) do
+            local unit = type(value) == "table" and frameUnit(value)
+            if unit then collect(value, unit) else collect(key) end
+        end
+    elseif type(pool.EnumerateActive) == "function" then
+        local ok, iter, state, seed = pcall(pool.EnumerateActive, pool)
+        if ok and type(iter) == "function" then
+            local guard = 0
+            for candidate in iter, state, seed do
+                guard = guard + 1
+                if guard > 400 then break end
+                collect(candidate)
+            end
+        end
+    end
+end
+
+local function collectFrameOverlays()
+    local out = {}
+    local host, bar, portrait
+    if BIT.Plate and BIT.Plate.UnitFrame then
+        host, bar, portrait = BIT.Plate.UnitFrame("focus")
+    else
+        host, bar, portrait = FocusFrame, FocusFrameHealthBar, FocusFramePortrait
+    end
+    if bar then out[#out + 1] = { unit = "focus", bar = bar, host = host or FocusFrame, portrait = portrait } end
+
+    for i = 1, 4 do
+        local frame = _G["PartyMemberFrame" .. i]
+        local partyBar = frameHealthBar(frame) or _G["PartyMemberFrame" .. i .. "HealthBar"]
+        if partyBar then
+            out[#out + 1] = { unit = "party" .. i, bar = partyBar, host = frame or partyBar }
+        end
+    end
+    collectPool(_G.PartyFrame and _G.PartyFrame.PartyMemberFramePool, out)
+    collectPool(_G.CompactPartyFrame, out)
+    collectPool(_G.CompactRaidFrameContainer, out)
+
+    local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
+    local eui = type(modules) == "table" and modules.EllesmereUIRaidFrames
+    if type(eui) ~= "table" then return out end
+    local internals = type(eui) == "table" and eui._internals
+    local function collectEUI(members)
+        if type(members) ~= "table" then return end
+        for unit, frame in pairs(members) do
+            local data = type(eui.GetFFD) == "function" and read(eui.GetFFD, frame)
+            if not isSecret(unit) and type(unit) == "string"
+                and (unit:match("^party%d+$") or unit:match("^raid%d+$"))
+                and type(data) == "table" and type(data.health) == "table"
+                and read(frame.IsVisible, frame) == true then
+                out[#out + 1] = { unit = unit, bar = data.health, host = frame }
+            end
+        end
+    end
+    collectEUI(type(internals) == "table" and internals.unitToButton)
+    collectEUI(type(eui) == "table" and eui._partyUnitToButton)
+    return out
+end
+
+local function createFrameWidgets(bar)
+    local w = { layerAt = -math.huge }
+    w.clip = CreateFrame("Frame", nil, UIParent)
+    w.clip:SetClipsChildren(true)
+    w.marker = CreateFrame("StatusBar", nil, w.clip)
+    w.marker:SetStatusBarTexture(WHITE)
+    w.marker:SetStatusBarColor(0, 0, 0, 0)
+    w.fill = w.marker:CreateTexture(nil, "ARTWORK")
+    local span = w.marker:GetStatusBarTexture()
+    w.fill:SetPoint("TOPLEFT", span, "TOPLEFT")
+    w.fill:SetPoint("BOTTOMRIGHT", span, "BOTTOMRIGHT")
+    w.edges = {}
+    local function edge(pointA, pointB, width, height)
+        local texture = w.marker:CreateTexture(nil, "OVERLAY", nil, 7)
+        texture:SetTexture(WHITE)
+        texture:SetPoint(pointA, span, pointB)
+        if width then texture:SetWidth(width) end
+        if height then texture:SetHeight(height) end
+        w.edges[#w.edges + 1] = texture
+    end
+    edge("TOPLEFT", "TOPLEFT")
+    w.edges[1]:SetPoint("TOPRIGHT", span, "TOPRIGHT")
+    w.edges[1]:SetHeight(1)
+    edge("BOTTOMLEFT", "BOTTOMLEFT")
+    w.edges[2]:SetPoint("BOTTOMRIGHT", span, "BOTTOMRIGHT")
+    w.edges[2]:SetHeight(1)
+    edge("TOPLEFT", "TOPLEFT", 1)
+    w.edges[3]:SetPoint("BOTTOMLEFT", span, "BOTTOMLEFT")
+    edge("TOPRIGHT", "TOPRIGHT", 1)
+    w.edges[4]:SetPoint("BOTTOMRIGHT", span, "BOTTOMRIGHT")
+
+    w.labelLayer = CreateFrame("Frame", nil, UIParent)
+    w.label = w.labelLayer:CreateFontString(nil, "OVERLAY")
+    w.labelLayer:Hide()
+    w.killWindow = CreateFrame("Frame", nil, UIParent)
+    w.killWindow:SetClipsChildren(true)
+    w.killBar = CreateFrame("StatusBar", nil, w.killWindow)
+    w.killBar:SetPoint("RIGHT", w.killWindow, "RIGHT")
+    w.killBar:SetStatusBarTexture(WHITE)
+    w.killBar:SetStatusBarColor(0, 0, 0, 0)
+    w.killIcon = w.killBar:CreateTexture(nil, "OVERLAY")
+    w.killIcon:SetPoint("RIGHT", w.killBar:GetStatusBarTexture(), "RIGHT")
+    w.clip:Hide()
+    w.killWindow:Hide()
+    frameWidgets[bar] = w
+    return w
+end
+
+local function keepFrameWidgetsAbove(w, host, now)
+    if now - w.layerAt < 1 and w.layerHost == host then return end
+    w.layerAt, w.layerHost = now, host
+    local ok, strata, level = pcall(topLayerOf, host)
+    if not ok then return end
+    for i, frame in ipairs({ w.clip, w.marker, w.labelLayer, w.killWindow, w.killBar }) do
+        frame:SetFrameStrata(strata)
+        frame:SetFrameLevel(level + i + 1)
+    end
+end
+
+local function hideFrameWidgets(w)
+    w.clip:Hide()
+    w.labelLayer:Hide()
+    w.killWindow:Hide()
+end
+
+local function drawFrameWidgets(w, entry, now)
+    local unit, bar = entry.unit, entry.bar
+    local prediction = castInProgress.prediction
+    local state = {
+        name = castInProgress.name, min = prediction.min, max = prediction.max, value = prediction.value,
+        school = castInProgress.view.school, channel = castInProgress.channel,
+    }
+    if not layoutDamage(w.marker, w.clip, bar) then hideFrameWidgets(w); return end
+    keepFrameWidgetsAbove(w, entry.host or bar, now)
+    w.marker:SetMinMaxValues(0, UnitHealthMax(unit))
+    w.marker:SetValue(prediction.value)
+    paintDamage(w.fill, settings.fillColor, settings.fillOpacity, state)
+    local r, g, b, a = colorOf(settings.outlineColor, settings.outlineOpacity)
+    for _, edgeTexture in ipairs(w.edges) do
+        edgeTexture:SetVertexColor(r, g, b, a)
+        edgeTexture:SetShown(settings.outlineStyle ~= "none")
+    end
+    w.clip:SetShown(settings.showMarker)
+    w.marker:SetShown(settings.showMarker)
+    w.labelLayer:ClearAllPoints()
+    w.labelLayer:SetAllPoints(bar)
+    w.label:ClearAllPoints()
+    w.label:SetFont(labelFontPath(), settings.labelSize, "OUTLINE")
+    w.label:SetTextColor(colorOf(settings.labelColor))
+    if settings.labelPosition == "center" then
+        w.label:SetPoint("CENTER", bar, "CENTER")
+    elseif settings.labelPosition == "right" then
+        w.label:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+    else
+        w.label:SetPoint("RIGHT", bar, "LEFT", -6, 0)
+    end
+    w.label:SetText(labelText(state, UnitHealthMax(unit)))
+    w.labelLayer:SetShown(settings.showMarker and settings.showLabel)
+
+    w.killWindow:ClearAllPoints()
+    w.killWindow:SetPoint("CENTER", entry.portrait or entry.host or bar, "CENTER")
+    local icon = findById(KILL_ICONS, settings.killIcon)
+    w.killIcon:SetTexture(icon.path)
+    local size = settings.plateIconSize
+    w.killWindow:SetSize(size, size)
+    w.killBar:SetSize(KILL_BAR_LENGTH, size)
+    w.killIcon:SetSize(size, size)
+    w.killBar:SetMinMaxValues(0, UnitHealth(unit))
+    w.killBar:SetValue(number(state.min) or prediction.value)
+    w.killWindow:SetShown(settings.showMarker and settings.showKillIcon)
+end
+
+local function refreshFrameOverlays(now, recipient)
+    for _, w in pairs(frameWidgets) do hideFrameWidgets(w) end
+    if previewHost or previewState then return end
+    if not castInProgress or not recipient or targetKnownDead(recipient) then return end
+    for _, entry in ipairs(collectFrameOverlays()) do
+        local unit = entry.unit
+        local enabled = unit == "focus" and settings.showFocusFrame
+            or unit:match("^raid%d+$") and settings.showRaidFrames
+            or unit:match("^party%d+$") and settings.showPartyFrames
+        local sameUnit = read(UnitIsUnit, unit, recipient) == true
+        if enabled and (not entry.host or read(entry.host.IsVisible, entry.host) ~= false)
+            and sameUnit then
+            local w = frameWidgets[entry.bar] or createFrameWidgets(entry.bar)
+            drawFrameWidgets(w, entry, now)
+        end
+    end
+end
+
+---------------------------------------------------------------------------------------------
 -- Nameplates: the same marker, drawn on the target's own plate
 ---------------------------------------------------------------------------------------------
 
-local MAX_PLATES = 40
 local widgetsByPlate = {}
 
 local function createPlateWidgets(plate, healthBar)
-    local w = { healthBar = healthBar, signature = nil, displayDamage = 0 }
-    w.clip = CreateFrame("Frame", nil, plate)
+    local host = BIT.Plate.WidgetHost(plate)
+    local w = { healthBar = healthBar, host = host, signature = nil, displayDamage = 0 }
+    w.clip = CreateFrame("Frame", nil, host)
     w.clip:SetClipsChildren(true)
     w.marker = CreateFrame("StatusBar", nil, w.clip)
     w.marker:SetStatusBarTexture(WHITE)
@@ -1257,7 +1523,7 @@ local function createPlateWidgets(plate, healthBar)
     right:SetPoint("TOPRIGHT", w.span, "TOPRIGHT")
     right:SetPoint("BOTTOMRIGHT", w.span, "BOTTOMRIGHT")
     right:SetWidth(1)
-    local iconWindow = CreateFrame("Frame", nil, plate)
+    local iconWindow = CreateFrame("Frame", nil, host)
     iconWindow:SetSize(settings and settings.plateIconSize or 18, settings and settings.plateIconSize or 18)
     w.icon = iconWindow:CreateTexture(nil, "OVERLAY")
     w.icon:SetAllPoints()
@@ -1350,6 +1616,12 @@ end
 local function widgetsFor(plate, healthBar)
     local w = widgetsByPlate[plate]
     if w then
+        local host = BIT.Plate.WidgetHost(plate)
+        if w.host ~= host then
+            w.host = host
+            w.clip:SetParent(host)
+            w.iconWindow:SetParent(host)
+        end
         if w.healthBar ~= healthBar then
             w.healthBar = healthBar
             w.marker:ClearAllPoints()
@@ -1400,28 +1672,22 @@ local function findTargetPlate(unit)
     return nil
 end
 
-local function targetKnownDead(unit)
-    if type(UnitIsDeadOrGhost) ~= "function" then return false end
-    local ok, dead = pcall(UnitIsDeadOrGhost, unit)
-    return ok and not isSecret(dead) and dead == true
-end
-
-local function refreshPlates(now)
+local function refreshPlates(now, unit)
     wipe(seenPlates)
-    local unit = castUnit()
-    if castInProgress and not castInProgress.softTarget and unitKey("target") ~= castInProgress.key then unit = nil end
     -- The options preview keeps the plate marker; the real plates stay hidden then.
     if previewPlate then
         seenPlates[previewPlate.plate] = true
         local w = widgetsFor(previewPlate.plate, previewPlate.healthBar)
-        if previewState and previewState.value and previewState.value > 0 and settings.nameplateMode ~= "off"
+        if previewState and previewState.value and previewState.value > 0
+            and settings.showNameplates and settings.nameplateMode ~= "off"
             and (previewState.health or 1) > 0 then
             drawPlate(w, previewState.value, number(previewState.maxHealth) or math.max(previewState.health, 0.01),
                 math.max(previewState.health, 0.01), previewState)
         else
             hidePlateWidgets(w)
         end
-    elseif settings.nameplateMode ~= "off" and castInProgress and not castInProgress.landedAt
+    elseif settings.showNameplates and settings.nameplateMode ~= "off"
+        and castInProgress and not castInProgress.landedAt
         and unit and not targetKnownDead(unit) then
         local plate = findTargetPlate(unit)
         if plate then
@@ -1451,8 +1717,10 @@ local reportedErrors = {}
 local function refresh()
     local now = GetTime()
     housekeep(now)
+    local recipient = castUnit()
     updateMarker(now)
-    refreshPlates(now)
+    refreshFrameOverlays(now, recipient)
+    refreshPlates(now, recipient)
 end
 
 local function safeRefresh()
@@ -1461,6 +1729,7 @@ local function safeRefresh()
         dropCast("display error")
         local cleanupOK, cleanupError = pcall(function()
             hideAll()
+            for _, w in pairs(frameWidgets) do hideFrameWidgets(w) end
             for _, w in pairs(widgetsByPlate) do hidePlateWidgets(w) end
         end)
         if not cleanupOK then err = tostring(err) .. "; cleanup: " .. tostring(cleanupError) end
@@ -1521,6 +1790,7 @@ end
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+frame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 pcall(frame.RegisterEvent, frame, "PLAYER_SOFT_ENEMY_CHANGED")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player")
@@ -1602,6 +1872,9 @@ frame:SetScript("OnEvent", function(self, event, ...)
         for _, sent in pairs(recipients) do
             if sent.key == "target" then sent.key = nil end
         end
+        safeRefresh()
+
+    elseif event == "PLAYER_FOCUS_CHANGED" then
         safeRefresh()
 
     elseif event == "PLAYER_SOFT_ENEMY_CHANGED" then

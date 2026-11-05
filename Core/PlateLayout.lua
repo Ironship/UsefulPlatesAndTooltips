@@ -192,6 +192,15 @@ local function threatPlatesBar(plate)
 end
 
 -- Prefer known integrations, then visible Blizzard bars, then a cached search of addon fields.
+function Plate.WidgetHost(plate)
+  if type(plate) ~= "table" then return nil end
+  local unitFrame = read(function() return plate.unitFrame end)
+  if type(unitFrame) == "table" and read(function() return unitFrame.PlateFrame end) == plate then
+    return unitFrame
+  end
+  return plate
+end
+
 function Plate.HealthBar(plate)
   if type(plate) ~= "table" then return nil, "no nameplate" end
   if read(plate.IsForbidden, plate) == true then return nil, "forbidden nameplate" end
@@ -233,6 +242,11 @@ function Plate.HealthBar(plate)
         if ok and type(bar) == "table" then return bar, "Platynator.widgets.health.statusBar" end
       end
     end
+  end
+  local host = Plate.WidgetHost(plate)
+  if host ~= plate then
+    local bar = read(function() return host.healthBar end)
+    if visibleHealthBar(bar) then return bar, "Plater.unitFrame.healthBar" end
   end
   local tpOk, tpBar = pcall(threatPlatesBar, plate)
   if tpOk and tpBar then return tpBar, "ThreatPlates.TPFrame.visual.Healthbar" end

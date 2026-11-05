@@ -300,9 +300,20 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildMarkerTab(parent)
-    local y = section(parent, 0, "THE MARKER")
+    local y = section(parent, 0, "FRAMES")
+    y = place(checkRow(parent, "Show on target frame", "showTargetFrame",
+        "Show the prediction on the Blizzard or configured target frame."), y)
+    y = place(checkRow(parent, "Show on focus frame", "showFocusFrame",
+        "Also show the prediction on the focus frame when it represents the cast's target."), y)
+    y = place(checkRow(parent, "Show on party frames", "showPartyFrames",
+        "Show the prediction only if a party frame represents the cast's recipient. Ordinary damage casts target enemies, not party members."), y)
+    y = place(checkRow(parent, "Show on raid frames", "showRaidFrames",
+        "Show the prediction only if a raid frame represents the cast's recipient. Ordinary damage casts target enemies, not raid members."), y)
+    y = place(checkRow(parent, "Show on nameplates", "showNameplates",
+        "Show the prediction on the cast target's nameplate."), y)
+    y = section(parent, y, "THE MARKER")
     y = place(checkRow(parent, "Show the marker", "showMarker",
-        "The predicted damage, drawn across the target's health bar while a cast is in flight."), y)
+        "The predicted damage, drawn across enabled health bars while a cast is in flight."), y)
     y = section(parent, y, "SOLID CASTS / BANDED CHANNELS")
     y = place(choiceRow(parent, "Fill color", "fillColor", colorList(true),
         "Only your own cast is ever drawn on the bar."), y)
@@ -351,7 +362,7 @@ end
 
 local function buildNameplateTab(parent)
     local y = section(parent, 0, "NAMEPLATES")
-    y = place(choiceRow(parent, "On nameplates", "nameplateMode", {
+    y = place(choiceRow(parent, "Nameplate style", "nameplateMode", {
         { id = "off", label = "Off" },
         { id = "marker", label = "Marker on the health bar" },
         { id = "markerIcon", label = "Marker and an impact icon" },
@@ -571,8 +582,8 @@ end
 if BIT.RegisterTab then
     BIT.RegisterTab("CastPrediction", {
         title = "Cast prediction",
-        summary = "The damage the spell you are casting should deal, drawn on the target's health bar "
-            .. "and nameplate. Channels show estimated damage remaining until the channel ends. "
+        summary = "The damage the spell you are casting should deal, drawn on enabled unit frames "
+            .. "and the target's nameplate. Channels show estimated damage remaining until the channel ends. "
             .. "Crits, procs and resists cannot be predicted.",
         width = WINDOW_WIDTH, height = WINDOW_HEIGHT,
         build = function(parent)

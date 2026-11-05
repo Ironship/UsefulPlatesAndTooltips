@@ -25,17 +25,19 @@ local M = BIT.Module("ShieldsInfo")
 
 local WHITE = "Interface\\Buttons\\WHITE8X8" -- the native Blizzard fill (the shared style paints it)
 local UPDATE_INTERVAL = 0.2
-local PARTY_UNITS = { "party1", "party2", "party3", "party4" }
--- The units whose bars the module draws: player, target and the party slots. The unit
--- events are registered unfiltered (see start(): RegisterUnitEvent takes at most two unit
--- tokens and this set is six), so onEvent checks every event's unit against this set.
-local WATCHED_UNITS = { player = true, target = true }
-for _, unit in ipairs(PARTY_UNITS) do WATCHED_UNITS[unit] = true end
+-- Unit events are registered unfiltered because RegisterUnitEvent takes at most two unit
+-- tokens; onEvent checks each event's unit against this set.
+local WATCHED_UNITS = {
+  player = true, target = true, focus = true,
+  party1 = true, party2 = true, party3 = true, party4 = true,
+}
 
 local DEFAULTS = {
   player = true,      -- the player frame
   target = true,      -- the target frame
-  party = true,       -- classic party frames and compact party/raid frames
+  focus = true,       -- the focus frame
+  party = true,       -- party frames
+  raid = true,        -- raid frames
   nameplates = true,  -- every accessible nameplate
   overlayAlpha = 0.5, -- Juicy: half-opacity stripes, opposite to DoT damage
   fillTexture = "stripes", -- the fill art the overlay wears (FILL_TEXTURES below)
@@ -298,6 +300,10 @@ end
 -- compared, and a depleted plain shield hides like any missing one.
 local function updateBar(unit, healthBar, enabled)
   local o = type(healthBar) == "table" and overlays[healthBar] or nil
+  if not o and enabled and type(healthBar) == "table" and not isSecret(unit) and type(unit) == "string"
+      and ask(InCombatLockdown) ~= true then
+    o = overlayFor(healthBar)
+  end
   if type(healthBar) ~= "table" or not enabled or isSecret(unit) or type(unit) ~= "string" then
     hideOverlay(o)
     return
@@ -373,11 +379,17 @@ local function targetBar()
     and type(tf.TargetFrameContent.TargetFrameContentMain.HealthBarsContainer.HealthBar) == "table" then
     return tf.TargetFrameContent.TargetFrameContentMain.HealthBarsContainer.HealthBar
   end
+
   if type(tf.HealthBar) == "table" then return tf.HealthBar end
   if type(tf.healthbar) == "table" then return tf.healthbar end
   end
   if type(_G.TargetFrameHealthBar) == "table" then return _G.TargetFrameHealthBar end
   return nil
+end
+
+local function focusBar()
+  if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("focus")) end
+  return _G.FocusFrameHealthBar
 end
 
 -- Retail nests its party bar inside HealthBarContainer. Older clients expose
@@ -469,6 +481,12 @@ local function compactGroup(frame)
   if type(frame.IsForbidden) == "function" and frame:IsForbidden() then return false end
   if type(frame.IsVisible) == "function" and not frame:IsVisible() then return false end
   return frame.unit:match("^party%d+$") or frame.unit:match("^raid%d+$") or frame.unit:match("^arena%d+$")
+end
+
+local function groupEnabled(unit)
+  if type(unit) ~= "string" then return false end
+  if unit:match("^raid%d+$") then return settings and settings.raid end
+  return settings and settings.party
 end
 
 local function compactBars(bars)
@@ -581,15 +599,17 @@ end
 local function updateAll()
   if not settings then return end
   for _, o in pairs(overlays) do o.current = false end
-  local pBar, tBar = playerBar(), targetBar()
+  local pBar, tBar, fBar = playerBar(), targetBar(), focusBar()
   updateBar("player", pBar, settings.player)
   updateBar("target", tBar, settings.target)
+  updateBar("focus", fBar, settings.focus)
   if type(pBar) == "table" then local o = overlays[pBar]; if o then o.party = false end end
   if type(tBar) == "table" then local o = overlays[tBar]; if o then o.party = false end end
+  if type(fBar) == "table" then local o = overlays[fBar]; if o then o.party = false end end
   local partySeen = {}
   for _, pb in ipairs(partyBars()) do
     partySeen[pb.bar] = true
-    updateBar(pb.unit, pb.bar, settings.party)
+    updateBar(pb.unit, pb.bar, groupEnabled(pb.unit))
     local o = overlays[pb.bar]
     if o then o.party = true; o.plate = false end
   end
@@ -629,9 +649,10 @@ local function compactUpdate(frame)
     if type(frame.IsForbidden) == "function" and frame:IsForbidden() then return end
     if not compactGroup(frame) then return end
     compactFrames[frame] = true
+    local unit = memberUnit(frame)
     local bar = partyBarOf(frame)
     if type(bar) ~= "table" then return end
-    updateBar(memberUnit(frame), bar, settings ~= nil and settings.party or false)
+    updateBar(unit, bar, groupEnabled(unit))
     local o = overlays[bar]
     if o then o.party = true; o.plate = false end
   end)
@@ -703,12 +724,11 @@ local function start()
   driver:RegisterEvent("PLAYER_LOGIN")
   driver:RegisterEvent("PLAYER_ENTERING_WORLD")
   driver:RegisterEvent("PLAYER_TARGET_CHANGED")
+  driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
   driver:RegisterEvent("GROUP_ROSTER_UPDATE")
   driver:RegisterEvent("NAME_PLATE_UNIT_ADDED")
   driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
-  -- The unit events unfiltered: Frame:RegisterUnitEvent takes at most two unit tokens and
-  -- the watched set is six (player, target, the four party slots). onEvent does the
-  -- filtering by each event's own unit (arg1).
+  -- The unit events are unfiltered because RegisterUnitEvent takes at most two unit tokens.
   driver:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED")
   driver:RegisterEvent("UNIT_HEALTH")
   driver:RegisterEvent("UNIT_MAXHEALTH")
@@ -725,7 +745,12 @@ local function start()
 end
 
 local function prepareShieldSettings()
+  local savedModules = type(UsefulPlatesAndTooltipsDB) == "table" and UsefulPlatesAndTooltipsDB.modules
+  local saved = type(savedModules) == "table" and savedModules.ShieldsInfo
+  local previousGroupSwitch = type(saved) == "table" and saved.party
+  local hasRaidSwitch = type(saved) == "table" and type(saved.raid) == "boolean"
   settings = BIT.Settings("ShieldsInfo", DEFAULTS)
+  if not hasRaidSwitch and type(previousGroupSwitch) == "boolean" then settings.raid = previousGroupSwitch end
   M.settings = settings
 end
 if BIT.RegisterWaker then BIT.RegisterWaker("ShieldsInfo", prepareShieldSettings) end
@@ -1461,8 +1486,12 @@ local function buildTabs(area)
     "The shield over your own health bar.")
   toggle("target", "On your target frame",
     "The shield over your target's health bar.")
-  toggle("party", "On party frames (classic and compact party/raid)",
-    "The shields over the classic party frames and the compact party/raid frames.")
+  toggle("focus", "On your focus frame",
+    "The shield over your focus's health bar.")
+  toggle("party", "On party frames",
+    "The shields over classic and compact party member frames.")
+  toggle("raid", "On raid frames",
+    "The shields over compact raid member frames.")
   toggle("nameplates", "On nameplates",
     "The shields over every accessible nameplate.")
 
