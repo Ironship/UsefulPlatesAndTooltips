@@ -274,6 +274,12 @@ local function germanParseDot(desc, comboPoints)
             end
         end
     end
+    -- Black Arrow: "verursacht 150 Schattenschaden und zieht 30 Sek. lang 150 Mana ab."
+    if not total then
+        local drained, words, secs = text:match("(%d+)([^%d%.\n]-)[Ss]chaden und zieht (%d+%.?%d*) Sek%a*%.? lang %d+ Mana ab")
+        local drainSchool = drained and schoolFromGerman(words)
+        if drainSchool then total, school, duration = tonumber(drained), drainSchool, tonumber(secs) end
+    end
     if total and duration > 0 then return total, school, duration end
 
     -- "alle 1 Sek. 72 Naturschaden ... Hält 10 Sek. lang an."

@@ -957,6 +957,11 @@ local function onPlayerCast(spellID, castGUID)
     local previous = dotsByTarget[key][name]
     local dot = newDot(spellID, tickKey, name, total, school, duration, statedInterval, now)
     if ns.Retail then ns.Retail.ApplyRefresh(dot, previous, now) end
+    -- A recast may keep the old DoT's tick timer: remember its rhythm and tick size (ns.discoverRhythm).
+    if not ns.Retail and previous and previous.lastTickAt and previous.interval == dot.interval then
+        dot.oldRhythmAt = previous.lastTickAt
+        dot.oldTickSize = previous.normalTicks > 0 and previous.tickSum / previous.normalTicks or nil
+    end
     dot.segmentOrder = previous and previous.segmentOrder
     dotsByTarget[key][name] = dot
     lastDotCast = { key = key, name = name, dot = dot, previous = previous, at = now }
@@ -1195,6 +1200,73 @@ local function tryRelearn(dot, name, amount, isCrit, index, distance, now)
     return true
 end
 
+-- A DoT whose ticks miss the cast's schedule never matched a tick: nothing was learned and the estimate ran
+-- on the clock alone (DoesItDie issue #26 dropped such DoTs as "never ticked"). Two ways that happens:
+-- * A recast that keeps the old DoT's tick timer: its ticks stay on the old rhythm, anywhere within the first
+--   interval after the cast. A hit exactly on that rhythm (anchored window) and of the old DoT's tick size is
+--   tick 1 (`oldRhythmAt`/`oldTickSize`, set by the cast).
+-- * A first tick later than the matching window: two hits of its school one interval apart and of the same,
+--   plausible size, the first between the missed window and 1.5 s after it. Physical and proc DoTs are left
+--   out (melee white hits keep a rhythm), and without a learned size a hit may be at most twice the
+--   description's share: a Shadow Bolt next to a resisted Corruption must not become its ticks.
+-- Field, not local: this file is at Lua's 200-local limit.
+function ns.discoverRhythm(dot, name, amount, isCrit, now)
+    if dot.firstTickAt or dot.ticksSeen > 0 or isCrit or amount <= 0 or dot.procDot then return false end
+    local since = now - dot.appliedAt
+    local learned = dot.tickKey and db.ticks[dot.tickKey]
+    local function near(size, reference)
+        return math.abs(size - reference) <= math.max(1, reference * FIRST_TICK_AMOUNT_TOLERANCE)
+    end
+    if dot.oldRhythmAt and since > 0 and since < dot.interval + TICK_MATCH_WINDOW_ANCHORED then
+        local k = math.floor((now - dot.oldRhythmAt) / dot.interval + 0.5)
+        local size = dot.oldTickSize or learned
+        if k >= 1 and math.abs(now - (dot.oldRhythmAt + k * dot.interval)) <= TICK_MATCH_WINDOW_ANCHORED
+            and size and near(amount, size * tickShape(dot, 1)) then
+            dot.appliedAt = now - dot.interval
+            local factor = tickShape(dot, 1)
+            dot.ticksSeen, dot.tickSum, dot.normalTicks = 1, amount / factor, 1
+            dot.lastTickAmount, dot.lastTickShape, dot.lastTickCrit = amount, factor, false
+            dot.offBeatCandidate, dot.rhythmCandidate, dot.oldRhythmAt = nil, nil, nil
+            saveLearnedTick(dot)
+            anchorTick(dot, 1, now)
+            trace(string.format("RHYTHM %s: tick %d on the recast DoT's old rhythm, %.1fs after the cast", name,
+                amount, since))
+            return true
+        end
+    end
+    if dot.school == SCHOOL_MASKS.Physical then return false end
+    local earliest = dot.interval + TICK_MATCH_WINDOW + (dot.travel or 0)
+    local latest = earliest + 1.5
+    if since < earliest or since > latest + dot.interval + TICK_MATCH_WINDOW_ANCHORED then return false end
+    local share = dot.total / dot.totalTicks
+    local function plausible(size, number)
+        local factor = tickShape(dot, number)
+        if learned then return near(size, learned * factor) end
+        return size >= share * factor * 0.5 - 1 and size <= share * factor * 2 + 1
+    end
+    local previous = dot.rhythmCandidate
+    if previous and math.abs(now - previous.at - dot.interval) <= TICK_MATCH_WINDOW_ANCHORED
+        and math.abs(amount - previous.amount) <= math.max(1, previous.amount * TICK_AMOUNT_TOLERANCE)
+        and plausible(amount, 2) then
+        dot.rhythmCandidate = nil
+        dot.appliedAt = previous.at - dot.interval
+        local first, second = tickShape(dot, 1), tickShape(dot, 2)
+        dot.tickSum, dot.normalTicks, dot.ticksSeen = previous.amount / first + amount / second, 2, 2
+        dot.lastTickAmount, dot.lastTickShape, dot.lastTickCrit = amount, second, false
+        dot.offBeatCandidate = nil
+        saveLearnedTick(dot)
+        dot.firstTickAt, dot.lastTickIndex = previous.at, 0
+        anchorTick(dot, 1, now)
+        trace(string.format("RHYTHM %s: ticks of %d and %d %.1fs apart, the first %.1fs after the cast", name,
+            previous.amount, amount, now - previous.at, since - (now - previous.at)))
+        return true
+    end
+    if since <= latest and plausible(amount, 1) then
+        dot.rhythmCandidate = { at = now, amount = amount }
+    end
+    return false
+end
+
 -- Returns the target key when this hit was the first tick of a DoT that was waiting for it (so the display
 -- can flash now that the DoT shows), else nil.
 -- F1: two same-school ticks landing in the same instant share one signature
@@ -1277,6 +1349,10 @@ local function onUnitCombat(unit, action, flag, amount, school)
                 local wasWaiting = isWaiting(dot)
                 if trySwapSameSlot(dot, name, amount, isCrit, now) then return end
                 if tryRelearn(dot, name, amount, isCrit, index, distance, now) then
+                    return wasWaiting and key or nil
+                end
+                if ns.discoverRhythm(dot, name, amount, isCrit, now) then
+                    lastCombatFed[name] = true
                     return wasWaiting and key or nil
                 end
             end
