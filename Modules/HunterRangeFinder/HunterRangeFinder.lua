@@ -314,9 +314,9 @@ local SCATTER_SLOT = 3 -- 15-20 yd in the new nearest-first ordering
 local scatterShotRange
 
 local BAND_LABEL = {
-    Y10 = "8-10 yd (approx.)", Y15 = "10-15 yd (approx.)", Y20 = "15-20 yd (approx.)",
-    Y25 = "20-25 yd (approx.)", Y30 = "25-30 yd (approx.)", Y35 = "30-35 yd (approx.)",
-    MAX = "35+ yd (approx.)", PREVIEW = "Preview (approx.)",
+    Y10 = "8-10 yd", Y15 = "10-15 yd", Y20 = "15-20 yd",
+    Y25 = "20-25 yd", Y30 = "25-30 yd", Y35 = "30-35 yd",
+    MAX = "35+ yd", PREVIEW = "Preview",
     MELEE = "MELEE", DEAD = "DEAD ZONE",
 }
 
@@ -412,7 +412,7 @@ end
 local function buildScene(parent)
     local frame = CreateFrame("Frame", nil, parent)
     local rail = CreateFrame("Frame", nil, frame)
-    rail:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    rail:SetPoint("TOP", frame, "TOP", 0, 0)
     frame.rail = rail
     local slots = {}
     for i = 1, SLOT_COUNT do
@@ -420,11 +420,11 @@ local function buildScene(parent)
     end
     frame.slots = slots
     local bar = BIT.Style.CreateMarkers(frame, 2)
-    bar:SetPoint("TOPLEFT", rail, "TOPLEFT", 0, 0)
+    bar:SetPoint("TOP", frame, "TOP", 0, 0)
     frame.bar = bar
     local zone = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    zone:SetPoint("TOPLEFT", rail, "BOTTOMLEFT", 0, -4)
-    zone:SetJustifyH("LEFT")
+    zone:SetPoint("TOP", rail, "BOTTOM", 0, -4)
+    zone:SetJustifyH("CENTER")
     frame.zone = zone
     -- Native status icons: static textures, no unit/spell/game probes.
     local deadIcon = frame:CreateTexture(nil, "OVERLAY")
@@ -498,7 +498,7 @@ local function renderScene(frame, style, bandName, scatter)
             frame.deadIcon:Show()
             frame.deadIcon:SetSize(iconSize, iconSize)
             frame.deadIcon:ClearAllPoints()
-            frame.deadIcon:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+            frame.deadIcon:SetPoint("LEFT", frame, "LEFT", 0, 0)
         else
             frame.deadIcon:Hide()
         end
@@ -509,7 +509,7 @@ local function renderScene(frame, style, bandName, scatter)
             frame.meleeIcon:Show()
             frame.meleeIcon:SetSize(iconSize, iconSize)
             frame.meleeIcon:ClearAllPoints()
-            frame.meleeIcon:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+            frame.meleeIcon:SetPoint("LEFT", frame, "LEFT", 0, 0)
         else
             frame.meleeIcon:Hide()
         end
@@ -584,27 +584,22 @@ local function renderScene(frame, style, bandName, scatter)
     if bandName == "MELEE" then labelRole = "good"
     elseif bandName == "DEAD" then labelRole = "bad" end
     BIT.Style.ApplyText(frame.zone, style, labelRole)
-    -- Re-anchor the label beside the icon for close bands, below the rail otherwise.
+    -- Size the frame to its paint so icon/text and rail/text share the same centre.
+    local labelW, labelH = frame.zone:GetStringWidth(), frame.zone:GetStringHeight()
     frame.zone:ClearAllPoints()
-    if close and (showDead or showMelee) then
-        frame.zone:SetPoint("LEFT", (showDead and frame.deadIcon or frame.meleeIcon), "RIGHT", 6, 0)
-    else
-        frame.zone:SetPoint("TOPLEFT", frame.rail, "BOTTOMLEFT", 0, -4)
-    end
-    -- Frame reserves painted extents + gap and font/caption/icon bounds at
-    -- min/max geometry: rail painted size (or bar/icon) plus label space.
-    local railW, railH = (frame.rail:GetWidth() or 0), (frame.rail:GetHeight() or 0)
-    local width
     if close then
-        width = iconSize + 6 + 120
-    elseif style.shape == "bar" then
-        width = math.max(1, style.length * style.scale)
+        if showDead or showMelee then
+            frame.zone:SetPoint("LEFT", (showDead and frame.deadIcon or frame.meleeIcon), "RIGHT", 6, 0)
+            frame:SetSize(iconSize + 6 + labelW, math.max(iconSize, labelH))
+        else
+            frame.zone:SetPoint("TOP", frame, "TOP", 0, 0)
+            frame:SetSize(labelW, labelH)
+        end
     else
-        width = railW
+        local markers = style.shape == "bar" and frame.bar or frame.rail
+        frame.zone:SetPoint("TOP", markers, "BOTTOM", 0, -4)
+        frame:SetSize(math.max(markers:GetWidth(), labelW), markers:GetHeight() + 4 + labelH)
     end
-    local baseH = railH
-    if close then baseH = math.max(railH, iconSize) end
-    frame:SetSize(width, baseH + 8 + (style.fontSize or 12))
 end
 
 ----------------------------------------------------------------------------------------------
@@ -1003,79 +998,25 @@ local function refreshControls()
     for _, r in ipairs(rows) do if r.Refresh then r:Refresh() end end
 end
 
--- The painted box of the sample's visible content, in the sample's own frame: the rail for the
--- rail shapes, the bar for "bar", and for the close bands the icon with its label -- or, icons
--- off, the label alone (seated under the hidden rail where renderScene anchors it). The frame
--- has no slack on the rail shapes: the close bands reserve a fixed 120 for a label that is
--- usually narrower, and the frame keeps a box for icons that may be switched off.
-local function previewContentSize(style)
-    if not sample then return nil, nil, 0 end
-    local close = previewBand == "MELEE" or previewBand == "DEAD"
-    local iconSize = math.max(16, 24 * ((style and style.scale) or 1))
-    local width, height, top = nil, nil, 0
-    if close then
-        local labelW = 0
-        if type(sample.zone) == "table" then
-            local ok, w = pcall(sample.zone.GetStringWidth, sample.zone)
-            if ok and type(w) == "number" then labelW = w end
-        end
-        local iconShown = (previewBand == "MELEE" and (settings == nil or settings.showMeleeIcon ~= false))
-            or (previewBand == "DEAD" and (settings == nil or settings.showDeadzoneIcon ~= false))
-        if iconShown then
-            width, height, top = iconSize + 6 + labelW, iconSize, 0
-        else
-            local railH = 0
-            if type(sample.rail) == "table" then
-                local ok, h = pcall(sample.rail.GetHeight, sample.rail)
-                if ok and type(h) == "number" then railH = h end
-            end
-            width = labelW
-            height = (style and style.fontSize) or 12
-            top = railH + 4
-        end
-    elseif style and style.shape == "bar" then
-        width = type(sample.bar) == "table" and select(2, pcall(sample.bar.GetWidth, sample.bar)) or nil
-    elseif type(sample.rail) == "table" then
-        width = select(2, pcall(sample.rail.GetWidth, sample.rail))
-    end
-    return width, height, top
-end
-
 -- Seat the preview rail on the mock health bar with the saved plate offset: the same "-offset"
 -- sign the live anchor uses, so a negative value (above) lifts the rail off the bar.
 local function seatPreviewRail()
     if not sample or not previewBar then return end
     local offset = finiteNum(tonumber(settings and settings.plateOffset), DEFAULTS.plateOffset)
     if offset < -80 then offset = -80 elseif offset > 30 then offset = 30 end
-    -- Seat the PAINTED content's centre over the bar: the paint is anchored at the sample's
-    -- left edge, and the frame is wider than the paint on the close bands (the label's fixed
-    -- 120), so the frame and the paint do not share a centre there.
-    local style
-    if type(BIT.Style) == "table" and type(BIT.Style.Resolve) == "function" then
-        local okStyle, resolved = pcall(BIT.Style.Resolve, M.moduleName, hunterLegacy)
-        if okStyle and type(resolved) == "table" then style = resolved end
-    end
-    local contentW, contentH, contentTop = previewContentSize(style)
-    local frameW = select(2, pcall(sample.GetWidth, sample))
-    local shift = (type(frameW) == "number" and type(contentW) == "number") and (frameW - contentW) / 2 or 0
     sample:ClearAllPoints()
-    sample:SetPoint("TOP", previewBar, "BOTTOM", shift, -offset)
+    sample:SetPoint("TOP", previewBar, "BOTTOM", 0, -offset)
     -- Center the ensemble (the plate with the rail seated off its bar) in the scene: the paint
-    -- starts contentTop below the sample's top (30 below the plate top, the bar bottom) plus the
-    -- offset; 36 is the plate's height. Heights come from the render just done, never a previous.
+    -- starts at the sample's top (30 below the plate top, the bar bottom) plus the offset;
+    -- 36 is the plate's height. Heights come from the render just done, never a previous.
     local scene = sample:GetParent()
     local plate = scene and scene.hunterPlate or nil
     if plate and type(plate.frame) == "table" then
-        contentTop = type(contentTop) == "number" and contentTop or 0
-        if type(contentH) ~= "number" or contentH <= 0 then
-            contentH = select(2, pcall(sample.GetHeight, sample))
-            contentTop = 0
-        end
-        contentH = type(contentH) == "number" and contentH or 40
+        local contentH = sample:GetHeight()
         local sceneH = select(2, pcall(scene.GetHeight, scene))
         sceneH = type(sceneH) == "number" and sceneH or 228
-        local above = math.max(0, -(30 + offset + contentTop))
-        local below = math.max(0, 30 + offset + contentTop + contentH - 36)
+        local above = math.max(0, -(30 + offset))
+        local below = math.max(0, 30 + offset + contentH - 36)
         plate.frame:ClearAllPoints()
         plate.frame:SetPoint("TOP", scene, "TOP", 0, -(sceneH / 2 - 18 + (above - below) / 2))
     end
