@@ -70,7 +70,7 @@ HealPrediction retains readable healing power on login, equipment/player-aura ch
 
 Hunter and ResourceDing dots share the same shaded orb, dark socket and bezel. Appearance samples use each module's renderer; changes also update the open preview. ResourceDing has an Appearance tab for its palette and opacity.
 
-For hunters only. A range rail sits above the target's nameplate, or at a spot you place on screen: six dots, and a seventh past 35 yd when Hawk Eye is detected or switched on. A sword marks melee range, and a skull marks the dead zone. The bands are approximate, not exact yard measurements.
+For hunters only. A range rail sits above the target's nameplate, or at a spot you place on screen: six dots, and a seventh past 35 yd when Hawk Eye is detected or switched on. A sword marks melee range, and a skull marks the dead zone. Range labels show just the band (e.g. `25-30 yd`), centred below the dots or bar; melee/dead-zone text and its optional icon are centred together on the same anchor, in both the HUD and preview. The bands are approximate, not exact yard measurements.
 
 ![range indicator](https://i.imgur.com/AGTwBqF.gif)
 ![range in game](https://i.imgur.com/gON8KAq.gif)
