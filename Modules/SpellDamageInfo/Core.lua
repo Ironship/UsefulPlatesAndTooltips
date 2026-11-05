@@ -2379,6 +2379,9 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
       end
     end
     register("PLAYER_TARGET_CHANGED")
+    -- Shift/Ctrl/Alt can swap what a button holds (a modifier-driven bar page, a [mod:shift] macro) without any
+    -- bar event: redraw on the key change, and once more when the swap has settled.
+    register("MODIFIER_STATE_CHANGED")
     -- the selected target's combo points: the events that say they changed. On clients that
     -- fire a unit variant of COMBO_POINTS / COMBO_TARGET_CHANGED, RegisterEvent still receives
     -- the event name; the payload is guarded as secret before anything is read from it.
@@ -2399,6 +2402,9 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     if not isSecret(arg1) and not isSecret(arg2) and arg1 == "player" and arg2 == COMBO_EVENT_TOKEN then
       refreshFinishers()
     end
+  elseif event == "MODIFIER_STATE_CHANGED" then
+    requestUpdate()
+    if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(0.3, requestUpdate) end
   elseif event == "SPELL_TEXT_UPDATE" then
     if not isSecret(arg1) and type(arg1) == "number" then parsedCache[arg1] = nil end
     requestUpdate()
