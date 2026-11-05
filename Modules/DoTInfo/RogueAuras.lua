@@ -324,7 +324,7 @@ local function update(refresh)
         display(targetEntry, nil, false)
         targetEntry = nil
     end
-    if markers and targetHost and targetBar and hostile("target") then
+    if markers and ns.db.targetMarkers ~= false and targetHost and targetBar and hostile("target") then
         targetEntry = targetEntry or create(targetHost, targetBar, false)
         display(targetEntry, "target", true, refresh)
     else

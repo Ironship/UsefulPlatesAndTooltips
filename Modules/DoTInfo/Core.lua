@@ -116,6 +116,7 @@ local DEFAULTS = {
     skullOffsetY = 0,
     -- Damage marker
     showMarkers = true,
+    targetMarkers = true, -- off: the marker stays on nameplates/focus only (target frame addons it can't follow)
     fillTexture = "stripes",
     fillColor = "red",
     fillOpacity = 100,
@@ -1875,7 +1876,7 @@ local label = remainingBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall
 -- Pushes the options onto the widgets, but only when one of them changed since the last call, so it
 -- can run on every refresh and option changes still show up immediately.
 local APPEARANCE_KEYS = {
-    "showMarkers", "skullIcon", "skullSize", "skullPulse", "skullOffsetX", "skullOffsetY",
+    "showMarkers", "targetMarkers", "skullIcon", "skullSize", "skullPulse", "skullOffsetX", "skullOffsetY",
     "showSpark", "showGlow", "glowSize", "showShine", "shineInterval", "scrollStripes",
     "fillTexture", "fillColor", "fillOpacity", "dotColors",
     "outlineStyle", "dashLength", "outlineThickness", "outlineColor", "outlineOpacity", "pulseOutline",
@@ -2026,10 +2027,11 @@ local function applyAppearance()
         shine:Hide()
     end
 
-    fillLayer:SetShown(db.showMarkers)
-    clipLayer:SetShown(db.showMarkers)
-    outlineLayer:SetShown(db.showMarkers)
-    sparkLayer:SetShown(db.showMarkers)
+    local markersOn = db.showMarkers and db.targetMarkers ~= false
+    fillLayer:SetShown(markersOn)
+    clipLayer:SetShown(markersOn)
+    outlineLayer:SetShown(markersOn)
+    sparkLayer:SetShown(markersOn)
 
     -- Text
     local fontPath = GameFontNormalSmall:GetFont()
@@ -2142,7 +2144,7 @@ local function breakdownText(entries)
 end
 
 local function playFlash()
-    if db.flashOnApply and db.showMarkers and remainingBar:IsShown() then
+    if db.flashOnApply and db.showMarkers and db.targetMarkers ~= false and remainingBar:IsShown() then
         flashAnim:Stop()
         flashAnim:Play()
         if db.showSpark then
@@ -2279,7 +2281,7 @@ end
 
 -- The label lives on the marker bar, so the bar stays up if either is wanted.
 local function showMarkers()
-    if db.showMarkers or db.showLabel then
+    if (db.showMarkers and db.targetMarkers ~= false) or db.showLabel then
         remainingBar:Show()
     else
         hideMarkers()
@@ -2605,6 +2607,7 @@ function ns.HasMarker(unit)
     if not db or type(unit) ~= "string" or db.showMarkers == false then return false end
     local onPlate = unit:match("^nameplate%d+$") ~= nil
     if unit ~= "target" and not onPlate then return false end
+    if unit == "target" and db.targetMarkers == false then return false end
     if onPlate and db.nameplateMode == "off" then return false end
     if type(UnitIsDeadOrGhost) == "function" then
         local ok, dead = pcall(UnitIsDeadOrGhost, unit)
@@ -2866,7 +2869,8 @@ SlashCmdList.BITDOTINFO = function(msg)
         if db.showMarkers and not healthBar then
             print("Target frame health bar not found; health bar markers unavailable.")
         else
-            print("Health bar markers " .. (db.showMarkers and "ON" or "OFF") .. ".")
+            print("Health bar markers " .. (db.showMarkers and "ON" or "OFF") .. "."
+                .. ((db.showMarkers and db.targetMarkers == false) and " The target frame's stays off (Marker tab)." or ""))
         end
     elseif cmd == "plates" then
         ns.probeNameplates()
