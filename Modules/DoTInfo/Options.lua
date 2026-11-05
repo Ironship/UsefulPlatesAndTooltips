@@ -588,9 +588,10 @@ local function buildTabs()
     marker:checkbox("showMarkers", "Show damage marker", { tooltip = "Marks the damage your DoTs still have to "
         .. "deal on the target's health bar. If the health ends inside it, the target dies." })
     marker:checkbox("targetMarkers", "Show on target frame", { enabledIf = function(s) return s.showMarkers end,
-        tooltip = "Turn off to keep the marker on nameplates and the focus frame only, for example when your "
-        .. "unit frame addon's target frame doesn't show it right. On Retail this also hides the rogue's aura "
-        .. "icons above the target bar. The kill icon has its own switch in the Kill icon tab." })
+        tooltip = "Keep this on to show the marker on your screen's target health bar. Plater changes nameplates, "
+        .. "not that frame; if you use a separate unit frame addon, set its bar under Behavior > Target health bar. "
+        .. "Turn off to keep the marker on nameplates and the focus frame only. On Retail this also hides the rogue's "
+        .. "aura icons above the target bar. The kill icon has its own switch in the Kill icon tab." })
     marker:choice("dotColors", "DoT colors", lists.dotColors, { tooltip = "One color, or one segment per DoT "
         .. "with green poisons, purple curses/shadow damage and red bleeds. Rainbow gives each spell a separate color." })
     marker:choice("fillTexture", "Fill style", lists.fills)
@@ -713,7 +714,8 @@ local function buildTabs()
         .. "Blizzard's target frame (ElvUI, Shadowed Unit Frames, ...). Target something, click Pick, then click "
         .. "its health bar; or type the frame's name (/fstack shows it), like ElvUF_Target.Health. The bar must "
         .. "fill left to right. Empty: Blizzard's, or EllesmereUI's when it shows its own. Shared with ShieldsInfo "
-        .. "and HealPrediction." })
+        .. "and HealPrediction. Plater replaces nameplates, not the screen target frame; its nameplate marker is "
+        .. "handled separately." })
     behavior:frame("icon", "Kill icon spot", "anchor", { tooltip = "Where the kill icon is centered (e.g. the "
         .. "custom frame's portrait). Empty: Blizzard's portrait, or EllesmereUI's; with a custom health bar and no spot "
         .. "the icon sits on that bar. Fine-tune with the offsets on the Kill icon tab." })
