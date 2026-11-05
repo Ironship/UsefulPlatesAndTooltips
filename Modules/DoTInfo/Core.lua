@@ -372,9 +372,12 @@ end
 -- Best known average damage per tick: observed average of non-crit ticks, else learned from earlier casts,
 -- else the description. Crits are one-offs, so they never raise the expectation for later ticks. For shaped
 -- DoTs (TICK_SHAPES) ticks are stored divided by their factor, so this is the average tick, not the latest.
+-- Before its own first tick a DoT keeps the size it was applied with (learnedAtApply): the store is shared by
+-- every mob, so another mob's tick (a different debuff set) must not move this one's marker. A DoT applied with
+-- nothing learned still picks up a size learned since.
 local function expectedTick(dot)
     if dot.normalTicks > 0 then return dot.tickSum / dot.normalTicks end
-    return (dot.tickKey and db.ticks[dot.tickKey]) or (dot.total / dot.totalTicks)
+    return dot.learnedAtApply or (dot.tickKey and db.ticks[dot.tickKey]) or (dot.total / dot.totalTicks)
 end
 
 -- Which tick of the DoT (1 = first) lands around `when`.
@@ -1199,6 +1202,7 @@ local function tryRelearn(dot, name, amount, isCrit, index, distance, now)
     dot.ticksSeen = dot.ticksSeen + 2
     dot.lastTickAmount, dot.lastTickShape, dot.lastTickCrit = amount, factor, false
     saveLearnedTick(dot)
+    if dot.tickKey then ns.dropSnapshots(dot.tickKey) end -- other mobs' DoTs that have not ticked yet must not keep the wrong size
     if not dot.firstTickAt then
         dot.firstTickAt, dot.lastTickIndex = previous.at, 0
         index = 1
@@ -2675,13 +2679,26 @@ end
 ns.print = print
 ns.trace = trace
 
+-- A running DoT that has not ticked yet keeps the size it was applied with (expectedTick). When the store is
+-- reset, forgotten or healed, that snapshot is as wrong as the store was: drop it so the DoT follows the store
+-- again. key nil = every DoT.
+function ns.dropSnapshots(key)
+    for _, dots in pairs(dotsByTarget) do
+        for _, dot in pairs(dots) do
+            if dot.normalTicks == 0 and (key == nil or dot.tickKey == key) then dot.learnedAtApply = nil end
+        end
+    end
+end
+
 function ns.resetLearnedTicks()
     wipe(db.ticks)
+    ns.dropSnapshots()
     print("Learned tick sizes cleared.")
 end
 
 function ns.forgetLearnedTick(key)
     db.ticks[key] = nil
+    ns.dropSnapshots(key)
     trace("FORGET learned tick size for " .. tostring(key))
 end
 
