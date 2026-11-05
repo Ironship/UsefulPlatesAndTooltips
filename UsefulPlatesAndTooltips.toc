@@ -43,6 +43,7 @@ Modules\DoTInfo\Locale_ptBR.lua
 Modules\DoTInfo\Locale_zhCN.lua
 Modules\DoTInfo\Core.lua
 Modules\DoTInfo\ProcDots.lua
+Modules\DoTInfo\DeathMark.lua
 Modules\DoTInfo\RogueEffects.lua
 Modules\DoTInfo\Options.lua
 Modules\DoTInfo\Nameplates.lua

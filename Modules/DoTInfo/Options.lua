@@ -680,6 +680,11 @@ local function buildTabs()
             .. "points, nothing is drawn). A crit counts as yours when you cast at that mob just before, or, for "
             .. "Deep Wounds, swing at it while alone; the first tick confirms it. Traps (Immolation Trap) are "
             .. "tracked as well." })
+        behavior:checkbox("deathMark", "Death Mark (experimental)", { tooltip = "Rogues: shows what Death Mark has "
+            .. "stored so far as one more segment, until it goes off 6 s after the finisher, never above the cap in its "
+            .. "description. Garrote and Rupture ticks count twice. Experimental, off by default: the game doesn't say "
+            .. "who hit the marked mob, so every hit on it counts as yours. In a party or raid the others' damage is "
+            .. "counted too and the estimate runs high. Not tested in game." })
     end
     behavior:checkbox("estimateDuringCast", "Estimate during casting", { tooltip = "Shows a DoT with a cast time "
         .. "while you're still casting it. Once the cast lands the normal estimate takes over; an interrupted or "
