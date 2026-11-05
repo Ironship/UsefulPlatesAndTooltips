@@ -587,6 +587,10 @@ local function buildTabs()
     local marker = addTab("Marker")
     marker:checkbox("showMarkers", "Show damage marker", { tooltip = "Marks the damage your DoTs still have to "
         .. "deal on the target's health bar. If the health ends inside it, the target dies." })
+    marker:checkbox("targetMarkers", "Show on target frame", { enabledIf = function(s) return s.showMarkers end,
+        tooltip = "Turn off to keep the marker on nameplates and the focus frame only, for example when your "
+        .. "unit frame addon's target frame doesn't show it right. On Retail this also hides the rogue's aura "
+        .. "icons above the target bar. The kill icon has its own switch in the Kill icon tab." })
     marker:choice("dotColors", "DoT colors", lists.dotColors, { tooltip = "One color, or one segment per DoT "
         .. "with green poisons, purple curses/shadow damage and red bleeds. Rainbow gives each spell a separate color." })
     marker:choice("fillTexture", "Fill style", lists.fills)
