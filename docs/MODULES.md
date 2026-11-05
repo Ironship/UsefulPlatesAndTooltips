@@ -22,6 +22,8 @@ Description parsing covers English, German, Spanish, French, Korean, Brazilian P
 
 `/dotinfo check` reads every spell in your spellbook and lists the ones whose text mentions seconds but gives no DoT (full texts go to the saved log), so a client in another language can show what is still unread. Parser failures are counted explicitly, with the spell id and original error in the saved log. In Forever, `/dotinfo ticks` (Behavior tab > View) lists the tick sizes learned from your casts next to what the tooltips predict. The check also keeps its findings in the saved settings (`census`, one entry per class, 80 of each at most): the unread texts, cut to 320 bytes, and the DoTs it read with the total and duration their text gave, to set against the learned tick sizes.
 
+Forever can hide `UNIT_COMBAT` damage amounts during combat. Such ticks now match by readable school and the existing timing windows, with duplicate unit-token reports counted once. They confirm a waiting DoT and anchor its schedule without changing learned damage; the estimate keeps the last learned or description value. A same-school foreign hit inside a tick window can still be mistaken for a tick. Size-based rhythm discovery, damage learning and starting traps or crit-triggered procs still require readable amounts. Retail tracking is unchanged.
+
 ![simulation](https://i.imgur.com/rI5Kdyv.gif)
 
 <img width="465" height="407" alt="WowB_Bx6Sgl1bvb-ezgif com-optimize (1)" src="https://github.com/user-attachments/assets/7cf3fe30-5752-4cec-9bb4-2e4ece2af2c9" />
