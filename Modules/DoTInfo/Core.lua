@@ -1202,6 +1202,7 @@ local function tryRelearn(dot, name, amount, isCrit, index, distance, now)
     dot.ticksSeen = dot.ticksSeen + 2
     dot.lastTickAmount, dot.lastTickShape, dot.lastTickCrit = amount, factor, false
     saveLearnedTick(dot)
+    ns.dropSnapshots(dot.tickKey) -- other mobs' DoTs that have not ticked yet must not keep the size that was wrong
     if not dot.firstTickAt then
         dot.firstTickAt, dot.lastTickIndex = previous.at, 0
         index = 1
@@ -2678,13 +2679,26 @@ end
 ns.print = print
 ns.trace = trace
 
+-- A running DoT that has not ticked yet keeps the size it was applied with (expectedTick). When the store is
+-- reset, forgotten or healed, that snapshot is as wrong as the store was: drop it so the DoT follows the store
+-- again. key nil = every DoT.
+function ns.dropSnapshots(key)
+    for _, dots in pairs(dotsByTarget) do
+        for _, dot in pairs(dots) do
+            if dot.normalTicks == 0 and (key == nil or dot.tickKey == key) then dot.learnedAtApply = nil end
+        end
+    end
+end
+
 function ns.resetLearnedTicks()
     wipe(db.ticks)
+    ns.dropSnapshots()
     print("Learned tick sizes cleared.")
 end
 
 function ns.forgetLearnedTick(key)
     db.ticks[key] = nil
+    ns.dropSnapshots(key)
     trace("FORGET learned tick size for " .. tostring(key))
 end
 

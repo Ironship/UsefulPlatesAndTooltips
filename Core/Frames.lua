@@ -123,15 +123,24 @@ function Frames.PathOf(region)
     current = parent
   end
   -- A unit frame addon may move the bar into an unnamed holder (EllesmereUI's clip frame) and still keep it as a
-  -- field of its named frame. Look for the bar among the fields of each named ancestor.
+  -- field of its named frame. Look for the bar among the fields of each named ancestor. The fields of other
+  -- addons' frames are read under pcall (an __index may raise), and the lowest key wins so that the saved path
+  -- is the same in every session.
   local ancestor = plain(region, "GetParent")
   for _ = 1, 12 do
     if not ancestor then return nil end
     local name = globalName(ancestor)
     if name then
-      local key = keyInParent(region, ancestor)
-      if key then
-        local path = name .. "." .. key
+      local ok, keys = pcall(function()
+        local found = {}
+        for k, v in pairs(ancestor) do
+          if v == region and type(k) == "string" and k:match("^[%a_][%w_]*$") then found[#found + 1] = k end
+        end
+        table.sort(found)
+        return found
+      end)
+      if ok and keys[1] then
+        local path = name .. "." .. keys[1]
         if Frames.Resolve(path) == region then return path end
       end
     end
