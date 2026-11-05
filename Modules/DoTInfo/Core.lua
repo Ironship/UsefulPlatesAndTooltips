@@ -1202,7 +1202,7 @@ local function tryRelearn(dot, name, amount, isCrit, index, distance, now)
     dot.ticksSeen = dot.ticksSeen + 2
     dot.lastTickAmount, dot.lastTickShape, dot.lastTickCrit = amount, factor, false
     saveLearnedTick(dot)
-    ns.dropSnapshots(dot.tickKey) -- other mobs' DoTs that have not ticked yet must not keep the size that was wrong
+    if dot.tickKey then ns.dropSnapshots(dot.tickKey) end -- other mobs' DoTs that have not ticked yet must not keep the wrong size
     if not dot.firstTickAt then
         dot.firstTickAt, dot.lastTickIndex = previous.at, 0
         index = 1

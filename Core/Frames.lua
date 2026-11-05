@@ -117,8 +117,8 @@ function Frames.PathOf(region)
     end
     local parent = plain(current, "GetParent")
     if not parent then break end
-    local key = keyInParent(current, parent)
-    if not key then break end
+    local keyOK, key = pcall(keyInParent, current, parent)
+    if not keyOK or not key then break end
     table.insert(parts, 1, key)
     current = parent
   end
