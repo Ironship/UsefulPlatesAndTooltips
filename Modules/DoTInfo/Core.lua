@@ -145,6 +145,7 @@ local DEFAULTS = {
     labelColor = "white",
     -- Misc
     procDots = true, -- Ignite (mage) and Deep Wounds (warrior), lit by crits (ProcDots.lua)
+    deathMark = false, -- experimental: Death Mark (rogue) stored damage (DeathMark.lua); counts others' hits in a group
     debug = false,
     -- Accuracy
     waitFirstTick = "off",
@@ -923,6 +924,11 @@ local function onPlayerCast(spellID, castGUID)
             comboSource = comboPoints and "read" or "unknown"
         end
     end
+    -- Death Mark stores damage instead of dealing it over time (DeathMark.lua).
+    if ns.DeathMark then
+        local handled, markedKey = ns.DeathMark.OnCast(key, spellID, name, desc, comboPoints, comboSource)
+        if handled then return markedKey end
+    end
     local total, school, duration, statedInterval
     if ns.Retail then total, school, duration, statedInterval = ns.Retail.Parse(spellID, desc, comboPoints, parseDot)
     else total, school, duration, statedInterval = parseDot(desc, comboPoints or 1) end
@@ -1317,6 +1323,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
         combatFrameHits[signature] = hit
     end
     local lastCombatFed = hit.fed
+    if ns.DeathMark then ns.DeathMark.OnHit(key, amount, now) end
 
     local best, bestName, bestDistance, bestIndex
     -- A shield that ate the whole tick reports ABSORB with amount 0. Zero matches no learned
@@ -1378,6 +1385,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
     end
     local tickIndex = anchorTick(best, bestIndex, now)
     lastCombatFed[bestName] = true
+    if ns.DeathMark then ns.DeathMark.OnTick(key, bestName, amount, now) end
     trace(string.format("TICK %s %d%s on %s (tick %d/%d, expecting %.1f for this tick)%s", bestName, amount,
         isCrit and " CRIT" or "", unit, tickIndex, best.totalTicks, expectedTick(best) * factor,
         wasWaiting and ", now shown" or ""))
@@ -1421,6 +1429,8 @@ local function housekeep(now)
 end
 
 local function remainingDamage(dot)
+    -- Death Mark (DeathMark.lua): what it stored lands at once when it ends.
+    if dot.burst then return GetTime() <= dot.expiresAt + TICK_MATCH_WINDOW and dot.total or 0 end
     if dot.predictionOnly then
         if ns.Retail then return ns.Retail.Remaining(dot, GetTime()) end
         return dot.total * math.max(0, math.min(1, (dot.expiresAt - GetTime()) / dot.duration))
