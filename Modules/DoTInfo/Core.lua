@@ -1285,12 +1285,8 @@ end
 local combatFrameAt
 local combatFrameHits = {}
 
--- Forever hides UNIT_COMBAT damage amounts in combat (secret; DoesItDie issue #26), while the action and school
--- stay readable. Without a size, a hit is matched on school and timing alone: one in a DoT's school, on its
--- rhythm, in a slot not yet taken, is its tick. That shows a DoT waiting for its first tick and anchors the
--- rhythm and expiry, but teaches no size (the estimate keeps the learned or description tick), and the
--- size-based repairs (swap, relearn, rhythm discovery), traps, Ignite / Deep Wounds and Death Mark need the
--- amount. Physical bleeds can take a white hit landing in the window for a tick: that only moves the schedule.
+-- Forever hides amounts, not schools (DoesItDie #26): match timing without learning damage.
+-- ponytail: same-school foreign hits inside a tick window can anchor it; use spell/source identity if exposed.
 -- Field, not local: this file is at Lua's 200-local limit.
 function ns.onHiddenAmountHit(key, unit, school)
     local dots = dotsByTarget[key]

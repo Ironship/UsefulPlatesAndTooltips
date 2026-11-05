@@ -695,19 +695,6 @@ local function onUnitCombat(unit, action, flag, amount, school)
     if not key or key ~= castInProgress.key then return end
     local absorbed = action == "ABSORB"
     if action ~= "WOUND" and not absorbed then return end
-    if isSecret(amount) then
-        -- Forever hides the amount in combat (DoesItDie issue #26): a hit of the cast's school is taken as it
-        -- landing, so the marker stops drawing the cast on top of the health it already took. Nothing is learned.
-        -- An earlier hit of the same school (a DoT tick) can end the marker before the cast lands: it then shows
-        -- less, never a skull that isn't there.
-        local mask = number(school)
-        local expects = castInProgress.view and castInProgress.view.school and SCHOOL_MASKS[castInProgress.view.school]
-        if not mask or not expects then return end
-        if not ((expects == 20) and (mask == 4 or mask == 16) or (expects == mask)) then return end
-        castInProgress.landedAt = GetTime()
-        trace(string.format("HIT %s (amount hidden) taken as the cast landing", tostring(castInProgress.name)))
-        return true
-    end
     amount = number(amount)
     if not amount then return end
     local nowHit = GetTime()
