@@ -1284,6 +1284,60 @@ end
 -- dropped, so one hit can never feed two DoTs (no false skull).
 local combatFrameAt
 local combatFrameHits = {}
+
+-- Forever hides UNIT_COMBAT damage amounts in combat (secret; DoesItDie issue #26), while the action and school
+-- stay readable. Without a size, a hit is matched on school and timing alone: one in a DoT's school, on its
+-- rhythm, in a slot not yet taken, is its tick. That shows a DoT waiting for its first tick and anchors the
+-- rhythm and expiry, but teaches no size (the estimate keeps the learned or description tick), and the
+-- size-based repairs (swap, relearn, rhythm discovery), traps, Ignite / Deep Wounds and Death Mark need the
+-- amount. Physical bleeds can take a white hit landing in the window for a tick: that only moves the schedule.
+-- Field, not local: this file is at Lua's 200-local limit.
+function ns.onHiddenAmountHit(key, unit, school)
+    local dots = dotsByTarget[key]
+    if not dots then return end
+    local now = GetTime()
+    if combatFrameAt ~= now then
+        combatFrameHits = {}
+        combatFrameAt = now
+    end
+    -- The same hit on another unit token is a copy; a repeat from the same token feeds another DoT.
+    local signature = key .. ":hidden:" .. school
+    local hit = combatFrameHits[signature]
+    if hit then
+        if unit ~= hit.unit then return end
+    else
+        hit = { unit = unit, fed = {} }
+        combatFrameHits[signature] = hit
+    end
+    local best, bestName, bestDistance, bestIndex
+    for name, dot in pairs(dots) do
+        if not dot.predictionOnly and not hit.fed[name] and dot.school == school then
+            local distance, index = distanceToExpectedTick(dot, now)
+            local window = dot.firstTickAt and TICK_MATCH_WINDOW_ANCHORED or TICK_MATCH_WINDOW
+            local freshSlot = not dot.firstTickAt or index > dot.lastTickIndex
+            if freshSlot and distance <= window and (not bestDistance or distance < bestDistance) then
+                best, bestName, bestDistance, bestIndex = dot, name, distance, index
+            end
+        end
+    end
+    if not best then
+        trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit))
+        return
+    end
+    local wasWaiting = isWaiting(best)
+    best.ticksSeen = best.ticksSeen + 1
+    -- lastTickAmount keeps the last readable tick (referenceTickSize subtracts it from tickSum); flagged like a
+    -- crit so a readable hit in the same slot isn't judged against a size nobody saw (trySwapSameSlot).
+    best.lastTickCrit = true
+    best.offBeatCandidate, best.rhythmCandidate, best.oldRhythmAt = nil, nil, nil
+    local tickIndex = anchorTick(best, bestIndex, now)
+    hit.fed[bestName] = true
+    trace(string.format("TICK %s (amount hidden) on %s (tick %d/%d, expecting %.1f for this tick)%s", bestName,
+        unit, tickIndex, best.totalTicks, expectedTick(best) * tickShape(best, tickIndex),
+        wasWaiting and ", now shown" or ""))
+    if wasWaiting then return key end
+end
+
 local function onUnitCombat(unit, action, flag, amount, school)
     if ns.Retail then return end -- No spell/source identity: other players' damage must not teach our estimate.
     if isSecret(action) then return end
@@ -1296,6 +1350,9 @@ local function onUnitCombat(unit, action, flag, amount, school)
     if AVOIDED_ACTIONS[action] then return onTargetAvoided(action, key, school) end
     if action == "WOUND" or absorbed then onTargetHit(key, school) end
     if action ~= "WOUND" and not absorbed then return end
+    if isSecret(amount) and not isSecret(school) and type(school) == "number" then
+        return ns.onHiddenAmountHit(key, unit, school)
+    end
     if isSecret(amount) or isSecret(school) or type(amount) ~= "number" then return end
     local isCrit = not isSecret(flag) and flag == "CRITICAL"
     local dots = dotsByTarget[key]
