@@ -151,6 +151,7 @@ local DEFAULTS = {
     -- Accuracy
     waitFirstTick = "off",
     estimateDuringCast = true,
+    targetOverMouseover = false, -- a same-named mob under the mouse doesn't blank a target cast (_namedEnemyKey)
     -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
     nameplateMode = "markerIcon",
     focusMode = "markerIcon",       -- the focus frame's marker (Focus.lua), in the nameplates' look
@@ -571,7 +572,11 @@ end
 -- 200-local limit, so it cannot gain another local function.
 function ns._namedEnemyKey(sentName)
     local matched, hardTarget
-    for _, unit in ipairs({ "target", "softenemy", "mouseover", "focus" }) do
+    -- targetOverMouseover: the mouseover only counts when nothing else has the name.
+    local mouseoverLast = db and db.targetOverMouseover
+    for _, unit in ipairs(mouseoverLast and { "target", "softenemy", "focus", "mouseover" }
+        or { "target", "softenemy", "mouseover", "focus" }) do
+        if unit == "mouseover" and mouseoverLast and matched then return matched end
         local existsOK, exists = pcall(UnitExists, unit)
         if not (unit == "softenemy" and hardTarget) and existsOK and not isSecret(exists) and exists == true then
             local attackOK, canAttack = pcall(UnitCanAttack, "player", unit)

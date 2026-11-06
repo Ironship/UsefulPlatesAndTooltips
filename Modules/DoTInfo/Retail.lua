@@ -160,8 +160,15 @@ function R.Recipient(sentName)
     local default = ns._selectedEnemyKey()
     if secret(sentName) or type(sentName) ~= "string" or sentName == "" then
         -- A hidden SENT name cannot distinguish a selected-target cast from a focus/mouseover macro.
+        -- targetOverMouseover: only a mouseover with the selected enemy's own name (a pack) is passed
+        -- over; one with another or a hidden name still makes the cast unknown, as without the option.
+        local selectedName
+        if default and ns.db and ns.db.targetOverMouseover then
+            selectedName = ask(UnitName, R.UnitKey("target") == default and "target" or "softenemy")
+        end
         for _, unit in ipairs({ "mouseover", "focus" }) do
-            if ask(UnitExists, unit) == true and ask(UnitCanAttack, "player", unit) ~= false then
+            if not (unit == "mouseover" and selectedName ~= nil and ask(UnitName, "mouseover") == selectedName)
+                and ask(UnitExists, unit) == true and ask(UnitCanAttack, "player", unit) ~= false then
                 local key = R.UnitKey(unit)
                 if not key or key ~= default then return end
             end
@@ -172,7 +179,11 @@ function R.Recipient(sentName)
     -- Two exceptions: a dead unit is never the recipient, and a living hard target beats the soft target
     -- (a pack of same-named mobs is the normal case with action targeting).
     local recipient, hardTarget
-    for _, unit in ipairs({ "target", "softenemy", "mouseover", "focus" }) do
+    -- targetOverMouseover: the mouseover only counts when nothing else has the name.
+    local mouseoverLast = ns.db and ns.db.targetOverMouseover
+    for _, unit in ipairs(mouseoverLast and { "target", "softenemy", "focus", "mouseover" }
+        or { "target", "softenemy", "mouseover", "focus" }) do
+        if unit == "mouseover" and mouseoverLast and recipient then return recipient end
         if not (unit == "softenemy" and hardTarget)
             and ask(UnitExists, unit) == true and ask(UnitCanAttack, "player", unit) == true
             and alive(unit) and ask(UnitName, unit) == sentName then

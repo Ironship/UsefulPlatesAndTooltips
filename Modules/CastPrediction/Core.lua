@@ -54,6 +54,7 @@ local DEFAULTS = {
     showMarker = true,
     showTargetFrame = true,
     showFocusFrame = true,
+    targetOverMouseover = false, -- a same-named mob under the mouse doesn't blank a target cast (findRecipient)
     showPartyFrames = true,
     showRaidFrames = true,
     showNameplates = true,
@@ -556,7 +557,11 @@ local function findRecipient(name)
         return true
     end
     local hardTarget = hostileTarget("target")
-    for _, unit in ipairs({ "target", "focus", "mouseover", "softenemy" }) do
+    -- targetOverMouseover: the mouseover only counts when nothing else has the name.
+    local mouseoverLast = settings and settings.targetOverMouseover
+    for _, unit in ipairs(mouseoverLast and { "target", "focus", "softenemy", "mouseover" }
+        or { "target", "focus", "mouseover", "softenemy" }) do
+        if unit == "mouseover" and mouseoverLast and found then return found end
         if not (unit == "softenemy" and hardTarget) and not consider(unit) then return nil end
     end
     if found then return found end

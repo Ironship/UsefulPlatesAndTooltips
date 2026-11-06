@@ -691,6 +691,11 @@ local function buildTabs()
             .. "who hit the marked mob, so every hit on it counts as yours. In a party or raid the others' damage is "
             .. "counted too and the estimate runs high. Not tested in game." })
     end
+    behavior:checkbox("targetOverMouseover", "Target beats mouseover", { tooltip =
+        "For packs of mobs with the same name. With the mouse over a second mob of the pack, the addon "
+        .. "can't tell which of the two your spell goes to and hides the estimate. With this on, your target "
+        .. "(or focus, or the soft target when nothing is targeted) wins over the mob under the mouse. (If you cast with @mouseover macros, "
+        .. "the estimate could then show on the wrong mob.)" })
     behavior:checkbox("estimateDuringCast", "Estimate during casting", { tooltip = "Shows a DoT with a cast time "
         .. "while you're still casting it. Once the cast lands the normal estimate takes over; an interrupted or "
         .. "failed cast removes it." })
