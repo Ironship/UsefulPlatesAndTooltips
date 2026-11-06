@@ -36,6 +36,8 @@ local DEFAULTS = {
     -- the old artwork. A stored animation flag maps onto reducedMotion = false.
     animateDeadzone = false, animateMelee = false,
     showDeadzoneIcon = true, showMeleeIcon = true,
+    -- The range label ("25-30 yd", "MELEE", "DEAD ZONE"): off keeps only the rail and the icons.
+    showRangeText = true,
     smallBottomChevron = true,
 }
 
@@ -577,7 +579,9 @@ local function renderScene(frame, style, bandName, scatter)
             frame.rail:SetSize(segTotal * step - gap, thick)
         end
     end
-    frame.zone:SetText(BAND_LABEL[bandName] or "")
+    -- Range text off: the rail (and the MELEE/DEAD icons) stay, the label is empty and takes no room.
+    local showText = settings == nil or settings.showRangeText ~= false
+    frame.zone:SetText(showText and BAND_LABEL[bandName] or "")
     -- Role-colored label for the close bands (MELEE good, DEAD bad), plain
     -- text for distance bands so the rail gradient stays the signal.
     local labelRole = "text"
@@ -585,20 +589,25 @@ local function renderScene(frame, style, bandName, scatter)
     elseif bandName == "DEAD" then labelRole = "bad" end
     BIT.Style.ApplyText(frame.zone, style, labelRole)
     -- Size the frame to its paint so icon/text and rail/text share the same centre.
-    local labelW, labelH = frame.zone:GetStringWidth(), frame.zone:GetStringHeight()
+    local labelW, labelH = 0, 0
+    if showText then labelW, labelH = frame.zone:GetStringWidth(), frame.zone:GetStringHeight() end
     frame.zone:ClearAllPoints()
     if close then
         if showDead or showMelee then
             frame.zone:SetPoint("LEFT", (showDead and frame.deadIcon or frame.meleeIcon), "RIGHT", 6, 0)
-            frame:SetSize(iconSize + 6 + labelW, math.max(iconSize, labelH))
+            if showText then
+                frame:SetSize(iconSize + 6 + labelW, math.max(iconSize, labelH))
+            else
+                frame:SetSize(iconSize, iconSize)
+            end
         else
             frame.zone:SetPoint("TOP", frame, "TOP", 0, 0)
-            frame:SetSize(labelW, labelH)
+            frame:SetSize(math.max(1, labelW), math.max(1, labelH))
         end
     else
         local markers = style.shape == "bar" and frame.bar or frame.rail
         frame.zone:SetPoint("TOP", markers, "BOTTOM", 0, -4)
-        frame:SetSize(math.max(markers:GetWidth(), labelW), markers:GetHeight() + 4 + labelH)
+        frame:SetSize(math.max(markers:GetWidth(), labelW), markers:GetHeight() + (showText and (4 + labelH) or 0))
     end
 end
 
@@ -1343,6 +1352,9 @@ local function buildTabs(parent, isHunter)
     plateClashLine = display:note("Nameplate lanes")
     refreshPlateClash()
     display:gap()
+    parent.rangeText = display:checkbox("showRangeText", "Show range text",
+        { tooltip = "The label under the rail (25-30 yd, MELEE, DEAD ZONE). Unchecked keeps only the coloured "
+            .. "rail and the MELEE / Dead Zone icons." })
     parent.deadIcon = display:checkbox("showDeadzoneIcon", "Show Dead Zone skull (native)",
         { tooltip = "Native Blizzard raid skull for the 5-8 yd dead zone. Unchecked hides it." })
     parent.meleeIcon = display:checkbox("showMeleeIcon", "Show Melee mark (native sword)",
