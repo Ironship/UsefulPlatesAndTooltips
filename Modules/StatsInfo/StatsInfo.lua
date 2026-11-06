@@ -1598,14 +1598,15 @@ local wholeText = memo1(function(v)
 end)
 
 -- The tank lines for link: {} when nothing can be said honestly. Gate: a tank-spec player
--- sees them on any piece of gear (not food, a Hearthstone, a bag, a quiver or ammo: equipLoc is "" for what cannot
--- be worn); anyone else only on a defensive item. Each line needs its own API:
+-- sees them on any piece of gear (an item that fits one of the slots in SLOTS: not food, a Hearthstone, a bag, a quiver
+-- or ammo, whatever empty-looking equipLoc the client answers for those); anyone else only on a defensive item.
+-- Each line needs its own API:
 -- Uncrittable needs defense skill; Avoidance needs dodge+parry+block (all three, live
 -- GetDodgeChance/GetParryChance/GetBlockChance) plus optionally miss (defense+level).
 local function tankExtraLines(link, alloc)
   if type(link) ~= "string" or isSecret(link) then return alloc("tankLines") end
   local loc = equipLoc(link)
-  local worn = loc ~= nil and loc ~= "" and loc ~= "INVTYPE_BAG" and loc ~= "INVTYPE_QUIVER" and loc ~= "INVTYPE_AMMO"
+  local worn = loc ~= nil and (SLOTS[loc] ~= nil or BOTH_HANDS[loc] == true)
   if not (hasTankSpec() and worn) and not itemHasTankStats(link, alloc) then return alloc("tankLines") end
   local out = alloc("tankLines")
   local def = tankDefenseSkill()
