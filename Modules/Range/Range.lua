@@ -30,7 +30,9 @@ local DEFAULTS = {
   besideFrame = true, -- without a nameplate: beside the target frame
   frameFirst = false, -- beside the target frame even where there is a nameplate
   size = 26,
-  offset = 22,        -- above the nameplate's health bar: over the row of debuff icons there
+  -- above the nameplate's health bar: over the row of debuff icons there, and above ResourceDing's combo point dots
+  -- (their row tops out 60 above the bar's bottom edge by default), so the two do not overlap on a fresh install
+  offset = 56,
   spell = "",         -- a spell name or id to measure by; empty: the class's main attacks
   dimIcons = true,    -- action bar icons grey and dim while the target is out of their range
 }
