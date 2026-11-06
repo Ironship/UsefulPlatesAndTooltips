@@ -26,10 +26,10 @@ local function isSecret(v)
 end
 
 -- A plain value from region:method(), or nil if it errors or is secret.
-local function plain(region, method)
+local function plain(region, method, ...)
   local fn = type(region) == "table" and region[method]
   if type(fn) ~= "function" then return nil end
-  local ok, value = pcall(fn, region)
+  local ok, value = pcall(fn, region, ...)
   if not ok or isSecret(value) then return nil end
   return value
 end
@@ -115,6 +115,7 @@ function Frames.PathOf(region)
       local path = table.concat(parts, ".")
       return Frames.Resolve(path) == region and path or nil
     end
+    if unit and plain(current, "GetAttribute", "unit") == unit then return current end
     local parent = plain(current, "GetParent")
     if not parent then break end
     local keyOK, key = pcall(keyInParent, current, parent)
@@ -148,10 +149,12 @@ function Frames.PathOf(region)
   end
 end
 
--- The top-level frame `region` belongs to (its ancestor just below UIParent), for layering.
-function Frames.Root(region)
+-- Stop at the owning unit frame for layering; shared UI roots include unrelated frames.
+-- Without a unit, retain the top-level ancestor for the frame picker.
+function Frames.Root(region, unit)
   local current = region
   for _ = 1, 20 do
+    if unit and plain(current, "GetAttribute", "unit") == unit then return current end
     local parent = plain(current, "GetParent")
     if not parent or parent == UIParent then return current end
     current = parent

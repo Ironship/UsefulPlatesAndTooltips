@@ -95,7 +95,8 @@ end
 local function updateLayering(w, bar, now)
     if bar ~= layerBar or now - layerCheckedAt >= LAYER_CHECK_INTERVAL then
         layerCheckedAt, layerBar = now, bar
-        local ok, strata, level = pcall(topLayer, frameRoot(bar))
+        local root = BIT.Frames and BIT.Frames.Root(bar, "focus") or frameRoot(bar)
+        local ok, strata, level = pcall(topLayer, root)
         if ok and (strata ~= topStrata or level ~= topLevel) then
             topStrata, topLevel = strata, level
             if ns.trace then
