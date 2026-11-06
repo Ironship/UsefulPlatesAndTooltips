@@ -311,6 +311,11 @@ local function buildMarkerTab(parent)
         "Show the prediction only if a raid frame represents the cast's recipient. Ordinary damage casts target enemies, not raid members."), y)
     y = place(checkRow(parent, "Show on nameplates", "showNameplates",
         "Show the prediction on the cast target's nameplate."), y)
+    y = place(checkRow(parent, "Target beats mouseover", "targetOverMouseover",
+        "For packs of mobs with the same name. With the mouse over a second mob of the pack, the addon "
+        .. "can't tell which of the two your spell goes to and hides the prediction. With this on, your target "
+        .. "(or focus, or the soft target when nothing is targeted) wins over the mob under the mouse. (If you cast with @mouseover macros, "
+        .. "the prediction could then show on the wrong mob.)"), y)
     y = section(parent, y, "THE MARKER")
     y = place(checkRow(parent, "Show the marker", "showMarker",
         "The predicted damage, drawn across enabled health bars while a cast is in flight."), y)

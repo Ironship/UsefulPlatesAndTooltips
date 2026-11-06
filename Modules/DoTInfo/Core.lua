@@ -151,6 +151,7 @@ local DEFAULTS = {
     -- Accuracy
     waitFirstTick = "off",
     estimateDuringCast = true,
+    targetOverMouseover = false, -- a same-named mob under the mouse doesn't blank a target cast (_namedEnemyKey)
     -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
     nameplateMode = "markerIcon",
     focusMode = "markerIcon",       -- the focus frame's marker (Focus.lua), in the nameplates' look
@@ -571,7 +572,11 @@ end
 -- 200-local limit, so it cannot gain another local function.
 function ns._namedEnemyKey(sentName)
     local matched, hardTarget
-    for _, unit in ipairs({ "target", "softenemy", "mouseover", "focus" }) do
+    -- targetOverMouseover: the mouseover only counts when nothing else has the name.
+    local mouseoverLast = db and db.targetOverMouseover
+    for _, unit in ipairs(mouseoverLast and { "target", "softenemy", "focus", "mouseover" }
+        or { "target", "softenemy", "mouseover", "focus" }) do
+        if unit == "mouseover" and mouseoverLast and matched then return matched end
         local existsOK, exists = pcall(UnitExists, unit)
         if not (unit == "softenemy" and hardTarget) and existsOK and not isSecret(exists) and exists == true then
             local attackOK, canAttack = pcall(UnitCanAttack, "player", unit)
@@ -2660,11 +2665,13 @@ end
 
 -- True when this unit is actually drawing a DoT fill. Shields ask before covering it.
 -- A tracked DoT with nothing left, a hidden marker, or a player/party frame is not a fill.
+-- The focus frame has one too (Focus.lua) unless its mode is off.
 function ns.HasMarker(unit)
     if not db or type(unit) ~= "string" or db.showMarkers == false then return false end
     local onPlate = unit:match("^nameplate%d+$") ~= nil
-    if unit ~= "target" and not onPlate then return false end
+    if unit ~= "target" and unit ~= "focus" and not onPlate then return false end
     if unit == "target" and db.targetMarkers == false then return false end
+    if unit == "focus" and db.focusMode == "off" then return false end
     if onPlate and db.nameplateMode == "off" then return false end
     if type(UnitIsDeadOrGhost) == "function" then
         local ok, dead = pcall(UnitIsDeadOrGhost, unit)
