@@ -115,7 +115,6 @@ function Frames.PathOf(region)
       local path = table.concat(parts, ".")
       return Frames.Resolve(path) == region and path or nil
     end
-    if unit and plain(current, "GetAttribute", "unit") == unit then return current end
     local parent = plain(current, "GetParent")
     if not parent then break end
     local keyOK, key = pcall(keyInParent, current, parent)
