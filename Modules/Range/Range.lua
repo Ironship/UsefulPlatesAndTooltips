@@ -28,6 +28,7 @@ local DEFAULTS = {
   showIn = true,      -- the green checkmark
   showOut = true,     -- the red X
   besideFrame = true, -- without a nameplate: beside the target frame
+  frameFirst = false, -- beside the target frame even where there is a nameplate
   size = 26,
   offset = 22,        -- above the nameplate's health bar: over the row of debuff icons there
   spell = "",         -- a spell name or id to measure by; empty: the class's main attacks
@@ -210,9 +211,20 @@ local function targetPlate()
   return plate
 end
 
+-- The target frame, when it is on screen to sit beside.
+local function shownTargetFrame()
+  local frame = BIT.Plate.UnitFrame("target")
+  if type(frame) ~= "table" or type(frame.IsShown) ~= "function" or not frame:IsShown() then return nil end
+  return frame
+end
+
 local function place(plate)
   icon:ClearAllPoints()
-  if plate then
+  local beside = settings.frameFirst and shownTargetFrame()
+  if beside then
+    icon:SetParent(UIParent)
+    icon:SetPoint("LEFT", beside, "RIGHT", 2, 8)
+  elseif plate then
     local bar = BIT.Plate.HealthBar(plate)
     if not bar then return false end
     icon:SetParent(plate)
@@ -926,7 +938,10 @@ local function buildTabs()
     { tooltip = "The green checkmark over your target while one of the measuring spells reaches it." })
   iconTab:checkbox("showOut", "Red X out of range",
     { tooltip = "The red X over your target while none of the measuring spells reaches it." })
-  iconTab:checkbox("besideFrame", "Beside the target frame",
+  iconTab:checkbox("frameFirst", "Beside the target frame, even with a nameplate",
+    { tooltip = "The mark sits beside the target frame instead of above the target's nameplate. "
+      .. "Without a target frame on screen it stays above the nameplate." })
+  iconTab:checkbox("besideFrame", "Beside the target frame without a nameplate",
     { tooltip = "Without a nameplate (nameplates off, the target off screen) the mark sits beside "
       .. "the target frame instead." })
   iconTab:gap()
