@@ -542,25 +542,28 @@ local function selectedEnemy()
     return hostileTarget("softenemy") and "softenemy" or nil
 end
 
+-- The units a cast can be aimed at decide: the hard target, or focus/mouseover through a macro (two of
+-- them with the cast's name but different mobs = unknown). The soft enemy only counts without a hard
+-- target. Nameplates are asked only when none of those has the name, and then just one may: other
+-- mobs that merely share the name (a wolf pack) must not make an ordinary target cast unknown.
 local function findRecipient(name)
-    if not isSecret(name) and type(name) == "string" and name ~= "" then
-        local found
-        local function consider(unit)
-            if not hostileTarget(unit) or read(UnitName, unit) ~= name then return true end
-            if found and read(UnitIsUnit, unit, found) ~= true then return false end
-            found = found or unit
-            return true
-        end
-        for _, unit in ipairs({ "target", "focus", "mouseover", "softenemy" }) do
-            if not consider(unit) then return nil end
-        end
-        for i = 1, MAX_PLATES do
-            local unit = "nameplate" .. i
-            if not consider(unit) then return nil end
-        end
-        return found
+    if isSecret(name) or type(name) ~= "string" or name == "" then return selectedEnemy() end
+    local found
+    local function consider(unit)
+        if not hostileTarget(unit) or read(UnitName, unit) ~= name then return true end
+        if found and read(UnitIsUnit, unit, found) ~= true then return false end
+        found = found or unit
+        return true
     end
-    return selectedEnemy()
+    local hardTarget = hostileTarget("target")
+    for _, unit in ipairs({ "target", "focus", "mouseover", "softenemy" }) do
+        if not (unit == "softenemy" and hardTarget) and not consider(unit) then return nil end
+    end
+    if found then return found end
+    for i = 1, MAX_PLATES do
+        if not consider("nameplate" .. i) then return nil end
+    end
+    return found
 end
 
 local function unitMatchesKey(unit, key)
