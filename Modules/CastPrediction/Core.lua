@@ -996,6 +996,9 @@ function ns.setDisplayHost(host)
     skullAnchor = host and (host.portrait or host.layerFrame) or nil
     targetHost = host and host.layerFrame or nil
     appliedSignature = nil
+    -- attach() parents the clip to the target bar, hidden with no target: the preview's own mock bar
+    -- would then show no fill. Back on UIParent here; attach() moves it again once the preview ends.
+    if host and markerClip:GetParent() ~= UIParent then pcall(markerClip.SetParent, markerClip, UIParent) end
     if not host then
         marker:ClearAllPoints()
         marker:Hide()

@@ -2660,11 +2660,13 @@ end
 
 -- True when this unit is actually drawing a DoT fill. Shields ask before covering it.
 -- A tracked DoT with nothing left, a hidden marker, or a player/party frame is not a fill.
+-- The focus frame has one too (Focus.lua) unless its mode is off.
 function ns.HasMarker(unit)
     if not db or type(unit) ~= "string" or db.showMarkers == false then return false end
     local onPlate = unit:match("^nameplate%d+$") ~= nil
-    if unit ~= "target" and not onPlate then return false end
+    if unit ~= "target" and unit ~= "focus" and not onPlate then return false end
     if unit == "target" and db.targetMarkers == false then return false end
+    if unit == "focus" and db.focusMode == "off" then return false end
     if onPlate and db.nameplateMode == "off" then return false end
     if type(UnitIsDeadOrGhost) == "function" then
         local ok, dead = pcall(UnitIsDeadOrGhost, unit)
