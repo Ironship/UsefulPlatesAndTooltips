@@ -132,6 +132,8 @@ Hunter and ResourceDing dots share the same shaded orb, dark socket and bezel. A
 
 Rip and Rupture use your combo points. Immolation Trap is tracked: placing it only arms it, and the DoT starts on the mob that takes its first tick. Ignite (mages) and Deep Wounds (warriors) are lit by critical hits, which no cast announces: a crit counts as yours when you cast at that mob just before (for Deep Wounds also when you swing at it alone), and the talent is assumed unless the talent tree shows no points. Ignite shows 8% a point of the fire crit over 4 s (rolling what the running one still owed into the new one), Deep Wounds 20% a point of your main hand's average damage over 12 s. The first tick confirms the guess. Forever only; switch them off in DoTInfo > Behavior.
 
+**Alpha (0.9.110-alpha.1), not checked in the game:** when the client hides tick sizes, Immolation Trap is found by its rhythm instead: the second hit of its school one tick after the first, with no other hit of that school between them, starts it (it shows about two ticks after the mob walks in). Wyvern Sting, whose DoT only starts when the sleep ends, is found the same way on the mob you stung. Paladins who know the Righteous Judgement rune get a Holy DoT after a critical Judgement or Crusader Strike (40% of the hit, as the rune's text says). With Enhance QoL's unit frames the marks follow its player, target and focus frames.
+
 ## Confirmed support for EllesmereUI, Platynator, Threat Plates, ElvUI etc.
 
 ## Gamepad support and tests (I play gamepad mainly)
