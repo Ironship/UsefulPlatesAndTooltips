@@ -19,8 +19,8 @@ local HEADER_HEIGHT = 52 -- title bar: title, presets, close button
 local TAB_HEIGHT = 26
 local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 170, control = 200 }
-local PREVIEW_LAYOUT = { label = 92, control = 140 }
+local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
+local PREVIEW_LAYOUT = BIT.Looks.PREVIEW_LAYOUT
 local DISABLED_ALPHA = 0.35
 local SIMULATION_STEP = 0.5 -- seconds
 
@@ -47,6 +47,57 @@ local PRESETS = {
         outlineOpacity = 85, smoothMotion = true, flashOnApply = true, pulseOutline = true,
         showSpark = true, showGlow = true, glowSize = 7, showShine = true, shineInterval = 3, scrollStripes = true,
         showLabel = false,
+    } },
+    { id = "glass", label = "Glass", values = {
+        showSkull = true, skullIcon = "boss", skullSize = 44, skullPulse = false,
+        showMarkers = true, fillTexture = "gloss", fillColor = "sky", fillOpacity = 85, dotColors = "single",
+        outlineStyle = "solid", outlineThickness = 1, outlineColor = "ice", outlineOpacity = 90,
+        smoothMotion = true, flashOnApply = false, pulseOutline = false,
+        showSpark = false, showGlow = true, glowSize = 4, showShine = true, shineInterval = 4, scrollStripes = false,
+        showLabel = false,
+    } },
+    { id = "neon", label = "Neon", values = {
+        showSkull = true, skullIcon = "skull", skullSize = 56, skullPulse = true,
+        showMarkers = true, fillTexture = "scanlines", fillColor = "magenta", fillOpacity = 90, dotColors = "single",
+        outlineStyle = "dashed", dashLength = 4, outlineThickness = 2, outlineColor = "cyan", outlineOpacity = 100,
+        smoothMotion = true, flashOnApply = true, pulseOutline = true,
+        showSpark = true, showGlow = true, glowSize = 10, showShine = false, scrollStripes = false, showLabel = false,
+    } },
+    { id = "blood", label = "Blood", values = {
+        showSkull = true, skullIcon = "skull", skullSize = 56, skullPulse = true,
+        showMarkers = true, fillTexture = "cylinder", fillColor = "crimson", fillOpacity = 95, dotColors = "single",
+        outlineStyle = "solid", outlineThickness = 1, outlineColor = "maroon", outlineOpacity = 100,
+        smoothMotion = true, flashOnApply = true, pulseOutline = false,
+        showSpark = true, showGlow = false, showShine = false, scrollStripes = false, showLabel = false,
+    } },
+    { id = "frost", label = "Frost", values = {
+        showSkull = true, skullIcon = "cross", skullSize = 44, skullPulse = false,
+        showMarkers = true, fillTexture = "noise", fillColor = "ice", fillOpacity = 75, dotColors = "single",
+        outlineStyle = "solid", outlineThickness = 1, outlineColor = "sky", outlineOpacity = 100,
+        smoothMotion = true, flashOnApply = false, pulseOutline = false,
+        showSpark = false, showGlow = true, glowSize = 5, showShine = true, shineInterval = 5, scrollStripes = false,
+        showLabel = false,
+    } },
+    { id = "toxic", label = "Toxic", values = {
+        showSkull = true, skullIcon = "check", skullSize = 48, skullPulse = true,
+        showMarkers = true, fillTexture = "waves", fillColor = "lime", fillOpacity = 80, dotColors = "single",
+        outlineStyle = "dashed", dashLength = 4, outlineThickness = 1, outlineColor = "forest", outlineOpacity = 100,
+        smoothMotion = true, flashOnApply = true, pulseOutline = true,
+        showSpark = false, showGlow = true, glowSize = 6, showShine = false, scrollStripes = false, showLabel = false,
+    } },
+    { id = "carbon", label = "Carbon", values = {
+        showSkull = true, skullIcon = "boss", skullSize = 48, skullPulse = false,
+        showMarkers = true, fillTexture = "carbon", fillColor = "charcoal", fillOpacity = 95, dotColors = "single",
+        outlineStyle = "solid", outlineThickness = 1, outlineColor = "gold", outlineOpacity = 100,
+        smoothMotion = true, flashOnApply = false, pulseOutline = false,
+        showSpark = false, showGlow = false, showShine = true, shineInterval = 6, scrollStripes = false, showLabel = false,
+    } },
+    { id = "ember", label = "Ember", values = {
+        showSkull = true, skullIcon = "skull", skullSize = 52, skullPulse = true,
+        showMarkers = true, fillTexture = "bevel", fillColor = "amber", fillOpacity = 90, dotColors = "single",
+        outlineStyle = "solid", outlineThickness = 2, outlineColor = "orange", outlineOpacity = 100,
+        smoothMotion = true, flashOnApply = true, pulseOutline = true,
+        showSpark = true, showGlow = true, glowSize = 7, showShine = false, scrollStripes = false, showLabel = false,
     } },
     { id = "debug", label = "Debug", values = {
         showSkull = true, skullIcon = "cross", skullPulse = false,
@@ -266,62 +317,23 @@ local function makeRow(parent, labelText, opts)
     return row
 end
 
-local function checkbox(parent, key, labelText, opts)
+local function rowOpts(opts)
     opts = opts or {}
-    local row = makeRow(parent, labelText, opts)
-    local box = CreateFrame("CheckButton", nil, row)
-    box:SetSize(24, 24)
-    box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-    box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-    box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-    box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-    box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-    BIT.UI.SkinCheck(box)
-    box:SetScript("OnClick", function(self)
-        db()[key] = self:GetChecked() and true or false
+    return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, layout = opts.layout, suffix = opts.suffix,
+        display = opts.display, settings = db, register = function(row) table.insert(controls, row) end }
+end
+
+-- The check box, slider and drop-down are the shared rows (Core/LookRows.lua): every module's options look the same.
+local function checkbox(parent, key, labelText, opts)
+    return BIT.Looks.Rows.Check(parent, labelText, function() return db()[key] end, function(value)
+        db()[key] = value
         changed()
-    end)
-    function row:Refresh()
-        box:SetChecked(db()[key] and true or false)
-        self:ApplyEnabled(box)
-    end
-    return row
+    end, rowOpts(opts))
 end
 
 -- get/set work on any value (settings or preview numbers).
 local function sliderRow(parent, labelText, min, max, step, get, set, opts)
-    opts = opts or {}
-    local row = makeRow(parent, labelText, opts)
-    local slider = CreateFrame("Slider", nil, row)
-    slider:SetOrientation("HORIZONTAL")
-    slider:SetSize(row.layout.control - 44, 18)
-    slider:SetPoint("LEFT", row, "LEFT", row.layout.label + 2, 0)
-    slider:SetMinMaxValues(min, max)
-    slider:SetValueStep(step)
-    slider:SetObeyStepOnDrag(true)
-    slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-    slider:GetThumbTexture():SetSize(18, 24)
-    BIT.UI.SkinSlider(slider, 6)
-    local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-    local suffix = opts.suffix or ""
-    local updating = false
-    slider:SetScript("OnValueChanged", function(_, value)
-        if updating then return end
-        value = math.floor(value / step + 0.5) * step
-        valueText:SetText(value .. suffix)
-        set(value)
-    end)
-    slider:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * step) end)
-    function row:Refresh()
-        updating = true
-        local value = get()
-        slider:SetValue(value)
-        valueText:SetText(math.floor(value / step + 0.5) * step .. suffix)
-        updating = false
-        self:ApplyEnabled(slider)
-    end
-    return row
+    return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, get, set, rowOpts(opts))
 end
 
 local function slider(parent, key, labelText, min, max, step, opts)
@@ -334,92 +346,21 @@ local function slider(parent, key, labelText, min, max, step, opts)
 end
 
 local function closeMenu()
-    if menu then menu:Hide() end
+    if BIT.Looks then BIT.Looks.ClosePickList() end
 end
 
--- Shared dropdown list under `owner`; entries may carry an rgb swatch.
+-- The shared drop-down (Core/Looks.lua): scrolls, shows a swatch or a texture preview, groups entries.
 local function openMenu(owner, list, current, pick)
-    if not menu then
-        menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        menu:SetFrameStrata("FULLSCREEN_DIALOG")
-        menu:EnableMouse(true)
-        setBackdrop(menu, 0.08, 0.98)
-        menu.buttons = {}
-        -- Close on a click anywhere else (event may not exist on every client; clicking the owner toggles too).
-        pcall(menu.RegisterEvent, menu, "GLOBAL_MOUSE_DOWN")
-        menu:SetScript("OnEvent", function(self)
-            if not self:IsMouseOver() and not (self.owner and self.owner:IsMouseOver()) then self:Hide() end
-        end)
-    end
-    if menu:IsShown() and menu.owner == owner then return menu:Hide() end
-    menu.owner = owner
-    for i, entry in ipairs(list) do
-        local button = menu.buttons[i]
-        if not button then
-            button = CreateFrame("Button", nil, menu)
-            button:SetHeight(20)
-            BIT.UI.RoundHighlight(button)
-            button.swatch = button:CreateTexture(nil, "ARTWORK")
-            button.swatch:SetSize(12, 12)
-            button.swatch:SetPoint("LEFT", 8, 0)
-            button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            button.text:SetJustifyH("LEFT")
-            menu.buttons[i] = button
-        end
-        button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", menu, "TOPLEFT", 1, -4 - (i - 1) * 20)
-        button:SetPoint("RIGHT", menu, "RIGHT", -1, 0)
-        button.swatch:SetShown(entry.rgb ~= nil)
-        if entry.rgb then button.swatch:SetColorTexture(entry.rgb[1], entry.rgb[2], entry.rgb[3], 1) end
-        button.text:ClearAllPoints()
-        button.text:SetPoint("LEFT", entry.rgb and 26 or 8, 0)
-        button.text:SetText(entry.id == current and ("|cffffd100" .. entry.label .. "|r") or entry.label)
-        button:SetScript("OnClick", function()
-            menu:Hide()
-            pick(entry.id)
-        end)
-        button:Show()
-    end
-    for i = #list + 1, #menu.buttons do menu.buttons[i]:Hide() end
-    menu:SetSize(owner:GetWidth(), #list * 20 + 8)
-    menu:ClearAllPoints()
-    menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
-    menu:Show()
+    BIT.Looks.PickList(owner, list, current, pick)
 end
 
 local function choice(parent, key, labelText, list, opts)
-    opts = opts or {}
-    local row = makeRow(parent, labelText, opts)
-    local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-    button:SetSize(row.layout.control, 22)
-    button:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-    BIT.UI.SkinButton(button)
-    local swatch = button:CreateTexture(nil, "ARTWORK")
-    swatch:SetSize(12, 12)
-    swatch:SetPoint("LEFT", 8, 0)
-    local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    text:SetJustifyH("LEFT")
-    text:SetPoint("RIGHT", -20, 0)
-    local arrow = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    arrow:SetPoint("RIGHT", -8, 0)
-    arrow:SetText("v")
-    button:SetScript("OnClick", function(self)
-        openMenu(self, list, db()[key], function(id)
-            db()[key] = id
-            changed()
-        end)
-    end)
-    function row:Refresh()
-        local entry = findEntry(list, db()[key])
-        text:SetText(entry and entry.label or tostring(db()[key]))
-        swatch:SetShown(entry ~= nil and entry.rgb ~= nil)
-        if entry and entry.rgb then swatch:SetColorTexture(entry.rgb[1], entry.rgb[2], entry.rgb[3], 1) end
-        text:ClearAllPoints()
-        text:SetPoint("LEFT", (entry and entry.rgb) and 26 or 8, 0)
-        text:SetPoint("RIGHT", -20, 0)
-        self:ApplyEnabled(button)
-    end
-    return row
+    local menuList = list
+    if list == ns.lists.colors then menuList = BIT.Looks.ColorList() end
+    return BIT.Looks.Rows.Choice(parent, labelText, menuList, function() return db()[key] end, function(id)
+        db()[key] = id
+        changed()
+    end, rowOpts(opts))
 end
 
 local function pushButton(parent, text, width, onClick)
@@ -523,7 +464,7 @@ local function addTab(name)
 
     local function place(row, key)
         row:SetPoint("TOPLEFT", tab.content, "TOPLEFT", 0, -tab.y)
-        tab.y = tab.y + ROW_HEIGHT
+        tab.y = tab.y + (row.standard and row:GetHeight() or ROW_HEIGHT)
         if key then table.insert(tab.keys, key) end
         return row
     end
@@ -572,16 +513,17 @@ local function showsLabel(settings) return settings.showLabel end
 
 local function buildTabs()
     local lists = ns.lists
+    lists.fills.kind = "texture" -- the shared drop-down merges the whole catalog into it
 
     local icon = addTab("Kill icon")
     icon:checkbox("showSkull", "Show icon on portrait",
         { tooltip = "Shows an icon over the target's portrait when your DoTs on it will kill it." })
-    icon:choice("skullIcon", "Icon", lists.icons)
-    icon:slider("skullSize", "Size", 20, 128, 2)
+    icon:choice("skullIcon", "Kill icon", lists.icons)
+    icon:slider("skullSize", "Icon size", 20, 128, 2)
     icon:checkbox("skullPulse", "Pulse", { tooltip = "Gently pulses the icon while it's showing." })
-    icon:slider("skullOffsetX", "Horizontal offset", -60, 60, 1,
+    icon:slider("skullOffsetX", "Icon horizontal offset", -60, 60, 1,
         { tooltip = "Pixels right (+) or left (-) of the portrait's center." })
-    icon:slider("skullOffsetY", "Vertical offset", -60, 60, 1,
+    icon:slider("skullOffsetY", "Icon vertical offset", -60, 60, 1,
         { tooltip = "Pixels up (+) or down (-) from the portrait's center." })
 
     local marker = addTab("Marker")
@@ -625,9 +567,9 @@ local function buildTabs()
     local text = addTab("Text")
     text:checkbox("showLabel", "Show damage text",
         { tooltip = "Remaining DoT damage next to the health bar (a per-DoT breakdown with DoT colors)." })
-    text:choice("labelPosition", "Position", lists.labelPositions, { enabledIf = showsLabel })
-    text:slider("labelSize", "Size", 8, 20, 1, { enabledIf = showsLabel })
-    text:choice("labelColor", "Color", lists.colors, { enabledIf = showsLabel })
+    text:choice("labelPosition", "Text position", lists.labelPositions, { enabledIf = showsLabel })
+    text:slider("labelSize", "Text size", 8, 20, 1, { enabledIf = showsLabel })
+    text:choice("labelColor", "Text color", lists.colors, { enabledIf = showsLabel })
 
     -- Presets match both bars; these controls allow a separate nameplate look afterwards.
     local platesOn = function(s) return s.nameplateMode ~= "off" end
@@ -1024,20 +966,11 @@ end
 -- The presets, the preview and the settings, in window: the addon's own window, below its title bar
 -- with the presets beside anchor (its close button), or inside UsefulPlatesAndTooltips the tab it is built into.
 local function buildContent(top, anchor)
-    -- Presets, right-aligned in the title bar.
+    -- Presets, right-aligned in the title bar: the shared "Look presets" button.
     local presetLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    local previous
-    for i = #PRESETS, 1, -1 do
-        local preset = PRESETS[i]
-        local button = pushButton(window, preset.label, 72, function() applyPreset(preset) end)
-        if previous then
-            button:SetPoint("RIGHT", previous, "LEFT", -4, 0)
-        else
-            button:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
-        end
-        previous = button
-    end
-    presetLabel:SetPoint("RIGHT", previous, "LEFT", -8, 0)
+    local presetButton = BIT.Looks.PresetButton(window, PRESETS, applyPreset)
+    presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
+    presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
     presetLabel:SetText("Both bars")
 
     local pane = CreateFrame("Frame", nil, window, "BackdropTemplate")

@@ -26,11 +26,33 @@ Forever can hide `UNIT_COMBAT` damage amounts during combat. Such ticks now matc
 
 <img width="465" height="407" alt="WowB_Bx6Sgl1bvb-ezgif com-optimize (1)" src="https://github.com/user-attachments/assets/7cf3fe30-5752-4cec-9bb4-2e4ece2af2c9" />
 
+## Textures and colors
+
+DoTInfo (target frame, nameplates, focus), CastPrediction, **ShieldsInfo** and **HealPrediction** share one catalog (`Core/Looks.lua`), so every texture and color below is in all four:
+
+- **89 fill textures**, in groups: *Basic* (flat, fade in from the left), *Blizzard*'s own bar textures, *Soft* shadings that give a bar depth (glass, bevel, cylinder, tube, chrome, rim and center glow, fades), *Bar shapes* (capsule, a bright leading edge, segments of 5, 10 or 20), *Patterns* (stripes both ways, lines, scanlines, crosshatch, grid, checkerboard, dots, diamonds, hexagons, triangles, argyle, plaid, houndstooth, zigzag, chevrons, waves, bricks, sparkles, crosses, rings, carbon fibre, noise, brushed metal), *Organic* (clouds, marble, wood grain, camouflage, leopard spots, cracked earth, glowing veins, bubbles, fish scales, water ripples, sand, zebra), *Material* (leather, woven cloth, basket weave, scratched metal, beveled tiles, rivets, louvers) and *Colorful* (rainbow, fire, lava, blood, sunset, plasma, aurora, ice, ocean, flame, toxic, gold, steel blue: these keep their own colors, the fill color does not tint them, only the opacity applies). The fill color tints all the others. Where another addon brought **LibSharedMedia** (ElvUI, Details, ...), every statusbar texture it knows is in the list too, under "Shared media".
+- **Colors**: 33 named colors, and **Custom color...** at the end of every color list opens Blizzard's color picker; the choice is saved as `#rrggbb`. This works for fills, outlines and labels.
+- **Drop-down lists** that scroll (mouse wheel), show a swatch or a preview of each texture, and group their entries.
+- **DoTInfo look presets** (the "Look presets" button, applied to the target frame and the nameplates): Minimal, Classic, Juicy, Glass, Neon, Blood, Frost, Toxic, Carbon, Ember and Debug.
+- **CastPrediction** has a texture for a cast, one for a channel and one (with its own color and opacity) for the finisher preview, so the three never look alike. A missing texture (a shared-media pack that is gone) falls back to flat.
+
+- **ShieldsInfo**: the fill style is a drop-down over the whole catalog (it kept its own shield art as extra entries); the absorb color stays in its Appearance panel, which already has a color picker.
+- **HealPrediction**: a texture and a color for each of the three bands (your heal, other healers, heals over time), 33 colors and a custom color instead of six.
+- A texture with colors of its own (the Colorful group) is not tinted by the color setting anywhere; only the opacity applies.
+
+The generated patterns are made by `tools/make_fill_textures.py`.
+
+### Every settings window works the same way
+
+All nine modules build their options from one set of rows (`Core/LookRows.lua`): the same label column and control column, the same drop-down (a "v", a color swatch, a texture preview or a picture, scrolling), the same slider (label, slider, value, opacities as a percentage), the same check box (label, then the box), one "Look presets" button where a module has presets, one "Reset this tab" at the bottom right of every tab, and a "TRY IT" block under every live preview. The same setting has the same name everywhere: *Fill style*, *Fill color*, *Fill opacity*, *Outline*, *Outline color*, *Outline opacity*, *Text position/size/color*, *Icon horizontal/vertical offset*. If you add a setting, build it with these rows, not with a new widget.
+
 ## CastPrediction
 
 <img width="400" height="400" alt="{3045F908-1D52-4E85-8F2D-19C7AF79044C}" src="https://github.com/user-attachments/assets/8d6dc029-3979-47fb-b450-7cf5a0375956" />
 
 Shows the damage of the spell you are casting on the enemy's health bar and nameplate. Direct hits use a solid translucent fill; channels use vertical bands for the damage remaining. Colors follow the spell's school, matching DoTInfo. The Marker tab has separate switches for the target, focus, party, raid and nameplate frames. Copies appear only when a frame represents the cast's recipient; party/raid members are normally friendly, so outgoing damage predictions do not ordinarily appear on those frames.
+
+**Finisher preview** (Prediction tab, on by default; rogues, druids and anyone with a damage finisher on the action bars): while your target has combo points, the same marker shows what your strongest damage finisher on the bars (Eviscerate, Ferocious Bite, a rune's Between the Eyes: whatever SpellDamageInfo can price from the description's per-point rows) would deal at that count, so you can see whether it kills before you press it. It is drawn with its own fill (Flame, top to bottom, at 70% opacity by default; a cast is solid, a channel has vertical dashes, DoTs diagonal stripes), growing from the health edge to the left like a cast. Its fill style, color and opacity are on the Marker tab. It reads the same description rows as the numbers on the bar button, so on Forever it leaves out the attack power the text says it adds: the real hit is at least the marked amount, and the kill icon only counts that certain part. A real cast shows its own prediction instead, the preview never learns from hits, and finishers that deal damage over time (Rupture, Rip), that only stun or buff (Kidney Shot, Slice and Dice) and the combo point builders (Sinister Strike, Backstab, Claw, Shred) are not previewed. Not yet checked in the game.
 
 The fill covers health backwards from its current edge: 20 damage at 60/100 HP covers 60 down to 40. It follows health changes and clips overkill inside the bar. Action targeting works without clicking a target, and the prediction stays on the original enemy if the reticle moves. Hidden GUIDs use a nameplate-session key, discarded when the plate disappears; this does not require DoTInfo to be enabled. The cast's reported recipient is matched against target, focus, mouseover and nameplates.
 
@@ -131,6 +153,10 @@ Hunter and ResourceDing dots share the same shaded orb, dark socket and bezel. A
 ## Estimation for crit based procs (Deep Wounds, Ignite)
 
 Rip and Rupture use your combo points. Immolation Trap is tracked: placing it only arms it, and the DoT starts on the mob that takes its first tick. Ignite (mages) and Deep Wounds (warriors) are lit by critical hits, which no cast announces: a crit counts as yours when you cast at that mob just before (for Deep Wounds also when you swing at it alone), and the talent is assumed unless the talent tree shows no points. Ignite shows 8% a point of the fire crit over 4 s (rolling what the running one still owed into the new one), Deep Wounds 20% a point of your main hand's average damage over 12 s. The first tick confirms the guess. Forever only; switch them off in DoTInfo > Behavior.
+
+**WARNING: this is an alpha build (Forever 0.9.111-alpha.1, Retail 0.9.120-alpha.1). Most of it has not been checked in the game, Retail not at all.** New since 0.9.110: the finisher preview on the target's bar and plate (Eviscerate, Ferocious Bite, rune finishers), 89 fill textures and 33 colors (plus a custom color) shared by DoTInfo, CastPrediction, ShieldsInfo and HealPrediction, one set of settings rows in every module (the same drop-downs, sliders, "Look presets" and "Reset this tab" everywhere), the health bar's shape mask kept on the shield and heal overlays, Immolation Trap, Wyvern Sting and Righteous Judgement below, Enhance QoL unit frames, and Forever build 70790 data. Back up your saved variables before trying it; the settings of 0.9.110 are read as they were.
+
+**Alpha, not checked in the game:** when the client hides tick sizes, Immolation Trap is found by its rhythm instead: the second hit of its school one tick after the first, with no other hit of that school between them, starts it (it shows about two ticks after the mob walks in). Wyvern Sting, whose DoT only starts when the sleep ends, is found the same way on the mob you stung. Paladins who know the Righteous Judgement rune get a Holy DoT after a critical Judgement or Crusader Strike (40% of the hit, as the rune's text says). With Enhance QoL's unit frames the marks follow its player, target and focus frames.
 
 ## Confirmed support for EllesmereUI, Platynator, Threat Plates, ElvUI etc.
 

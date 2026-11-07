@@ -243,7 +243,12 @@ local function applyStyle(w, db)
         w.fill:SetTexture(path, wrap, wrap)
         w.fill:SetHorizTile(style.tiled or false)
         w.fill:SetVertTile(style.tiled or false)
-        w.fill:SetVertexColor(ns.colorOf(db.plateFillColor, db.plateFillOpacity))
+        if style.raw then
+            local _, _, _, alpha = ns.colorOf(db.plateFillColor, db.plateFillOpacity)
+            w.fill:SetVertexColor(1, 1, 1, alpha) -- a texture with colours of its own
+        else
+            w.fill:SetVertexColor(ns.colorOf(db.plateFillColor, db.plateFillOpacity))
+        end
     end
     for _, segment in ipairs(w.segments) do
         segment.texture:SetTexture(path or WHITE, wrap, wrap)

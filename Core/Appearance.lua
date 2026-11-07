@@ -909,67 +909,62 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   end
   advanced:SetSize(width, -ay + 8)
 
-  local function slider(label, minv, maxv, step, key, fmt)
-    local holder = BIT.UI.Slider(panel, label, minv, maxv, step,
+  -- The shared rows (Core/LookRows.lua): the same slider, drop-down and check box as every module's own options.
+  local function slider(label, minv, maxv, step, key, display, suffix)
+    local row = BIT.Looks.Rows.Slider(panel, label, minv, maxv, step,
       function() return currentStyle()[key] end,
-      function(v) commit(key, v) end, fmt)
-    holder:SetPoint("TOPLEFT", x, y)
-    y = y - 44
-    controls.sliders[key] = holder
+      function(v) commit(key, v) end, { display = display, suffix = suffix })
+    row:SetPoint("TOPLEFT", x, y)
+    y = y - row:GetHeight()
+    controls.sliders[key] = row
   end
+  local function percent(v) return math.floor(v * 100 + 0.5) .. "%" end
 
   if capabilities.opacity ~= false then
-    slider("Opacity", 0, 1, 0.05, "opacity", "%d%%")
+    slider("Opacity", 0, 1, 0.05, "opacity", percent)
   end
 
   if capabilities.shapes and #capabilities.shapes > 0 then
     local shapes = capabilities.shapes
-    local shapeButton = BIT.UI.Button(panel, "Shape: segments", 220, function()
-      local current = currentStyle().shape
-      local next
-      for i = 1, #shapes do
-        if shapes[i] == current then next = shapes[(i % #shapes) + 1] break end
-      end
-      next = next or shapes[1]
-      commit("shape", next)
-    end)
-    shapeButton:SetPoint("TOPLEFT", x, y)
-    y = y - 30
-    controls.shape = shapeButton
+    local list = {}
+    for i = 1, #shapes do
+      local id = shapes[i]
+      list[i] = { id = id, label = id:sub(1, 1):upper() .. id:sub(2) }
+    end
+    local shapeRow = BIT.Looks.Rows.Choice(panel, "Shape", list,
+      function() return currentStyle().shape end, function(id) commit("shape", id) end)
+    shapeRow:SetPoint("TOPLEFT", x, y)
+    y = y - shapeRow:GetHeight()
+    controls.shape = shapeRow
   end
 
-  if capabilities.border then slider("Border (px)", 0, 16, 1, "border", nil) end
+  if capabilities.border then slider("Border", 0, 16, 1, "border", nil, " px") end
 
   if capabilities.geometry then
-    slider("Thickness (px)", 1, 64, 1, "thickness", nil)
-    slider("Gap (px)", 0, 32, 1, "gap", nil)
-    slider("Length (px)", 1, 128, 1, "length", nil)
+    slider("Thickness", 1, 64, 1, "thickness", nil, " px")
+    slider("Gap", 0, 32, 1, "gap", nil, " px")
+    slider("Length", 1, 128, 1, "length", nil, " px")
   end
 
-  if capabilities.scale then slider("Scale", 0.5, 3, 0.05, "scale", "%.2fx") end
+  if capabilities.scale then slider("Scale", 0.5, 3, 0.05, "scale", function(v) return string.format("%.2fx", v) end) end
 
   if capabilities.font then
-    slider("Font size (px)", 6, 48, 1, "fontSize", nil)
-    local outlineButton = BIT.UI.Button(panel, "Outline: OUTLINE", 220, function()
-      local current = currentStyle().outline
-      local order = { "NONE", "OUTLINE", "THICKOUTLINE" }
-      local next
-      for i = 1, #order do
-        if order[i] == current then next = order[(i % #order) + 1] break end
-      end
-      commit("outline", next or "NONE")
-    end)
-    outlineButton:SetPoint("TOPLEFT", x, y)
-    y = y - 30
-    controls.outline = outlineButton
+    slider("Font size", 6, 48, 1, "fontSize", nil, " px")
+    local outlineRow = BIT.Looks.Rows.Choice(panel, "Text outline", {
+      { id = "NONE", label = "None" }, { id = "OUTLINE", label = "Outline" }, { id = "THICKOUTLINE", label = "Thick outline" },
+    }, function() return currentStyle().outline end, function(id) commit("outline", id) end)
+    outlineRow:SetPoint("TOPLEFT", x, y)
+    y = y - outlineRow:GetHeight()
+    controls.outline = outlineRow
   end
 
   -- the opacity slider is built above only when the capability allows it
-  local motion = BIT.UI.Check(panel, "Limit animations (reduced motion)",
+  local motion = BIT.Looks.Rows.Check(panel, "Reduced motion",
     function() return currentStyle().reducedMotion end,
-    function(v) commit("reducedMotion", v) end)
+    function(v) commit("reducedMotion", v) end,
+    { tooltip = "Limits the animations (pulses, glides, sweeps) to the calm ones." })
   motion:SetPoint("TOPLEFT", x, y)
-  y = y - 30
+  y = y - motion:GetHeight()
   controls.checks.reducedMotion = motion
 
   -- The Minimal preset is scope-aware: editing this module writes that module's
@@ -1028,6 +1023,8 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
       end
       local fit = math.min(1, (width - 24) / math.max(1, sample:GetWidth()))
       sample:SetScale(fit)
+      sample:ClearAllPoints()
+      sample:SetPoint("TOPLEFT", panel, "TOPLEFT", x / fit, sampleTop / fit) -- offsets scale with the frame
       local height = sample:GetHeight() * fit + 12
       if height ~= sampleHeight then
         sampleHeight = height
@@ -1074,12 +1071,8 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
       local c = style.colors[role]
       swatch.tex:SetColorTexture(c[1], c[2], c[3], c[4] * style.opacity)
     end
-    if controls.shape then
-      controls.shape:SetText("Shape: " .. style.shape)
-    end
-    if controls.outline then
-      controls.outline:SetText("Outline: " .. style.outline)
-    end
+    if controls.shape then controls.shape:Refresh() end
+    if controls.outline then controls.outline:Refresh() end
     if controls.checks.reducedMotion then controls.checks.reducedMotion:Refresh() end
     renderSample(style)
   end

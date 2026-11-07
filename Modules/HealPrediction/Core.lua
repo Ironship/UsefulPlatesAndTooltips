@@ -24,6 +24,9 @@ local DEFAULTS = {
     allHealers = false, -- ask for the client's total instead of only your own heals
     fillColor = "green",
     fillOpacity = 55,
+    fillTexture = "flat", -- the shared texture catalog (Core/Looks.lua), one per band
+    otherTexture = "flat",
+    hotTexture = "flat",
     showOthers = true,  -- the other healers' share, behind your own (needs the client to tell them apart)
     otherColor = "cyan",
     otherOpacity = 40,
@@ -46,6 +49,12 @@ local COLOR_PRESETS = {
 }
 local COLOR_BY_ID = {}
 for _, preset in ipairs(COLOR_PRESETS) do COLOR_BY_ID[preset.id] = preset.rgb end
+-- The shared palette (Core/Looks.lua) adds the rest; a saved "#rrggbb" id is read by colorOf.
+do
+    for _, preset in ipairs(BIT.Looks and BIT.Looks.Palette or {}) do
+        if not COLOR_BY_ID[preset.id] then COLOR_BY_ID[preset.id] = preset.rgb end
+    end
+end
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
@@ -75,7 +84,7 @@ local function ask(fn, ...)
 end
 
 local function colorOf(id, opacityPercent)
-    local rgb = COLOR_BY_ID[id] or COLOR_BY_ID.green
+    local rgb = COLOR_BY_ID[id] or (BIT.Looks and BIT.Looks.Rgb(id)) or COLOR_BY_ID.green
     return rgb[1], rgb[2], rgb[3], (tonumber(opacityPercent) or 100) / 100
 end
 
@@ -147,7 +156,7 @@ local function newLayer(healthBar, levelOffset, withLabel)
     local bar = CreateFrame("StatusBar", nil, clip)
     bar:SetStatusBarTexture(WHITE)
     -- The frame's own HealthBarMask keeps the segment inside the visible bar.
-    if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(bar:GetStatusBarTexture(), healthBar, true) end
+    if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.ApplyToBar(bar, healthBar, true) end
     local layer = { clip = clip, bar = bar }
     if withLabel then
         layer.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -227,18 +236,34 @@ local function layoutOverlay(o, healthBar)
     o.layoutSignature, o.healthFill, o.ownFill = signature, fill, ownFill
 end
 
-local function paintLayer(layer, color, opacity)
+local function paintLayer(layer, color, opacity, textureId)
     local r, g, b, a = colorOf(color, opacity)
+    local entry = BIT.Looks and BIT.Looks.Texture(textureId or "flat") or nil
+    -- A fade-in gradient is a trick of DoTInfo's fill, not a texture: a status bar's fill stays flat there.
+    local path = entry and not entry.gradient and entry.path or WHITE
+    local tiled = entry and not entry.gradient and entry.tiled or false
+    if entry and entry.raw then r, g, b = 1, 1, 1 end -- a texture with colours of its own: only the opacity applies
+    -- Repainting only when the look changed keeps the bar's shape mask on the fill between updates.
+    local key = table.concat({ tostring(path), tostring(tiled), string.format("%.3f,%.3f,%.3f,%.3f", r, g, b, a) }, "|")
+    if layer.paintKey == key then return end
+    layer.paintKey = key
     pcall(function()
         layer.bar:SetStatusBarColor(r, g, b, a)
-        layer.bar:SetStatusBarTexture(WHITE)
+        layer.bar:SetStatusBarTexture(path)
+        local fill = layer.bar:GetStatusBarTexture()
+        if fill then
+            fill:SetTexture(path, tiled and "REPEAT" or nil, tiled and "REPEAT" or nil)
+            fill:SetHorizTile(tiled)
+            fill:SetVertTile(tiled)
+        end
+        if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Refresh(layer.bar) end -- the repaint may drop the shape mask
     end)
 end
 
 local function paintOverlay(o)
-    paintLayer(o, db().fillColor, db().fillOpacity)
-    if o.others then paintLayer(o.others, db().otherColor, db().otherOpacity) end
-    if o.hot then paintLayer(o.hot, db().hotColor, db().hotOpacity) end
+    paintLayer(o, db().fillColor, db().fillOpacity, db().fillTexture)
+    if o.others then paintLayer(o.others, db().otherColor, db().otherOpacity, db().otherTexture) end
+    if o.hot then paintLayer(o.hot, db().hotColor, db().hotOpacity, db().hotTexture) end
 end
 
 -- Feeds one band: the value goes to the status bar untouched (it may be secret); a plain zero hides it.
@@ -582,6 +607,7 @@ end
 
 -- Shared with the options module.
 ns._settings = function() return settings end
+ns._defaults = function() return DEFAULTS end
 ns._updateAll = updateAll
 ns.DEFAULTS = DEFAULTS
 

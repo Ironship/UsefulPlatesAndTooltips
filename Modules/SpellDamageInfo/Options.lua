@@ -23,8 +23,8 @@ local WHITE = "Interface\\Buttons\\WHITE8X8"
 local WINDOW_WIDTH, WINDOW_HEIGHT = 660, 460
 local HEADER_HEIGHT = 46
 local PREVIEW_WIDTH = 250
-local ROW_HEIGHT = 28
-local LAYOUT = { label = 186, control = 150 }
+local ROW_HEIGHT = BIT.Looks.ROW_HEIGHT
+local LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
 local DISABLED_ALPHA = 0.35
 local MOCK_SIZE = 36     -- a Blizzard action button, so the number gets the size it gets on the bar
 local MOCK_SCALE = 1.5   -- the preview magnifies the whole button, number and all
@@ -216,168 +216,45 @@ end
 -- Controls
 ---------------------------------------------------------------------------------------------
 
+-- Every row is the shared one (Core/LookRows.lua); this module only adds its translations (the label, the tooltip and the
+-- names in a drop-down follow the chosen language, also while the window is open).
+local function rowOpts(labelText, opts)
+  opts = opts or {}
+  local labelKey, tooltipKey = localeKey(labelText), opts.tooltip and localeKey(opts.tooltip)
+  return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, layout = opts.layout, suffix = opts.suffix,
+    settings = db, register = function(row) controls[#controls + 1] = row end,
+    localize = function(fontString) localizedText(fontString, labelKey) end,
+    tooltipFor = opts.tooltip and function()
+      local body = L[tooltipKey] or opts.tooltip
+      if opts.retailNote and ns.IsRetail() then body = body .. " " .. L.OPT_RETAIL end
+      return L[labelKey] or labelText, body
+    end or nil,
+    labelOf = choiceLabel }
+end
+
 local function makeRow(parent, labelText, opts)
-  local row = CreateFrame("Frame", nil, parent)
-  row:SetSize(LAYOUT.label + LAYOUT.control + 20, ROW_HEIGHT)
-  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  row.label:SetPoint("LEFT", 6, 0)
-  row.label:SetWidth(LAYOUT.label - 8)
-  row.label:SetJustifyH("LEFT")
-  localizedText(row.label, localeKey(labelText))
-  row.enabledIf = opts.enabledIf
-  if opts.tooltip then
-    local labelKey, tooltipKey = localeKey(labelText), localeKey(opts.tooltip)
-    row:EnableMouse(true)
-    row:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(L[labelKey] or labelText, 1, 0.82, 0)
-      local tooltipText = L[tooltipKey] or opts.tooltip
-      if opts.retailNote and ns.IsRetail() then tooltipText = tooltipText .. " " .. L.OPT_RETAIL end
-      GameTooltip:AddLine(tooltipText, 1, 1, 1, true)
-      GameTooltip:Show()
-    end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  end
-  function row:ApplyEnabled(widget)
-    local enabled = not self.enabledIf or self.enabledIf(db())
-    self:SetAlpha(enabled and 1 or DISABLED_ALPHA)
-    widget:EnableMouse(enabled)
-    if widget.EnableMouseWheel then widget:EnableMouseWheel(enabled) end
-  end
-  controls[#controls + 1] = row
-  return row
+  return BIT.Looks.Rows.Row(parent, labelText, rowOpts(labelText, opts))
 end
 
 local function checkbox(parent, key, labelText, opts)
-  local row = makeRow(parent, labelText, opts)
-  local box = CreateFrame("CheckButton", nil, row)
-  box:SetSize(24, 24)
-  box:SetPoint("LEFT", row, "LEFT", LAYOUT.label, 0)
-  box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  BIT.UI.SkinCheck(box)
-  box:SetScript("OnClick", function(self) set(key, self:GetChecked() and true or false) end)
-  function row:Refresh()
-    box:SetChecked(db()[key] and true or false)
-    self:ApplyEnabled(box)
-  end
-  row.widget = box
-  return row
+  return BIT.Looks.Rows.Check(parent, labelText, function() return db()[key] end, function(value) set(key, value) end,
+    rowOpts(labelText, opts))
 end
 
+-- /sdi size takes any whole number, so the slider shows it as it is.
 local function slider(parent, key, labelText, min, max, step, opts)
-  local row = makeRow(parent, labelText, opts)
-  local bar = CreateFrame("Slider", nil, row)
-  bar:SetOrientation("HORIZONTAL")
-  bar:SetSize(LAYOUT.control - 44, 18)
-  bar:SetPoint("LEFT", row, "LEFT", LAYOUT.label + 2, 0)
-  bar:SetMinMaxValues(min, max)
-  bar:SetValueStep(step)
-  bar:SetObeyStepOnDrag(true)
-  bar:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-  bar:GetThumbTexture():SetSize(18, 24)
-  BIT.UI.SkinSlider(bar, 6)
-  local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  valueText:SetPoint("LEFT", bar, "RIGHT", 8, 0)
-  local suffix = opts.suffix or ""
-  local updating = false
-  bar:SetScript("OnValueChanged", function(_, value)
-    if updating then return end
-    value = math.floor(value / step + 0.5) * step
-    valueText:SetText(value .. suffix)
-    set(key, value)
-  end)
-  bar:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * step) end)
-  function row:Refresh()
-    updating = true
-    local value = db()[key]
-    bar:SetValue(value)
-    valueText:SetText(value .. suffix) -- /sdi size takes any whole number, so show it as it is
-    updating = false
-    self:ApplyEnabled(bar)
-  end
-  row.widget = bar
-  return row
+  return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value) set(key, value) end,
+    rowOpts(labelText, opts))
 end
 
 local function closeMenu()
-  if menu then menu:Hide() end
-end
-
--- The shared choice list under `owner`.
-local function openMenu(owner, list, current, pick)
-  if not menu then
-    menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    menu:SetFrameStrata("FULLSCREEN_DIALOG")
-    menu:EnableMouse(true)
-    setBackdrop(menu, 0.08, 0.98)
-    menu.buttons = {}
-    -- close on a click anywhere else (the event may not exist on every client; clicking the
-    -- owner again closes it too)
-    pcall(menu.RegisterEvent, menu, "GLOBAL_MOUSE_DOWN")
-    menu:SetScript("OnEvent", function(self)
-      if not self:IsMouseOver() and not (self.owner and self.owner:IsMouseOver()) then self:Hide() end
-    end)
-  end
-  if menu:IsShown() and menu.owner == owner then return menu:Hide() end
-  menu.owner = owner
-  -- above the window, which is raised when opened over Blizzard's options in combat
-  menu:SetFrameStrata((window and window:GetFrameStrata() == "FULLSCREEN_DIALOG") and "TOOLTIP" or "FULLSCREEN_DIALOG")
-  for i, entry in ipairs(list) do
-    local button = menu.buttons[i]
-    if not button then
-      button = CreateFrame("Button", nil, menu)
-      button:SetHeight(20)
-      BIT.UI.RoundHighlight(button)
-      button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-      button.text:SetPoint("LEFT", 8, 0)
-      button.text:SetJustifyH("LEFT")
-      menu.buttons[i] = button
-    end
-    button:ClearAllPoints()
-    button:SetPoint("TOPLEFT", menu, "TOPLEFT", 1, -4 - (i - 1) * 20)
-    button:SetPoint("RIGHT", menu, "RIGHT", -1, 0)
-    local label = choiceLabel(entry)
-    button.text:SetText(entry.id == current and ("|cffffd100" .. label .. "|r") or label)
-    button:SetScript("OnClick", function()
-      menu:Hide()
-      pick(entry.id)
-    end)
-    button:Show()
-  end
-  for i = #list + 1, #menu.buttons do menu.buttons[i]:Hide() end
-  menu:SetSize(owner:GetWidth(), #list * 20 + 8)
-  menu:ClearAllPoints()
-  menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
-  menu:Show()
+  if BIT.Looks then BIT.Looks.ClosePickList() end
 end
 
 local function choice(parent, key, labelText, list, opts)
   for _, entry in ipairs(list) do entry.localeKey = localeKey(entry.label) end
-  local row = makeRow(parent, labelText, opts)
-  local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-  button:SetSize(LAYOUT.control, 22)
-  button:SetPoint("LEFT", row, "LEFT", LAYOUT.label, 0)
-  BIT.UI.SkinButton(button)
-  local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  text:SetJustifyH("LEFT")
-  text:SetPoint("LEFT", 8, 0)
-  text:SetPoint("RIGHT", -20, 0)
-  local arrow = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  arrow:SetPoint("RIGHT", -8, 0)
-  arrow:SetText("v")
-  button:SetScript("OnClick", function(self)
-    openMenu(self, list, db()[key], function(id) set(key, id) end)
-  end)
-  function row:Refresh()
-    local entry = findEntry(list, db()[key])
-    text:SetText(entry and choiceLabel(entry) or tostring(db()[key]))
-    self:ApplyEnabled(button)
-  end
-  row.widget, row.text = button, text
-  return row
+  return BIT.Looks.Rows.Choice(parent, labelText, list, function() return db()[key] end, function(id) set(key, id) end,
+    rowOpts(labelText, opts))
 end
 
 local function pushButton(parent, text, width, onClick)
@@ -398,7 +275,7 @@ local function buildSettings(area)
   local rows, y = {}, 0
   local function place(key, row)
     row:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -12 - y)
-    y = y + ROW_HEIGHT
+    y = y + (row.standard and row:GetHeight() or ROW_HEIGHT)
     rows[key] = row
   end
   place("button", choice(area, "button", L.OPT_BUTTON, {

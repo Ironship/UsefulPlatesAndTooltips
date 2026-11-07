@@ -66,9 +66,29 @@ function BarMask.Apply(fill, healthBar, on)
     pcall(fill.RemoveMaskTexture, fill, fill.uptMask)
     fill.uptMask = nil
   end
+  fill.uptHost = on and healthBar or nil -- remembered, so a repaint can put the mask back (RefreshTexture)
   if not on then return end
   local mask = BarMask.Find(healthBar)
   if mask and pcall(fill.AddMaskTexture, fill, mask) then fill.uptMask = mask end
+end
+
+-- Whatever repaints a masked texture (SetTexture, SetStatusBarTexture) may drop the mask or hand out a new texture:
+-- call this after every repaint and the fill is cut to the bar's shape again.
+function BarMask.RefreshTexture(texture)
+  local host = type(texture) == "table" and texture.uptHost
+  if host then BarMask.Apply(texture, host, true) end
+end
+
+-- The same for a status bar's fill: ApplyToBar remembers the health bar, Refresh re-applies to the bar's current texture.
+function BarMask.ApplyToBar(bar, healthBar, on)
+  if type(bar) ~= "table" or type(bar.GetStatusBarTexture) ~= "function" then return end
+  bar.uptMaskHost = on and healthBar or nil
+  BarMask.Apply(bar:GetStatusBarTexture(), healthBar, on)
+end
+
+function BarMask.Refresh(bar)
+  local host = type(bar) == "table" and bar.uptMaskHost
+  if host and type(bar.GetStatusBarTexture) == "function" then BarMask.Apply(bar:GetStatusBarTexture(), host, true) end
 end
 
 -- The mask a mock frame carries for its own health bar (the same atlas and offset as the game's).

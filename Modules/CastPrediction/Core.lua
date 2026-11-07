@@ -89,6 +89,13 @@ local DEFAULTS = {
     useTalents = true,    -- multiply Forever casts by the detected passive talent percents
     useAuras = true,      -- multiply by readable buffs and target debuffs
     castOnly = true,      -- only spells that are actually cast (not instant casts)
+    finisherPreview = true, -- show what the finisher on your action bars would deal at the current combo points
+    -- Fill textures (the shared catalog, Core/Looks.lua): a cast, a channel, and the finisher preview each have their own
+    castTexture = "flat",
+    channelTexture = "dash_v",
+    finisherTexture = "fire_v", -- Flame (top to bottom): a texture with its own colours
+    finisherColor = "school",
+    finisherOpacity = 70,
     manualPower = false,  -- use manualPowerValue instead of the client's spell power reading
     manualPowerValue = 0,
     debug = false,
@@ -107,6 +114,15 @@ local COLOR_PRESETS = {
 }
 local COLOR_BY_ID = {}
 for _, preset in ipairs(COLOR_PRESETS) do COLOR_BY_ID[preset.id] = preset.rgb end
+-- The shared palette (Core/Looks.lua) adds the colours these nine do not have; a saved "#rrggbb" id is read by colorOf.
+do
+    for _, preset in ipairs(BIT.Looks and BIT.Looks.Palette or {}) do
+        if not COLOR_BY_ID[preset.id] then
+            COLOR_PRESETS[#COLOR_PRESETS + 1] = preset
+            COLOR_BY_ID[preset.id] = preset.rgb
+        end
+    end
+end
 local COLOR_LIST = {}
 for _, preset in ipairs(COLOR_PRESETS) do COLOR_LIST[#COLOR_LIST + 1] = { id = preset.id, label = preset.label } end
 
@@ -525,6 +541,13 @@ end
 local castInProgress
 local lastCombatAt, combatFrameHits = 0, {}
 
+-- A finisher preview is not a cast: what the finisher on the action bars would deal to the target at the combo points
+-- it has right now, drawn like a cast prediction. It is never matched against hits and never teaches the estimate
+-- (see refreshFinisherPreview). The display code draws shownCast(), the cast logic keeps castInProgress.
+local finisherPreview
+local finisherScan = { at = -math.huge, dirty = true } -- the bars are re-read when they or the spellbook change
+local function shownCast() return castInProgress or finisherPreview end
+
 local function sameCast(cast, castGUID, spellID)
     if not cast then return false end
     local readable = not isSecret(castGUID) and type(castGUID) == "string" and castGUID or nil
@@ -589,6 +612,12 @@ end
 
 local function castUnit()
     return castInProgress and findUnitByKey(castInProgress.key)
+end
+
+-- The unit the shown prediction (a cast, or the finisher preview) is aimed at.
+local function displayUnit()
+    local shown = shownCast()
+    return shown and findUnitByKey(shown.key)
 end
 
 local recipients = {}
@@ -815,18 +844,23 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function colorOf(id, opacityPercent)
-    local rgb = COLOR_BY_ID[id] or COLOR_BY_ID.white
+    local rgb = COLOR_BY_ID[id] or (BIT.Looks and BIT.Looks.Rgb(id)) or COLOR_BY_ID.white
     return rgb[1], rgb[2], rgb[3], (opacityPercent or 100) / 100
 end
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local CHANNEL_PATTERN = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Modules\\DoTInfo\\Textures\\DashH2"
+-- A finisher preview has its own fill: horizontal lines, so it reads differently from a cast (solid), a channel
+-- (vertical dashes) and DoTInfo's DoTs (diagonal stripes) on the same health bar.
+local PREVIEW_PATTERN = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Modules\\DoTInfo\\Textures\\DashV4"
 
 local function paintDamage(texture, color, opacity, state)
-    local channel = state and state.channel == true
-    texture:SetTexture(channel and CHANNEL_PATTERN or WHITE, "REPEAT", "REPEAT")
-    texture:SetHorizTile(channel)
-    texture:SetVertTile(channel)
+    -- Which texture: a finisher preview, a channel and a cast each have their own (settings, shared catalog).
+    local kind = (state and state.preview == true and "finisher") or (state and state.channel == true and "channel") or "cast"
+    local entry = BIT.Looks and BIT.Looks.Texture(settings[kind .. "Texture"]) or nil
+    local path = entry and entry.path or ((kind == "finisher" and PREVIEW_PATTERN) or (kind == "channel" and CHANNEL_PATTERN) or WHITE)
+    local tiled = entry and entry.tiled or false
+    if kind == "finisher" then color, opacity = settings.finisherColor, settings.finisherOpacity end
     local r, g, b, a = colorOf(color, opacity)
     local dot = BIT.modules and BIT.modules.DoTInfo
     if color == "school" and dot and type(dot.dotColor) == "function" then
@@ -834,7 +868,23 @@ local function paintDamage(texture, color, opacity, state)
         local rgb = dot.dotColor({ school = SCHOOL_MASKS[school] or number(school) }, "school")
         r, g, b = rgb[1], rgb[2], rgb[3]
     end
-    texture:SetVertexColor(r, g, b, a)
+    -- Repainting a texture only when its look changed keeps the bar's shape mask on it between frames.
+    local key = table.concat({ tostring(path), tostring(tiled), tostring(entry and entry.gradient), tostring(entry and entry.raw),
+        string.format("%.3f,%.3f,%.3f,%.3f", r, g, b, a) }, "|")
+    if texture.uptPaint == key then return end
+    texture.uptPaint = key
+    texture:SetTexture(path, tiled and "REPEAT" or nil, tiled and "REPEAT" or nil)
+    texture:SetHorizTile(tiled)
+    texture:SetVertTile(tiled)
+    if entry and entry.gradient and CreateColor then
+        texture:SetVertexColor(1, 1, 1, 1)
+        texture:SetGradient("HORIZONTAL", CreateColor(r, g, b, 0), CreateColor(r, g, b, a))
+    elseif entry and entry.raw then
+        texture:SetVertexColor(1, 1, 1, a) -- a texture with colours of its own
+    else
+        texture:SetVertexColor(r, g, b, a)
+    end
+    if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.RefreshTexture(texture) end
 end
 
 -- The native health texture supplies the moving edge. Only public bar dimensions enter Lua;
@@ -1091,6 +1141,12 @@ end
 local function updateLayering(now)
     if now - layerCheckedAt < 1 then return end
     layerCheckedAt = now
+    -- attach() cannot reparent in combat; the marker then hangs on UIParent and would not follow the bar (its alpha,
+    -- its scale, hiding with it). Once out of combat it moves onto the bar.
+    if healthBar and not previewHost and not (type(InCombatLockdown) == "function" and InCombatLockdown()) then
+        local parent = markerClip.GetParent and markerClip:GetParent()
+        if parent ~= healthBar then pcall(markerClip.SetParent, markerClip, healthBar) end
+    end
     local strata, level
     if previewHost then
         -- One strata above the options window; dropdowns and tooltips sit higher still.
@@ -1129,11 +1185,13 @@ local function applyAppearance(state)
     local parts = {}
     for _, key in ipairs({ "fillColor", "fillOpacity", "outlineStyle", "outlineColor",
         "outlineOpacity", "pulseOutline", "showKillIcon", "killIcon", "showLabel", "labelMode", "labelPosition",
-        "labelSize", "labelColor", "plateIconSize" }) do
+        "labelSize", "labelColor", "plateIconSize", "castTexture", "channelTexture", "finisherTexture",
+        "finisherColor", "finisherOpacity" }) do
         parts[#parts + 1] = tostring(settings[key])
     end
     parts[#parts + 1] = tostring(state and state.school)
     parts[#parts + 1] = tostring(state and state.channel)
+    parts[#parts + 1] = tostring(state and state.preview)
     local signature = table.concat(parts, "|")
     if signature == appliedSignature then return end
     appliedSignature = signature
@@ -1144,6 +1202,12 @@ local function applyAppearance(state)
     for _, texture in ipairs(edges) do
         texture:SetVertexColor(or_, og, ob, oa)
         texture:SetShown(settings.outlineStyle ~= "none")
+    end
+    -- Blizzard's bar fill is cut to the frame's shape by a mask; ours is a plain rectangle and spilled over the border.
+    local barMask = BIT.UI and BIT.UI.BarMask
+    if barMask and healthBar then
+        barMask.Apply(fillTex, healthBar, true)
+        for _, texture in ipairs(edges) do barMask.Apply(texture, healthBar, true) end
     end
     if settings.pulseOutline and settings.outlineStyle ~= "none" then
         outlinePulse:Play()
@@ -1240,16 +1304,17 @@ local function updateMarker(now)
         local maxHealth = number(state.maxHealth) or math.max(state.health, 0.01)
         return drawMarker(state.value, maxHealth, math.max(state.health, 0.01), state)
     end
-    if not castInProgress or not settings.showTargetFrame
-        or not unitMatchesKey("target", castInProgress.key) or not hostileTarget("target") then
+    local cast = shownCast()
+    if not cast or not settings.showTargetFrame
+        or not unitMatchesKey("target", cast.key) or not hostileTarget("target") then
         hideAll()
         return false
     end
-    if castInProgress.landedAt then
-        local prediction = castInProgress.prediction
+    if cast.landedAt then
+        local prediction = cast.prediction
         return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
-            name = castInProgress.name, min = prediction.min, max = prediction.max,
-            value = prediction.value, school = castInProgress.view.school,
+            name = cast.name, min = prediction.min, max = prediction.max,
+            value = prediction.value, school = cast.view.school,
         })
     end
     if not UnitExists("target") or targetIsDead() then
@@ -1262,10 +1327,10 @@ local function updateMarker(now)
         return false
     end
     updateLayering(now)
-    local prediction = castInProgress.prediction
+    local prediction = cast.prediction
     return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
-        name = castInProgress.name, min = prediction.min, max = prediction.max, value = prediction.value,
-        school = castInProgress.view.school, channel = castInProgress.channel,
+        name = cast.name, min = prediction.min, max = prediction.max, value = prediction.value,
+        school = cast.view.school, channel = cast.channel, preview = cast.preview,
     })
 end
 
@@ -1439,12 +1504,19 @@ end
 
 local function drawFrameWidgets(w, entry, now)
     local unit, bar = entry.unit, entry.bar
-    local prediction = castInProgress.prediction
+    local cast = shownCast()
+    local prediction = cast.prediction
     local state = {
-        name = castInProgress.name, min = prediction.min, max = prediction.max, value = prediction.value,
-        school = castInProgress.view.school, channel = castInProgress.channel,
+        name = cast.name, min = prediction.min, max = prediction.max, value = prediction.value,
+        school = cast.view.school, channel = cast.channel, preview = cast.preview,
     }
     if not layoutDamage(w.marker, w.clip, bar) then hideFrameWidgets(w); return end
+    local barMask = BIT.UI and BIT.UI.BarMask
+    if barMask and w.maskedBar ~= bar then
+        w.maskedBar = bar
+        barMask.Apply(w.fill, bar, true)
+        for _, texture in ipairs(w.edges) do barMask.Apply(texture, bar, true) end
+    end
     keepFrameWidgetsAbove(w, entry.host or bar, now)
     w.marker:SetMinMaxValues(0, UnitHealthMax(unit))
     w.marker:SetValue(prediction.value)
@@ -1487,7 +1559,7 @@ end
 local function refreshFrameOverlays(now, recipient)
     for _, w in pairs(frameWidgets) do hideFrameWidgets(w) end
     if previewHost or previewState then return end
-    if not castInProgress or not recipient or targetKnownDead(recipient) then return end
+    if not shownCast() or not recipient or targetKnownDead(recipient) then return end
     for _, entry in ipairs(collectFrameOverlays()) do
         local unit = entry.unit
         local enabled = unit == "focus" and settings.showFocusFrame
@@ -1559,12 +1631,14 @@ local function plateStyleSignature()
     return table.concat({ tostring(settings.plateFillColor), tostring(settings.plateFillOpacity),
         tostring(settings.plateOutlineStyle), tostring(settings.plateOutlineColor), tostring(settings.plateOutlineOpacity),
         tostring(settings.nameplateMode), tostring(settings.plateIconSize), tostring(settings.plateIconPosition),
-        tostring(settings.plateIconOffsetX), tostring(settings.plateIconOffsetY) }, "|")
+        tostring(settings.plateIconOffsetX), tostring(settings.plateIconOffsetY), tostring(settings.castTexture),
+        tostring(settings.channelTexture), tostring(settings.finisherTexture), tostring(settings.finisherColor),
+        tostring(settings.finisherOpacity) }, "|")
 end
 
 local function applyPlateStyle(w, state)
     local signature = plateStyleSignature() .. ":" .. tostring(state and state.school)
-        .. ":" .. tostring(state and state.channel)
+        .. ":" .. tostring(state and state.channel) .. ":" .. tostring(state and state.preview)
     if w.signature == signature then return end
     w.signature = signature
     paintDamage(w.fill, settings.plateFillColor, settings.plateFillOpacity, state)
@@ -1679,12 +1753,13 @@ local function findTargetPlate(unit)
     if not (C_NamePlate and type(C_NamePlate.GetNamePlateForUnit) == "function") then return nil end
     local plate = read(C_NamePlate.GetNamePlateForUnit, unit)
     if type(plate) == "table" then return plate end
-    if not castInProgress then return nil end
+    local cast = shownCast()
+    if not cast then return nil end
     for i = 1, MAX_PLATES do
         local unit = "nameplate" .. i
         if UnitExists(unit) then
             local key = unitKey(unit)
-            if key and key == castInProgress.key then
+            if key and key == cast.key then
                 plate = read(C_NamePlate.GetNamePlateForUnit, unit)
                 if type(plate) == "table" then return plate end
             end
@@ -1695,6 +1770,7 @@ end
 
 local function refreshPlates(now, unit)
     wipe(seenPlates)
+    local cast = shownCast()
     -- The options preview keeps the plate marker; the real plates stay hidden then.
     if previewPlate then
         seenPlates[previewPlate.plate] = true
@@ -1708,7 +1784,7 @@ local function refreshPlates(now, unit)
             hidePlateWidgets(w)
         end
     elseif settings.showNameplates and settings.nameplateMode ~= "off"
-        and castInProgress and not castInProgress.landedAt
+        and cast and not cast.landedAt
         and unit and not targetKnownDead(unit) then
         local plate = findTargetPlate(unit)
         if plate then
@@ -1718,8 +1794,8 @@ local function refreshPlates(now, unit)
                 local healthBar = BIT.Plate and BIT.Plate.HealthBar and BIT.Plate.HealthBar(plate)
                 if healthBar then
                     local w = widgetsFor(plate, healthBar)
-                    drawPlate(w, castInProgress.prediction.value, UnitHealthMax(unit), UnitHealth(unit), {
-                        school = castInProgress.view.school, channel = castInProgress.channel,
+                    drawPlate(w, cast.prediction.value, UnitHealthMax(unit), UnitHealth(unit), {
+                        school = cast.view.school, channel = cast.channel, preview = cast.preview,
                     })
                 end
             end
@@ -1731,6 +1807,78 @@ local function refreshPlates(now, unit)
 end
 
 ---------------------------------------------------------------------------------------------
+-- Finisher preview: what the finisher on your action bars would deal to the target right now
+---------------------------------------------------------------------------------------------
+
+local FINISHER_SCAN_EVERY = 5 -- the bars are re-read no more often than this, and only after a change
+local ACTION_SLOTS = 180
+
+-- Every direct-damage finisher on the action bars (Eviscerate, Ferocious Bite, a rogue rune's Between the Eyes: any
+-- description with a damage row per combo point), as a list of spell ids. SpellDamageInfo already reads the same
+-- descriptions for the bar numbers, so whatever it can price is found here, on every class. A finisher that only
+-- deals damage over time (Rupture, Rip) or none (Kidney Shot, Slice and Dice) is not one.
+local function scanFinishers(module)
+    local ids, seen = {}, {}
+    if type(GetActionInfo) ~= "function" or type(module.Compute) ~= "function" then return ids end
+    for slot = 1, ACTION_SLOTS do
+        local ok, kind, id = pcall(GetActionInfo, slot)
+        if ok and kind == "spell" and not isSecret(id) and type(id) == "number" and not seen[id] then
+            seen[id] = true
+            local okView, view = pcall(module.Compute, id, false)
+            local finisher = okView and type(view) == "table" and view.finisher
+            if type(finisher) == "table" and finisher.kind == "direct" then ids[#ids + 1] = id end
+        end
+    end
+    return ids
+end
+
+-- What one finisher would deal at the target's combo points now: min, max, or nil (no points, not priced).
+local function finisherDamage(module, id)
+    local ok, view = pcall(module.Compute, id, false)
+    local at = ok and type(view) == "table" and view.finisherAt
+    local direct = type(at) == "table" and at.known and (number(at.n) or 0) >= 1 and view.direct
+    if type(direct) ~= "table" then return nil end
+    local min, max = number(direct.min), number(direct.max)
+    if not min or not max or max <= 0 or min > max then return nil end
+    return min, max
+end
+
+local finisherState = { view = { school = "physical" }, prediction = {} }
+
+-- Rebuilds finisherPreview every refresh: set only while the option is on, no real cast is shown, a hostile target
+-- carries combo points and SpellDamageInfo can price at least one finisher on the bars at that count. With several
+-- (Eviscerate and Between the Eyes, Ferocious Bite), the strongest is shown: the question is whether any of them
+-- kills. Attack power is not in a Forever description, so the number is what that finisher deals at least.
+local function refreshFinisherPreview(now)
+    finisherPreview = nil
+    if not settings.finisherPreview or castInProgress or previewState or previewHost then return end
+    if not hostileTarget("target") then return end
+    local module = sdi()
+    if not module or type(module.Compute) ~= "function" then return end
+    if finisherScan.dirty and now - finisherScan.at >= FINISHER_SCAN_EVERY then
+        finisherScan.at, finisherScan.dirty = now, false
+        finisherScan.ids = scanFinishers(module)
+    end
+    local bestID, bestMin, bestMax, bestValue
+    for _, id in ipairs(finisherScan.ids or {}) do
+        local min, max = finisherDamage(module, id)
+        if min then
+            local value = (settings.estimate == "min" and min) or (settings.estimate == "max" and max) or (min + max) / 2
+            if not bestValue or value > bestValue then bestID, bestMin, bestMax, bestValue = id, min, max, value end
+        end
+    end
+    if not bestID then return end
+    local key = unitKey("target")
+    if not key then return end
+    local name = spellName(bestID) or "?"
+    local prediction = finisherState.prediction
+    prediction.min, prediction.max, prediction.value = bestMin, bestMax, bestValue
+    finisherState.key, finisherState.name, finisherState.spellID, finisherState.preview = key, name, bestID, true
+    finisherState.view.name = name
+    finisherPreview = finisherState
+end
+
+---------------------------------------------------------------------------------------------
 -- Refresh loop (DoTInfo's pattern): the OnUpdate tick redraws; errors are reported once
 ---------------------------------------------------------------------------------------------
 
@@ -1738,7 +1886,8 @@ local reportedErrors = {}
 local function refresh()
     local now = GetTime()
     housekeep(now)
-    local recipient = castUnit()
+    refreshFinisherPreview(now)
+    local recipient = displayUnit()
     updateMarker(now)
     refreshFrameOverlays(now, recipient)
     refreshPlates(now, recipient)
@@ -1828,7 +1977,8 @@ frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
 for _, event in ipairs({ "UNIT_AURA", "PLAYER_EQUIPMENT_CHANGED", "PLAYER_REGEN_ENABLED",
-    "SPELL_TEXT_UPDATE", "SPELL_DATA_LOAD_RESULT", "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED" }) do
+    "SPELL_TEXT_UPDATE", "SPELL_DATA_LOAD_RESULT", "SPELLS_CHANGED", "PLAYER_TALENT_UPDATE", "TRAIT_CONFIG_UPDATED",
+    "ACTIONBAR_SLOT_CHANGED" }) do
     pcall(frame.RegisterEvent, frame, event)
 end
 -- Never register COMBAT_LOG_EVENT_UNFILTERED: Forever forbids it and shows a "blocked" popup.
@@ -1881,10 +2031,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
         local unit = ...
         if not isSecret(unit) and unit == "player" then invalidateView() end
 
+    elseif event == "ACTIONBAR_SLOT_CHANGED" then
+        finisherScan.dirty = true
+
     elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_REGEN_ENABLED"
         or event == "SPELL_TEXT_UPDATE" or event == "SPELL_DATA_LOAD_RESULT" or event == "SPELLS_CHANGED"
         or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
         invalidateView()
+        finisherScan.dirty = true
         if ns.Talents and (event == "SPELLS_CHANGED" or event == "PLAYER_TALENT_UPDATE"
             or event == "TRAIT_CONFIG_UPDATED") then ns.Talents.Invalidate() end
 
@@ -1955,6 +2109,92 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     safeRefresh()
 end)
 
+
+-- /upt castpred layers: what sits where on the target frame, for a report when the marker draws under Blizzard's bar.
+function ns.dumpLayers()
+    local function label(f)
+        local name = read(f.GetName, f)
+        if type(name) == "string" and name ~= "" then return name end
+        local parent = read(f.GetParent, f)
+        if type(parent) == "table" then
+            local okKey, key = pcall(function()
+                for k, v in pairs(parent) do
+                    if v == f and type(k) == "string" then return k end
+                end
+            end)
+            if okKey and key then return "." .. key end
+        end
+        return "<" .. tostring(read(f.GetObjectType, f)) .. ">"
+    end
+    local function info(f)
+        return string.format("%s %s/%s shown=%s alpha=%.2f", label(f), tostring(read(f.GetFrameStrata, f)),
+            tostring(read(f.GetFrameLevel, f)), tostring(read(f.IsShown, f)), number(read(f.GetEffectiveAlpha, f)) or -1)
+    end
+    local function say(text)
+        trace("LAYERS " .. text)
+        print(text)
+    end
+    if not healthBar then
+        say("no target health bar attached yet (target something and let the marker show first)")
+        return
+    end
+    say("bar: " .. info(healthBar))
+    local chain, f = {}, healthBar
+    for _ = 1, 6 do
+        f = read(f.GetParent, f)
+        if type(f) ~= "table" or f == UIParent then break end
+        chain[#chain + 1] = info(f)
+    end
+    say("parents: " .. (#chain > 0 and table.concat(chain, " < ") or "none"))
+    local parent = read(markerClip.GetParent, markerClip)
+    say("marker clip parent: " .. (type(parent) == "table" and label(parent) or "none"))
+    local maskLooks = BIT.UI and BIT.UI.BarMask
+    local foundMask = maskLooks and maskLooks.Find(healthBar)
+    local function masks(texture)
+        local count = texture and read(texture.GetNumMaskTextures, texture)
+        return tostring(number(count) or "?")
+    end
+    say("shape mask: bar's own mask " .. (foundMask and "found" or "NOT found") .. "; masks on our fill: " .. masks(fillTex)
+        .. ", outline: " .. masks(edges[1]))
+    say("ours: clip " .. info(markerClip) .. " | marker " .. info(marker) .. " | fill " .. info(fillLayer)
+        .. " | outline " .. info(outlineLayer) .. " | label " .. info(labelLayer))
+    local left, right = number(read(healthBar.GetLeft, healthBar)), number(read(healthBar.GetRight, healthBar))
+    local top, bottom = number(read(healthBar.GetTop, healthBar)), number(read(healthBar.GetBottom, healthBar))
+    local root = healthBar
+    for _ = 1, 10 do
+        local up = read(root.GetParent, root)
+        if type(up) ~= "table" or up == UIParent then break end
+        root = up
+    end
+    local found, visited = {}, 0
+    local function visit(frame, depth)
+        visited = visited + 1
+        if visited > 400 or frame == markerClip then return end
+        if read(frame.IsForbidden, frame) == true then return end
+        if read(frame.IsShown, frame) == true and left then
+            local l, r = number(read(frame.GetLeft, frame)), number(read(frame.GetRight, frame))
+            local t, b = number(read(frame.GetTop, frame)), number(read(frame.GetBottom, frame))
+            if l and r and t and b and l < right and r > left and b < top and t > bottom then
+                found[#found + 1] = { frame = frame, rank = STRATA_RANK[read(frame.GetFrameStrata, frame)] or 0,
+                    level = number(read(frame.GetFrameLevel, frame)) or 0 }
+            end
+        end
+        if depth < 8 then
+            local children = { pcall(frame.GetChildren, frame) }
+            if children[1] then
+                for i = 2, #children do visit(children[i], depth + 1) end
+            end
+        end
+    end
+    visit(root, 0)
+    table.sort(found, function(a, b)
+        if a.rank ~= b.rank then return a.rank > b.rank end
+        return a.level > b.level
+    end)
+    say(string.format("frames over the bar under %s (%d seen), highest first:", label(root), visited))
+    for i = 1, math.min(12, #found) do say("  " .. info(found[i].frame)) end
+end
+
 ---------------------------------------------------------------------------------------------
 -- Commands (/upt castpred, /upt castprobe, ...)
 ---------------------------------------------------------------------------------------------
@@ -2010,6 +2250,8 @@ if BIT.RegisterCommand then
             else
                 print("Auras file not loaded.")
             end
+        elseif cmd == "layers" then
+            ns.dumpLayers()
         elseif cmd == "debug" then
             settings.debug = not settings.debug
             print("Debug " .. (settings.debug and "ON" or "OFF") .. ".")
@@ -2017,7 +2259,7 @@ if BIT.RegisterCommand then
             print("/upt castpred - open the settings; line - toggle the marker; talents - what the talent tree "
                 .. "answers; auras - what buffs/debuffs are readable; learned - what the hits taught; census - read the whole talent tree into the saved settings (census clear removes it); reset - forget learned factors; debug - echo the trace log")
         else
-            print("CastPrediction: /upt castpred [line|talents|auras|learned|census|census clear|reset|debug]")
+            print("CastPrediction: /upt castpred [line|talents|auras|learned|census|census clear|reset|debug|layers]")
         end
     end)
 end
@@ -2058,4 +2300,5 @@ end
 -- Shared with the options, aura and talent modules.
 ns._settings = function() return settings end
 ns._colorList = function() return COLOR_LIST end
+ns._defaults = function() return DEFAULTS end
 ns._refresh = safeRefresh
