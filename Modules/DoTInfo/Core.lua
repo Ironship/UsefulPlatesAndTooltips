@@ -2272,6 +2272,9 @@ local LAYER_CHECK_INTERVAL = 1
 -- Highest strata/level anywhere in the target frame's tree. Blizzard (Edit Mode) re-layers the target
 -- frame after addons load, so a level picked once at load ends up underneath the health bar and portrait.
 local function targetFrameTopLayer()
+    local root = targetHost or healthBar
+    -- Hidden custom frames resolve to nil. Never scan the entire UI as a fallback.
+    if not root or root == UIParent then return end
     local topStrata, topLevel = "BACKGROUND", 0
     local function visit(frame, depth)
         local ok, forbidden = pcall(function() return frame.IsForbidden and frame:IsForbidden() end)
@@ -2294,7 +2297,7 @@ local function targetFrameTopLayer()
             end
         end
     end
-    visit(targetHost or healthBar or UIParent, 0)
+    visit(root, 0)
     return topStrata, topLevel
 end
 
@@ -2319,6 +2322,7 @@ local function updateLayering(now)
         end
         return
     end
+    if not strata then return end
     for i, frame in ipairs({ remainingBar, fillLayer, clipLayer, outlineLayer, sparkLayer, skullWindow, skullBar }) do
         frame:SetFrameStrata(strata)
         frame:SetFrameLevel(level + i)

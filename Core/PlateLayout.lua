@@ -43,7 +43,7 @@ local function unitFrameBase(unit)
       if bar then
         -- A replacement frame that is hidden (no target, switched off) hides the marks with it.
         if not Frames.Shown(bar) then return end
-        return Frames.Root(bar), bar, nil
+        return Frames.Root(bar, unit), bar, nil
       end
     end
   end
