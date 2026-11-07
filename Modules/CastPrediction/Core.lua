@@ -1098,7 +1098,11 @@ local function updateLayering(now)
     else
         local ok
         ok, strata, level = pcall(topLayerOf, targetHost or healthBar or TargetFrame)
-        if not ok or not strata then return end
+        if not ok then return end
+        if not strata then
+            layerCheckedAt = now - 0.75 -- nothing to scan yet (the custom frame is hidden): look again soon
+            return
+        end
     end
     for i, frame in ipairs({ markerClip, marker, fillLayer, outlineLayer, labelLayer, killWindow, killBar }) do
         frame:SetFrameStrata(strata)
@@ -1416,7 +1420,11 @@ local function keepFrameWidgetsAbove(w, host, now)
     if now - w.layerAt < 1 and w.layerHost == host then return end
     w.layerAt, w.layerHost = now, host
     local ok, strata, level = pcall(topLayerOf, host)
-    if not ok or not strata then return end
+    if not ok then return end
+    if not strata then
+        w.layerAt = now - 0.75 -- nothing to scan yet: look again soon
+        return
+    end
     for i, frame in ipairs({ w.clip, w.marker, w.labelLayer, w.killWindow, w.killBar }) do
         frame:SetFrameStrata(strata)
         frame:SetFrameLevel(level + i + 1)

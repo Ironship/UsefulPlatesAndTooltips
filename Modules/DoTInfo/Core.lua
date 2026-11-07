@@ -2322,7 +2322,11 @@ local function updateLayering(now)
         end
         return
     end
-    if not strata then return end
+    if not strata then
+        -- Nothing to scan yet (the custom frame is hidden): look again soon, not after a full second.
+        layerCheckedAt = now - LAYER_CHECK_INTERVAL * 0.75
+        return
+    end
     for i, frame in ipairs({ remainingBar, fillLayer, clipLayer, outlineLayer, sparkLayer, skullWindow, skullBar }) do
         frame:SetFrameStrata(strata)
         frame:SetFrameLevel(level + i)
