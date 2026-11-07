@@ -1884,11 +1884,13 @@ frame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_REGEN_ENABLED"
         or event == "SPELL_TEXT_UPDATE" or event == "SPELL_DATA_LOAD_RESULT" or event == "SPELLS_CHANGED"
         or event == "PLAYER_TALENT_UPDATE" or event == "TRAIT_CONFIG_UPDATED" then
+        if event == "PLAYER_REGEN_ENABLED" and not previewHost then attach() end
         invalidateView()
         if ns.Talents and (event == "SPELLS_CHANGED" or event == "PLAYER_TALENT_UPDATE"
             or event == "TRAIT_CONFIG_UPDATED") then ns.Talents.Invalidate() end
 
     elseif event == "PLAYER_TARGET_CHANGED" then
+        if not previewHost and not (type(InCombatLockdown) == "function" and InCombatLockdown()) then attach() end
         dropCast("target changed")
         for _, sent in pairs(recipients) do
             if sent.key == "target" then sent.key = nil end
