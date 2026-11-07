@@ -1,5 +1,5 @@
 -- UsefulPlatesAndTooltips module SpellDamageInfo: spell power shares for spells whose damage or healing the client's
--- SpellEffect tables attach to a second spell (build 1.60.1.70755); see tools/make_linked_coefficients.py for how each
+-- SpellEffect tables attach to a second spell (build 1.60.1.70790); see tools/make_linked_coefficients.py for how each
 -- number is worked out. Generated; do not edit by hand. Copyright (c) 2026 Ironship. GPL-3.0-or-later.
 -- Only fills spells SpellCoefficients.lua does not have; the same keys as there (d, o, h, ho).
 
