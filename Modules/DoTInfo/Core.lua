@@ -51,6 +51,7 @@ local KNOWN_TICK_INTERVALS = {
     ["Rip"] = 2,
     ["Rupture"] = 2,
     ["Black Arrow"] = 2, -- the description gives the total over 30 sec only
+    ["Wyvern Sting"] = 2, -- client data: its DoT (24336) ticks every 2 s
 }
 
 -- DoTs whose ticks aren't even: each tick is the average tick times its factor (factors average 1, so the
@@ -70,13 +71,13 @@ local SCHOOL_BY_NAME = {
 }
 
 -- Read like DoTs but aren't one on the current target: ground/area effects, channels, traps, and
--- delayed damage (Wyvern Sting only starts after the sleep).
+-- delayed damage (Wyvern Sting is handled apart, see DELAYED_DOTS).
 local IGNORED_SPELLS = {
     ["Rain of Fire"] = true, ["Hellfire"] = true, ["Blizzard"] = true, ["Flamestrike"] = true,
     ["Consecration"] = true, ["Hurricane"] = true, ["Volley"] = true,
     ["Drain Life"] = true, ["Drain Soul"] = true, ["Drain Mana"] = true, ["Health Funnel"] = true,
     ["Mind Flay"] = true, ["Arcane Missiles"] = true, ["Starshards"] = true,
-    ["Explosive Trap"] = true, ["Wyvern Sting"] = true,
+    ["Explosive Trap"] = true,
 }
 
 -- The name-keyed tables also answer to the German names, and on ADDON_LOADED to the names this client reports
@@ -92,11 +93,13 @@ ns.refreshNames = {
 
 -- Traps that put a DoT on the first enemy to walk in (ProcDots.lua): placing one only arms it.
 ns.TRAP_DOTS = { ["Immolation Trap"] = true }
+-- Cast at a mob, but the DoT starts later (ProcDots.lua finds the start by its rhythm).
+ns.DELAYED_DOTS = { ["Wyvern Sting"] = true }
 -- Any new Fire trap replaces the armed one (by name, so it works in every language).
 ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
-    ns.TRAP_DOTS, ns.FIRE_TRAPS }
+    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS }
 ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -956,6 +959,12 @@ local function onPlayerCast(spellID, castGUID)
         return
     end
 
+    -- Wyvern Sting: the DoT starts when the sleep ends (ProcDots.lua).
+    if ns.ProcDots and ns.DELAYED_DOTS[name] then
+        ns.ProcDots.ArmDelayed(key, spellID, name, total, school, duration, statedInterval or KNOWN_TICK_INTERVALS[name] or 3)
+        return
+    end
+
     -- DOT-1: SUCCEEDED names only the spell, so the cast belongs to the mob
     -- remembered at SENT time, not to whatever is targeted now (a tab
     -- mid-cast must not move the DoT). Fall back to the current target only
@@ -1299,7 +1308,10 @@ local combatFrameHits = {}
 -- Field, not local: this file is at Lua's 200-local limit.
 function ns.onHiddenAmountHit(key, unit, school)
     local dots = dotsByTarget[key]
-    if not dots then return end
+    local tracked = dots ~= nil
+    -- An armed trap needs the hit even where no DoT runs (ProcDots.lua).
+    if not dots and not (ns.ProcDots and ns.ProcDots.Wants(false, school)) then return end
+    dots = dots or {}
     local now = GetTime()
     if combatFrameAt ~= now then
         combatFrameHits = {}
@@ -1326,7 +1338,9 @@ function ns.onHiddenAmountHit(key, unit, school)
         end
     end
     if not best then
-        trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit))
+        -- An armed trap's ticks, told by their rhythm alone.
+        if ns.ProcDots and ns.ProcDots.OnHiddenHit(key, unit, school, now) then return key end
+        if tracked then trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit)) end
         return
     end
     local wasWaiting = isWaiting(best)

@@ -47,6 +47,16 @@ local function unitFrameBase(unit)
       end
     end
   end
+  -- Enhance QoL's unit frames hard-hide Blizzard's (reparented under a hidden frame, flagged _eqolUFHidden) and draw
+  -- their own: EQOLUF<Part>Frame with the bar EQOLUF<Part>Health. Marks go on that bar; while its frame is not
+  -- shown (no target) there is nothing to mark, and Blizzard's hidden bar must not get them.
+  local blizzard = (unit == "player" and PlayerFrame) or (unit == "focus" and FocusFrame) or (unit ~= "player" and unit ~= "focus" and TargetFrame)
+  if type(blizzard) == "table" and read(function() return blizzard._eqolUFHidden end) == true then
+    local frame, bar = _G["EQOLUF" .. part .. "Frame"], _G["EQOLUF" .. part .. "Health"]
+    if type(frame) ~= "table" or type(bar) ~= "table" or read(frame.IsForbidden, frame) == true
+        or read(bar.IsForbidden, bar) == true or read(frame.IsVisible, frame) ~= true then return end
+    return frame, bar, nil
+  end
   local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
   local eui = type(modules) == "table" and modules.EllesmereUIUnitFrames
   local source = type(eui) == "table" and read(eui.GetUnitFrameSource, unit)
