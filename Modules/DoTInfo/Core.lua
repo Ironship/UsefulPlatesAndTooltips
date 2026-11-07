@@ -2611,7 +2611,11 @@ function ns.stylePoisonSegment(timer, health, config)
         style.tiled and "REPEAT" or nil, style.tiled and "REPEAT" or nil)
     texture:SetHorizTile(style.tiled or false)
     texture:SetVertTile(style.tiled or false)
-    texture:SetVertexColor(r, g, b, a)
+    if style.raw and not perDot then
+        texture:SetVertexColor(1, 1, 1, a) -- a texture with colours of its own: only the opacity applies
+    else
+        texture:SetVertexColor(r, g, b, a)
+    end
     if style.gradient and not perDot and not config.onPlate and CreateColor then
         texture:SetVertexColor(1, 1, 1, 1)
         texture:SetGradient("HORIZONTAL", CreateColor(r, g, b, 0), CreateColor(r, g, b, a))

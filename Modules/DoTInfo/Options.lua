@@ -286,38 +286,12 @@ local function changed()
     refreshControls()
 end
 
+local rowOpts -- below
 local function makeRow(parent, labelText, opts)
-    local layout = opts.layout or SETTINGS_LAYOUT
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(layout.label + layout.control + 50, ROW_HEIGHT)
-    row.layout = layout
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 6, 0)
-    row.label:SetWidth(layout.label - 8)
-    row.label:SetJustifyH("LEFT")
-    row.label:SetText(labelText)
-    row.enabledIf = opts.enabledIf
-    if opts.tooltip then
-        row:EnableMouse(true)
-        row:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(labelText, 1, 0.82, 0)
-            GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    function row:ApplyEnabled(widget)
-        local enabled = not self.enabledIf or self.enabledIf(db())
-        self:SetAlpha(enabled and 1 or DISABLED_ALPHA)
-        widget:EnableMouse(enabled)
-        if widget.EnableMouseWheel then widget:EnableMouseWheel(enabled) end
-    end
-    table.insert(controls, row)
-    return row
+    return BIT.Looks.Rows.Row(parent, labelText, rowOpts(opts))
 end
 
-local function rowOpts(opts)
+rowOpts = function(opts)
     opts = opts or {}
     return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, layout = opts.layout, suffix = opts.suffix,
         display = opts.display, settings = db, register = function(row) table.insert(controls, row) end }

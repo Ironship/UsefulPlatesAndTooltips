@@ -115,7 +115,8 @@ function Looks.ColorEntry(list, id)
     return nil
 end
 
--- Blizzard's own colour picker. set("#rrggbb") runs while the user drags and again with the old colour on Cancel.
+-- Blizzard's own colour picker. set("#rrggbb") runs while the user drags; Cancel sets the id the row had before (a name
+-- stays a name, "school" stays "school").
 function Looks.PickColor(currentId, set)
     local picker = ColorPickerFrame
     if type(picker) ~= "table" or type(set) ~= "function" then return false end
@@ -132,7 +133,11 @@ function Looks.PickColor(currentId, set)
             r = rgb[1], g = rgb[2], b = rgb[3], hasOpacity = false,
             swatchFunc = changed,
             cancelFunc = function(previous)
-                if type(previous) == "table" and previous.r then set(Looks.Hex(previous.r, previous.g, previous.b)) end
+                if currentId ~= nil then
+                    set(currentId)
+                elseif type(previous) == "table" and previous.r then
+                    set(Looks.Hex(previous.r, previous.g, previous.b))
+                end
             end,
         })
         starting = false
@@ -147,7 +152,11 @@ function Looks.PickColor(currentId, set)
         end
         picker.opacityFunc = nil
         picker.cancelFunc = function(previous)
-            if type(previous) == "table" and previous.r then set(Looks.Hex(previous.r, previous.g, previous.b)) end
+            if currentId ~= nil then
+                set(currentId)
+            elseif type(previous) == "table" and previous.r then
+                set(Looks.Hex(previous.r, previous.g, previous.b))
+            end
         end
         picker:SetColorRGB(rgb[1], rgb[2], rgb[3])
         picker:Hide()
@@ -277,11 +286,11 @@ local function sharedMedia()
     return nil
 end
 
-local mediaCache, mediaCount = {}, -1
+local mediaCache, mediaSignature = {}, nil
 local function mediaEntries()
     local lib = sharedMedia()
     if not lib then
-        if mediaCount ~= 0 then mediaCache, mediaCount = {}, 0 end
+        if mediaSignature ~= "" then mediaCache, mediaSignature = {}, "" end
         return mediaCache
     end
     local ok, hash = pcall(lib.HashTable, lib, "statusbar")
@@ -290,9 +299,10 @@ local function mediaEntries()
     for name, path in pairs(hash) do
         if type(name) == "string" and type(path) == "string" then names[#names + 1] = name end
     end
-    if #names == mediaCount then return mediaCache end
     table.sort(names, function(a, b) return a:lower() < b:lower() end)
-    mediaCache, mediaCount = {}, #names
+    local signature = table.concat(names, "\1")
+    if signature == mediaSignature then return mediaCache end -- the same names (a renamed or replaced one changes it)
+    mediaCache, mediaSignature = {}, signature
     for i, name in ipairs(names) do
         mediaCache[i] = { id = "lsm:" .. name, label = name, path = hash[name], group = "Shared media" }
     end
@@ -343,7 +353,8 @@ local ROWS, ROW_HEIGHT = 14, 20
 local menu
 
 local function build()
-    menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    menu = CreateFrame("Frame", "UsefulPlatesAndTooltips_PickList", UIParent, "BackdropTemplate")
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "UsefulPlatesAndTooltips_PickList") end -- Escape closes it
     menu:SetFrameStrata("TOOLTIP") -- above every settings window, whatever strata and levels its rows use
     menu:EnableMouse(true)
     menu:EnableMouseWheel(true)
@@ -355,9 +366,18 @@ local function build()
     menu.floor:SetColorTexture(0.05, 0.05, 0.06, 1)
     menu.buttons = {}
     menu.offset = 0
-    pcall(menu.RegisterEvent, menu, "GLOBAL_MOUSE_DOWN")
+    menu.hasEvent = pcall(menu.RegisterEvent, menu, "GLOBAL_MOUSE_DOWN")
     menu:SetScript("OnEvent", function(self)
         if not self:IsMouseOver() and not (self.owner and self.owner:IsMouseOver()) then self:Hide() end
+    end)
+    -- It never outlives the window that opened it, and a client without GLOBAL_MOUSE_DOWN still closes it on an outside click.
+    menu:SetScript("OnUpdate", function(self)
+        local owner = self.owner
+        if owner and owner.IsVisible and not owner:IsVisible() then self:Hide() return end
+        if not self.hasEvent and type(IsMouseButtonDown) == "function" and IsMouseButtonDown("LeftButton")
+            and not self:IsMouseOver() and not (owner and owner:IsMouseOver()) then
+            self:Hide()
+        end
     end)
     menu.scroll = menu:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     menu.scroll:SetPoint("BOTTOMRIGHT", menu, "BOTTOMRIGHT", -6, 2)
@@ -430,20 +450,41 @@ local function build()
     end
 end
 
--- The entries of `list`, with a header row before each new `group` (a list without groups stays as it is).
+-- One header row per group, groups in one fixed order whatever order a module's list (or the catalog) lists them in. Entries
+-- without a group stay first, in their own order; a group nobody knows comes after the known ones.
+local GROUP_ORDER = { Basic = 1, Blizzard = 2, Soft = 3, ["Bar shapes"] = 4, Patterns = 5, Organic = 6, Material = 7,
+    ["Colorful (own colors)"] = 8, ["Shield art"] = 9, ["Shared media"] = 10 }
+
 local function withHeaders(list)
     local grouped = false
     for _, entry in ipairs(list) do
         if entry.group then grouped = true break end
     end
     if not grouped then return list end
-    local out, last = { kind = list.kind }, nil
+    local loose, buckets, names = {}, {}, {}
     for _, entry in ipairs(list) do
-        if entry.group and entry.group ~= last then
-            out[#out + 1] = { id = "~" .. entry.group, label = entry.group, header = true }
-            last = entry.group
+        local group = entry.group
+        if not group then
+            loose[#loose + 1] = entry
+        else
+            if not buckets[group] then
+                buckets[group] = {}
+                names[#names + 1] = group
+            end
+            table.insert(buckets[group], entry)
         end
-        out[#out + 1] = entry
+    end
+    local seen = {}
+    for i, name in ipairs(names) do seen[name] = i end
+    table.sort(names, function(a, b)
+        local ra, rb = GROUP_ORDER[a] or (100 + seen[a]), GROUP_ORDER[b] or (100 + seen[b])
+        return ra < rb
+    end)
+    local out = { kind = list.kind }
+    for _, entry in ipairs(loose) do out[#out + 1] = entry end
+    for _, name in ipairs(names) do
+        out[#out + 1] = { id = "~" .. name, label = name, header = true }
+        for _, entry in ipairs(buckets[name]) do out[#out + 1] = entry end
     end
     return out
 end
@@ -476,86 +517,6 @@ end
 
 function Looks.ClosePickList()
     if menu then menu:Hide() end
-end
-
--- A settings row (label + drop-down button with a swatch or texture preview) for any list: colours (with the custom
--- colour), textures, icons or plain choices. get() reads the saved id, set(id) writes it.
-function Looks.ChoiceRow(parent, labelText, list, get, set, tooltip, height)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(height or 26)
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 0, 0)
-    row.label:SetText(labelText)
-    local button = BIT.UI.Button(row, "", 180, nil)
-    button:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    local swatch = button:CreateTexture(nil, "ARTWORK")
-    swatch:SetPoint("LEFT", 8, 0)
-    local isColor, isTexture, isIcon = list.kind == "color", list.kind == "texture", list.kind == "icon"
-    local function current()
-        local value = get()
-        for _, entry in ipairs(list) do
-            if entry.id == value then return entry end
-        end
-        if isColor then
-            local entry = Looks.ColorEntry(list, value)
-            if entry then return entry end
-        end
-        if isTexture then return Looks.Texture(value) end
-        return list[1] or { label = "?" }
-    end
-    button:SetScript("OnClick", function(self)
-        if isColor then
-            Looks.Choose(self, list, get(), set)
-        else
-            if isTexture then Looks.Merge(list) end
-            Looks.PickList(self, list, get(), set)
-        end
-    end)
-    if tooltip then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(labelText, 1, 0.82, 0)
-            GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    function row:Refresh()
-        local entry = current()
-        button:SetText(entry.label)
-        self.label:SetText(labelText)
-        swatch:SetHorizTile(false)
-        swatch:SetVertTile(false)
-        if entry.rgb then
-            swatch:SetSize(14, 12)
-            swatch:SetVertexColor(1, 1, 1, 1)
-            swatch:SetColorTexture(entry.rgb[1], entry.rgb[2], entry.rgb[3], 1)
-            swatch:Show()
-        elseif entry.path and isIcon then
-            swatch:SetSize(16, 16)
-            swatch:SetVertexColor(1, 1, 1, 1)
-            swatch:SetTexture(entry.path)
-            swatch:Show()
-        elseif entry.path then
-            swatch:SetSize(34, 12)
-            swatch:SetTexture(entry.path, entry.tiled and "REPEAT" or nil, entry.tiled and "REPEAT" or nil)
-            swatch:SetHorizTile(entry.tiled or false)
-            swatch:SetVertTile(entry.tiled or false)
-            if entry.raw then swatch:SetVertexColor(1, 1, 1, 1) else swatch:SetVertexColor(1, 0.62, 0.2, 1) end
-            swatch:Show()
-        else
-            swatch:Hide()
-        end
-        local fontString = button.GetFontString and button:GetFontString()
-        if fontString then
-            fontString:ClearAllPoints()
-            fontString:SetPoint("LEFT", button, "LEFT", (entry.rgb and 28) or (entry.path and (isIcon and 30 or 48)) or 8, 0)
-            fontString:SetPoint("RIGHT", button, "RIGHT", -8, 0)
-            fontString:SetJustifyH("LEFT")
-        end
-    end
-    row:Refresh()
-    return row
 end
 
 -- The colour list entry a module's option row should show and what a click does, shared by every row builder:

@@ -885,17 +885,6 @@ local function findMock(id)
   return FRAME_MOCKS[1]
 end
 
--- The absorb colours the Fill tab offers next to the native picker. The colour itself lives
--- in the shared appearance (role "absorb"), never in the module's saved settings.
-local ABSORB_PRESETS = {
-  { id = "blue", label = "Blue", rgb = { 0.45, 0.75, 1.0 } },
-  { id = "cyan", label = "Cyan", rgb = { 0.35, 0.85, 0.95 } },
-  { id = "white", label = "White", rgb = { 1, 1, 1 } },
-  { id = "gold", label = "Gold", rgb = { 1, 0.82, 0.2 } },
-  { id = "green", label = "Green", rgb = { 0.35, 1, 0.55 } },
-  { id = "violet", label = "Violet", rgb = { 0.7, 0.5, 1 } },
-}
-
 local controls = {} -- every settings/preview row, refreshed after each change
 local tabs, activeTab = {}, nil
 local menu -- the shared dropdown list
@@ -1007,58 +996,11 @@ local function absorbColor()
   return { 0.45, 0.75, 1, 1 }
 end
 
-local function absorbColorPresetId()
-  local c = absorbColor()
-  for i = 1, #ABSORB_PRESETS do
-    local p = ABSORB_PRESETS[i]
-    if math.abs(p.rgb[1] - c[1]) < 0.02 and math.abs(p.rgb[2] - c[2]) < 0.02
-      and math.abs(p.rgb[3] - c[3]) < 0.02 then
-      return p.id
-    end
-  end
-  return "custom"
-end
-
-local function absorbColorLabel()
-  local id = absorbColorPresetId()
-  for i = 1, #ABSORB_PRESETS do
-    if ABSORB_PRESETS[i].id == id then return ABSORB_PRESETS[i].label end
-  end
-  return "Custom"
-end
-
 local function commitAbsorbColor(r, g, b, a)
   if type(BIT.Style) == "table" and type(BIT.Style.Set) == "function" then
     pcall(BIT.Style.Set, "ShieldsInfo", "colors", { absorb = { r, g, b, a or 1 } })
   end
   changed()
-end
-
--- The native colour picker, with its drag callbacks suppressed while it opens. A client
--- without it keeps the preset colours above; nothing here can error out of a click.
-local function openAbsorbPicker()
-  local picker = ColorPickerFrame
-  if not picker or type(picker.SetupColorPickerAndShow) ~= "function" then return end
-  local c = absorbColor()
-  local last = { c[1], c[2], c[3], c[4] or 1 }
-  local initializing = true
-  local function commit()
-    if initializing then return end
-    local r, g, b = picker:GetColorRGB()
-    local a = last[4]
-    pcall(function() a = picker:GetColorAlpha() end)
-    if math.abs(r - last[1]) < 0.000001 and math.abs(g - last[2]) < 0.000001
-      and math.abs(b - last[3]) < 0.000001 and math.abs(a - last[4]) < 0.000001 then return end
-    last = { r, g, b, a }
-    commitAbsorbColor(r, g, b, a)
-  end
-  pcall(function()
-    picker:SetupColorPickerAndShow({
-      r = c[1], g = c[2], b = c[3], opacity = last[4], hasOpacity = true,
-      swatchFunc = commit, opacityFunc = commit,
-    })
-  end)
-  initializing = false
 end
 
 -- The Fill tab's colour row: the shared colour drop-down (the whole palette and a custom colour). The colour is still the

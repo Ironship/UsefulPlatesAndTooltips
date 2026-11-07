@@ -2664,11 +2664,9 @@ BIT.RegisterTab("StatsInfo", {
         .. "the choice that sells for the most when nothing is an upgrade.")
     box("worldMarkers", "Arrows on loot, rolls and merchants",
       "The same bag verdict on loot slots, need/greed rolls and merchant buttons.")
-    updateBagIconState = function()
-      local on = (settings or DEFAULTS).bagMarkers
-      bagSpecIcons:SetAlpha(on and 1 or 0.35)
-      bagSpecIcons:EnableMouse(on)
-    end
+    -- The row dims and disables its check box itself while the bag arrows are off.
+    bagSpecIcons.enabledIf = function() return (settings or DEFAULTS).bagMarkers end
+    updateBagIconState = function() bagSpecIcons:Refresh() end
     display:body("Hover a box for what it does. The preview at the left follows these boxes at once.")
     -- Reset: the seven settings above, back to their defaults. The appearance is not touched.
     local reset = BIT.Looks.ResetButton(display.content, function()

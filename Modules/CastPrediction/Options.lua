@@ -166,6 +166,7 @@ local TALENT_CHOICES = {
     { id = "max",  label = "Max rank" },
 }
 local function talentForceRow(parent, entry, tooltip)
+    note("talentForce")
     return forceRow(parent, entry.en, TALENT_CHOICES,
         function()
             local force = db().talentForce
@@ -183,6 +184,7 @@ local AURA_CHOICES = {
     { id = "off",  label = "Off" },
 }
 local function auraForceRow(parent, entry, tooltip)
+    note("auraForce")
     return forceRow(parent, string.format("%s (%s)", entry.en, entry.unit), AURA_CHOICES,
         function()
             local force = db().auraForce
@@ -430,7 +432,10 @@ local function buildTabs(parent, area)
     end
     -- "Reset this tab": the same button, in the same place, as every other module; it resets the sub-tab that is open.
     local reset = BIT.Looks.ResetButton(area, function()
-        for _, key in ipairs(tabKeysByName[currentTab] or {}) do db()[key] = ns._defaults()[key] end
+        for _, key in ipairs(tabKeysByName[currentTab] or {}) do
+            -- the per-talent and per-aura choices are tables of overrides: back to none (a fresh table, never the default's)
+            if key == "talentForce" or key == "auraForce" then db()[key] = {} else db()[key] = ns._defaults()[key] end
+        end
         changed()
     end)
     reset:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -10, 10)

@@ -244,9 +244,8 @@ local function paintLayer(layer, color, opacity, textureId)
     local tiled = entry and not entry.gradient and entry.tiled or false
     if entry and entry.raw then r, g, b = 1, 1, 1 end -- a texture with colours of its own: only the opacity applies
     -- Repainting only when the look changed keeps the bar's shape mask on the fill between updates.
-    local key = table.concat({ tostring(path), tostring(tiled), string.format("%.3f,%.3f,%.3f,%.3f", r, g, b, a) }, "|")
-    if layer.paintKey == key then return end
-    layer.paintKey = key
+    local last = layer.paintKey
+    if last and last[1] == path and last[2] == tiled and last[3] == r and last[4] == g and last[5] == b and last[6] == a then return end
     pcall(function()
         layer.bar:SetStatusBarColor(r, g, b, a)
         layer.bar:SetStatusBarTexture(path)
@@ -257,6 +256,7 @@ local function paintLayer(layer, color, opacity, textureId)
             fill:SetVertTile(tiled)
         end
         if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Refresh(layer.bar) end -- the repaint may drop the shape mask
+        layer.paintKey = { path, tiled, r, g, b, a } -- only a repaint that went through is remembered
     end)
 end
 

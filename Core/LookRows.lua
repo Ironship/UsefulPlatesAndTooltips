@@ -105,9 +105,14 @@ function Rows.Choice(parent, labelText, list, get, set, opts)
         if kind == "texture" then return Looks.Texture(value) end
         return nil
     end
+    -- Whatever the module does with a pick, this row shows it at once (a module's own setter need not refresh anything).
+    local function pick(id)
+        set(id)
+        row:Refresh()
+    end
     button:SetScript("OnClick", function(self)
         if kind == "color" then
-            Looks.Choose(self, list, get(), set)
+            Looks.Choose(self, list, get(), pick)
         else
             if kind == "texture" then Looks.Merge(list) end
             local menuList = list
@@ -120,7 +125,7 @@ function Rows.Choice(parent, labelText, list, get, set, opts)
                     menuList[i] = copy
                 end
             end
-            Looks.PickList(self, menuList, get(), set)
+            Looks.PickList(self, menuList, get(), pick)
         end
     end)
     function row:Refresh()

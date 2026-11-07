@@ -179,7 +179,8 @@ local function plateToken(unit)
 end
 
 local warnedSecretGuid = false
-local function unitKey(unit)
+local unitKey -- memoised below (computeUnitKey calls it for the target)
+local function computeUnitKey(unit)
     if isSecret(unit) or type(unit) ~= "string" or read(UnitExists, unit) ~= true then return end
     local guid = read(UnitGUID, unit)
     local token = plateToken(unit)
@@ -206,6 +207,25 @@ local function unitKey(unit)
     end
     return "target"
 end
+
+-- A refresh asks for the key of the same unit up to four times (the preview, the marker, the plates, the recipient search) and
+-- a key costs a scan of the 40 plates when the unit has none: the answer is kept for the frame it was read in, and dropped when
+-- any event arrives (a new target, a plate coming or going), so it never outlives a change.
+local keyMemo, keyMemoAt = {}, nil
+unitKey = function(unit)
+    if isSecret(unit) or type(unit) ~= "string" then return end
+    local now = GetTime()
+    if keyMemoAt ~= now then
+        for k in pairs(keyMemo) do keyMemo[k] = nil end
+        keyMemoAt = now
+    end
+    local hit = keyMemo[unit]
+    if hit ~= nil then return hit or nil end
+    local key = computeUnitKey(unit)
+    keyMemo[unit] = key or false
+    return key
+end
+ns.ForgetUnitKeys = function() keyMemoAt = nil end
 
 local function targetIsDead()
     local ok, dead = pcall(UnitIsDead, "target")
@@ -869,10 +889,13 @@ local function paintDamage(texture, color, opacity, state)
         r, g, b = rgb[1], rgb[2], rgb[3]
     end
     -- Repainting a texture only when its look changed keeps the bar's shape mask on it between frames.
-    local key = table.concat({ tostring(path), tostring(tiled), tostring(entry and entry.gradient), tostring(entry and entry.raw),
-        string.format("%.3f,%.3f,%.3f,%.3f", r, g, b, a) }, "|")
-    if texture.uptPaint == key then return end
-    texture.uptPaint = key
+    local gradient, raw = entry and entry.gradient and true or false, entry and entry.raw and true or false
+    local last = texture.uptPaint
+    if last and last[1] == path and last[2] == tiled and last[3] == gradient and last[4] == raw
+        and last[5] == r and last[6] == g and last[7] == b and last[8] == a then
+        return
+    end
+    texture.uptPaint = { path, tiled, gradient, raw, r, g, b, a }
     texture:SetTexture(path, tiled and "REPEAT" or nil, tiled and "REPEAT" or nil)
     texture:SetHorizTile(tiled)
     texture:SetVertTile(tiled)
@@ -1203,12 +1226,10 @@ local function applyAppearance(state)
         texture:SetVertexColor(or_, og, ob, oa)
         texture:SetShown(settings.outlineStyle ~= "none")
     end
-    -- Blizzard's bar fill is cut to the frame's shape by a mask; ours is a plain rectangle and spilled over the border.
+    -- Blizzard's bar fill is cut to the frame's shape by a mask; ours is a plain rectangle and spilled over the border. Only
+    -- the fill takes the mask: the 1 px outline lies on the bar's boundary, which a masked bar cuts away, so it would vanish.
     local barMask = BIT.UI and BIT.UI.BarMask
-    if barMask and healthBar then
-        barMask.Apply(fillTex, healthBar, true)
-        for _, texture in ipairs(edges) do barMask.Apply(texture, healthBar, true) end
-    end
+    if barMask and healthBar then barMask.Apply(fillTex, healthBar, true) end
     if settings.pulseOutline and settings.outlineStyle ~= "none" then
         outlinePulse:Play()
     else
@@ -1515,7 +1536,6 @@ local function drawFrameWidgets(w, entry, now)
     if barMask and w.maskedBar ~= bar then
         w.maskedBar = bar
         barMask.Apply(w.fill, bar, true)
-        for _, texture in ipairs(w.edges) do barMask.Apply(texture, bar, true) end
     end
     keepFrameWidgetsAbove(w, entry.host or bar, now)
     w.marker:SetMinMaxValues(0, UnitHealthMax(unit))
@@ -1984,6 +2004,7 @@ end
 -- Never register COMBAT_LOG_EVENT_UNFILTERED: Forever forbids it and shows a "blocked" popup.
 
 frame:SetScript("OnEvent", function(self, event, ...)
+    keyMemoAt = nil -- an event may have changed who is where: no key read before it is trusted
     if event == "ADDON_LOADED" then
         if ... ~= ADDON_NAME then return end
         if BIT.ShouldRun and not BIT.ShouldRun("CastPrediction") then
