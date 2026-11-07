@@ -13,6 +13,13 @@
 --     numbers, ElliotWood/Forever sim). Both start "waiting" for their first tick when the setting says so: the
 --     attribution of a crit is a guess, the first tick proves it.
 --
+--   * Wyvern Sting. Cast at a known mob, but its DoT only starts when the sleep ends, and the client says nothing
+--     about when. The DoT starts on that mob at the second hit of the sting's school one tick apart (see
+--     springDelayed).
+--   * Righteous Judgement (paladin rune, Season of Discovery). A critical Judgement or Crusader Strike lights a Holy
+--     DoT worth 40% of the hit over its duration; Ignite's way, but only those two casts count, and only when the rune
+--     is known.
+--
 -- Everything here is Forever only (Retail has no readable source for a hit).
 local _, BIT = ...
 local ns = BIT.Module("DoTInfo")
@@ -30,13 +37,20 @@ local SPECS = {
         interval = 2, school = 4, basis = "hit" },
     WARRIOR = { name = "Deep Wounds", spellID = 412609, talentID = 12834, maxRank = 3, perRank = 0.20, duration = 12,
         interval = 3, school = PHYSICAL, basis = "weapon", autoAttack = true },
+    -- The rune's own text gives the share and the duration ("40% additional damage over 6 sec"); castSpells limits
+    -- it to crits of those casts (their ids, resolved to names so every language works).
+    PALADIN = { name = "Righteous Judgement", spellID = 440675, runeID = 440672, maxRank = 1, perRank = 0.40,
+        interval = 2, school = 2, basis = "hit", anySchool = true, castSpells = { 20271, 2537 },
+        window = 1.5, textPattern = "(%d+)%%[^%.]-over (%d+) sec" },
 }
 
 local armed          -- an armed trap: { spellID, name, total, school, duration, interval, placedAt, expiresAt }
 local recent = {}    -- [mob key] = when you last cast at it
 local lastCast       -- { key, at }
 local pending        -- an unattributed crit, kept for a moment: { key, unit, amount, school, at }
-local chains = {}    -- hidden-amount hits that may be a trap's ticks: [mob key] = { at = last, first = first, noisy = bool }
+local chains = {}    -- hits that may be a trap's ticks: [mob key] = { at = last, first = first, noisy = bool }
+local delayed = {}   -- DoTs cast at a mob that start later (Wyvern Sting): [mob key] = { spellID, name, total, ... }
+local delayedChains = {} -- the same kind of chain, for them
 
 local function isSecret(v)
     if type(issecretvalue) ~= "function" then return false end
@@ -70,6 +84,12 @@ end
 -- module switched off); when the tree cannot be read, or does not list the talent, the maximum is assumed. A tree
 -- that answers "no points" is believed.
 local function rankOf(s)
+    if s.runeID then
+        -- A rune is either known or not: unknown API, unknown rune, no DoT.
+        if type(IsPlayerSpell) ~= "function" then return 0 end
+        local ok, known = pcall(IsPlayerSpell, s.runeID)
+        return ok and not isSecret(known) and known and 1 or 0
+    end
     local cast = BIT.modules and BIT.modules.CastPrediction
     local talents = type(cast) == "table" and cast.Talents
     if type(talents) == "table" and type(talents.NodeRank) == "function" then
@@ -85,6 +105,7 @@ local function fireSchool(school)
 end
 
 local function schoolMatches(s, school)
+    if s.anySchool then return true end
     if s.school == FIRE_BITS then return fireSchool(school) end
     return school == s.school
 end
@@ -156,44 +177,93 @@ local function springTrap(key, unit, amount, school, isCrit, now)
     return true
 end
 
--- The same, when the client hides the tick sizes (amounts secret, the school still readable): no size can say
--- which hit is the trap's, so the rhythm does. A trap's mob takes a hit of the trap's school every interval and
--- nothing in between; the second such hit, one interval after the first and with no other hit of that school on
--- that mob between them, springs the trap, and both count as its ticks. A mob that takes hits more often (someone
--- else's spells) never qualifies. Another player's Fire DoT of the same rhythm on a mob while a trap is armed can
--- still pass for it: the size check that rules that out needs readable amounts.
+-- Hits that may be one DoT's ticks, told by their rhythm alone (used when the client hides the tick sizes, and for a
+-- DoT whose start nothing announces). Per mob, the chain keeps the last hit of the school: a hit one interval after it,
+-- with no other hit of that school on that mob in between, completes the chain. Hits that come more often (someone
+-- else's spells) mark it noisy and it never completes. Returns true and the first hit's time when it completes.
 local HIDDEN_RHYTHM_SLACK = 0.3
-function P.OnHiddenHit(key, unit, school, now)
-    local trap = armed
-    if not trap or school ~= trap.school then return false end
-    if now > trap.expiresAt + trap.interval + 0.45 then armed, chains = nil, {} return false end
-    local interval = trap.interval
-    for k, c in pairs(chains) do
-        if now - c.at > interval + HIDDEN_RHYTHM_SLACK then chains[k] = nil end
+local function chainStep(store, key, now, interval)
+    for k, c in pairs(store) do
+        if now - c.at > interval + HIDDEN_RHYTHM_SLACK then store[k] = nil end
     end
-    local c = chains[key]
+    local c = store[key]
     if not c then
-        -- Too soon after placing it: the trap's first tick comes one interval after it, at the earliest.
-        if now >= trap.placedAt + interval - 0.45 then chains[key] = { at = now, first = now } end
+        store[key] = { at = now, first = now }
         return false
     end
-    local gap = now - c.at
-    if gap < interval - HIDDEN_RHYTHM_SLACK then c.noisy = true return false end
-    if c.noisy then chains[key] = { at = now, first = now } return false end
+    if now - c.at < interval - HIDDEN_RHYTHM_SLACK then c.noisy = true return false end
+    if c.noisy then store[key] = { at = now, first = now } return false end
+    store[key] = nil
+    return true, c.first
+end
+
+-- A DoT found by its rhythm: both hits count as its first two ticks, none of them teaches a size.
+local function startFromChain(key, spellID, name, total, school, duration, interval, first, now)
     local internals = I()
-    local dot = internals.newDot(trap.spellID, trap.spellID, trap.name, trap.total, trap.school, trap.duration,
-        interval, c.first - interval)
-    armed, chains = nil, {}
+    local dot = internals.newDot(spellID, spellID, name, total, school, duration, interval, first - interval)
     internals.dotsByTarget[key] = internals.dotsByTarget[key] or {}
-    internals.dotsByTarget[key][trap.name] = dot
-    for index, at in ipairs({ c.first, now }) do
+    internals.dotsByTarget[key][name] = dot
+    for index, at in ipairs({ first, now }) do
         dot.ticksSeen = dot.ticksSeen + 1
         dot.lastTickCrit = true -- a tick nobody read: keeps the learned size and the swap check out of it
         dot.offBeatCandidate = nil
         internals.anchorTick(dot, index - 1, at) -- slots count from the first tick, as anchorTick expects
     end
+    return dot
+end
+
+-- Cast at a known mob, DoT later (Wyvern Sting: it starts when the sleep ends, which nothing announces). Armed per
+-- mob; the DoT starts on the second hit of its school one tick after the first. With readable amounts every hit must
+-- also be of a plausible size. Another Nature DoT on that mob that nothing of yours explains can pass for it.
+local DELAYED_LIFETIME = 45
+function P.ArmDelayed(key, spellID, name, total, school, duration, interval)
+    if not I() or not key then return end
+    if not enabled() then return end
+    local now = GetTime()
+    delayed[key] = { spellID = spellID, name = name, total = total, school = school, duration = duration,
+        interval = interval, castAt = now, expiresAt = now + DELAYED_LIFETIME }
+    delayedChains[key] = nil
+    trace(string.format("DELAYED %s (id %d) cast at %s: %.0f dmg over %ss once it wakes, school %d", name, spellID, key,
+        total, duration, school))
+end
+
+local function springDelayed(key, unit, amount, school, isCrit, now)
+    local d = delayed[key]
+    if not d then return false end
+    if now > d.expiresAt then delayed[key] = nil delayedChains[key] = nil return false end
+    if school ~= d.school then return false end
+    if amount then
+        local share = d.total / math.max(1, math.floor(d.duration / d.interval + 0.5))
+        local low, high = share * 0.5, share * 2.5
+        if isCrit then low, high = low * 1.3, high * 2.3 end
+        if amount < low or amount > high then return false end
+    end
+    local done, first = chainStep(delayedChains, key, now, d.interval)
+    if not done then return false end
+    delayed[key] = nil
+    local dot = startFromChain(key, d.spellID, d.name, d.total, d.school, d.duration, d.interval, first, now)
+    trace(string.format("DELAYED %s started on %s%s: hits %.1fs apart, ticks 1-2 of %d", d.name, unit,
+        amount and "" or " (amounts hidden)", now - first, dot.totalTicks))
+    return true
+end
+
+-- The same for an armed trap when the client hides the tick sizes (amounts secret, the school still readable): no
+-- size can say which hit is the trap's, so the rhythm does. Another player's Fire DoT of the same rhythm on a mob while
+-- a trap is armed can still pass for it: the size check that rules that out needs readable amounts.
+function P.OnHiddenHit(key, unit, school, now)
+    if delayed[key] and springDelayed(key, unit, nil, school, false, now) then return true end
+    local trap = armed
+    if not trap or school ~= trap.school then return false end
+    if now > trap.expiresAt + trap.interval + 0.45 then armed, chains = nil, {} return false end
+    -- Too soon after placing it: the trap's first tick comes one interval after it, at the earliest.
+    if not chains[key] and now < trap.placedAt + trap.interval - 0.45 then return false end
+    local done, first = chainStep(chains, key, now, trap.interval)
+    if not done then return false end
+    armed, chains = nil, {}
+    local dot = startFromChain(key, trap.spellID, trap.name, trap.total, trap.school, trap.duration, trap.interval,
+        first, now)
     trace(string.format("TRAP %s sprung on %s (amounts hidden): hits %.1fs apart, ticks 1-2 of %d", trap.name, unit,
-        now - c.first, dot.totalTicks))
+        now - first, dot.totalTicks))
     return true
 end
 
@@ -214,7 +284,18 @@ local function light(s, key, amount, now)
     local internals = I()
     local rank = rankOf(s)
     if rank <= 0 then return false end
-    local share = s.perRank * rank
+    local share, duration = s.perRank * rank, s.duration
+    if s.textPattern and s.runeID then
+        local ok, text = pcall(function() return C_Spell.GetSpellDescription(s.runeID) end)
+        if ok and type(text) == "string" and not isSecret(text) then
+            local pct, secs = text:match(s.textPattern)
+            if tonumber(pct) and tonumber(secs) then share, duration = tonumber(pct) / 100, tonumber(secs) end
+        end
+    end
+    if not duration then
+        trace(string.format("PROC %s: crit of %d on %s but the rune's duration is unreadable", s.name, amount, key))
+        return false
+    end
     local base
     if s.basis == "hit" then
         base = amount * share
@@ -233,19 +314,41 @@ local function light(s, key, amount, now)
     end
     local old = dots[s.name]
     local owed = old and internals.remainingDamage(old) or 0
-    local dot = internals.newDot(s.spellID, nil, s.name, owed + base, s.school, s.duration, s.interval, now)
+    local dot = internals.newDot(s.spellID, nil, s.name, owed + base, s.school, duration, s.interval, now)
     dot.unsure = true -- the crit's owner is a guess until the first tick lands
     dot.procDot = true
     dot.segmentOrder = old and old.segmentOrder
     dots[s.name] = dot
     trace(string.format("PROC %s on %s: %.0f%% (rank %d) of %s -> %.0f dmg over %ss%s", s.name, key, share * 100, rank,
-        s.basis == "hit" and ("a crit of " .. amount) or "the main hand's average", owed + base, s.duration,
+        s.basis == "hit" and ("a crit of " .. amount) or "the main hand's average", owed + base, duration,
         owed > 0 and string.format(", %.0f still owed rolled in", owed) or ""))
     return true
 end
 
 -- Whether a crit of this school on this mob may be yours.
+local castNameCache = {}
+local function castNames(s)
+    local names = castNameCache[s]
+    if not names then
+        names = {}
+        for _, id in ipairs(s.castSpells) do
+            local ok, name = pcall(function() return C_Spell.GetSpellName(id) end)
+            if ok and type(name) == "string" and not isSecret(name) then names[name] = true end
+        end
+        if next(names) then castNameCache[s] = names end
+    end
+    return names
+end
+
 local function mine(s, key, unit, now)
+    if s.castSpells then
+        -- Only a crit right after one of these casts, at this mob (or at the target when the cast named nobody).
+        local c = lastCast
+        if not c or not c.name or now - c.at > (s.window or CAST_WINDOW) then return false end
+        if not castNames(s)[c.name] then return false end
+        local targetKey = I().unitKey("target")
+        return (c.key == key) or (c.key == nil and targetKey ~= nil and targetKey == key)
+    end
     local at = key and recent[key]
     if at and now - at <= CAST_WINDOW then return true end
     local internals = I()
@@ -280,7 +383,7 @@ function P.NoteCast(key, spellID, name, desc)
     end
     -- A cast with no readable recipient counts only when it deals damage: a self-buff must not open the window.
     if key or (type(desc) == "string" and not isSecret(desc) and desc:find("[Dd]amage")) then
-        lastCast = { key = key, at = now }
+        lastCast = { key = key, at = now, name = name }
     end
     for old, at in pairs(recent) do
         if now - at > 30 then recent[old] = nil end
@@ -291,7 +394,10 @@ function P.NoteCast(key, spellID, name, desc)
         local p = pending
         pending = nil
         local s = spec()
-        if s and schoolMatches(s, p.school) and (key == nil or key == p.key) then light(s, p.key, p.amount, now) end
+        if s and schoolMatches(s, p.school) and (key == nil or key == p.key)
+            and (not s.castSpells or castNames(s)[name]) then
+            light(s, p.key, p.amount, now)
+        end
     end
 end
 
@@ -299,6 +405,9 @@ end
 function P.Wants(isCrit, school)
     if not I() then return false end
     if armed and school == armed.school then return true end
+    for _, d in pairs(delayed) do
+        if d.school == school then return true end
+    end
     if isCrit and enabled() then
         local s = spec()
         return s ~= nil and schoolMatches(s, school)
@@ -309,6 +418,7 @@ end
 -- A hit no DoT claimed. Returns true when it started one (the display then flashes).
 function P.OnUnmatchedHit(key, unit, amount, school, isCrit, now)
     if not I() then return false end
+    if delayed[key] and springDelayed(key, unit, amount, school, isCrit, now) then return true end
     if armed and springTrap(key, unit, amount, school, isCrit, now) then return true end
     if not isCrit then return false end
     local s = spec()
@@ -320,5 +430,5 @@ end
 
 function P.Reset()
     armed, lastCast, pending = nil, nil, nil
-    recent, chains = {}, {}
+    recent, chains, delayed, delayedChains = {}, {}, {}, {}
 end

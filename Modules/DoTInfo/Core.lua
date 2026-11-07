@@ -51,6 +51,7 @@ local KNOWN_TICK_INTERVALS = {
     ["Rip"] = 2,
     ["Rupture"] = 2,
     ["Black Arrow"] = 2, -- the description gives the total over 30 sec only
+    ["Wyvern Sting"] = 2, -- client data: its DoT (24336) ticks every 2 s
 }
 
 -- DoTs whose ticks aren't even: each tick is the average tick times its factor (factors average 1, so the
@@ -70,13 +71,13 @@ local SCHOOL_BY_NAME = {
 }
 
 -- Read like DoTs but aren't one on the current target: ground/area effects, channels, traps, and
--- delayed damage (Wyvern Sting only starts after the sleep).
+-- delayed damage (Wyvern Sting is handled apart, see DELAYED_DOTS).
 local IGNORED_SPELLS = {
     ["Rain of Fire"] = true, ["Hellfire"] = true, ["Blizzard"] = true, ["Flamestrike"] = true,
     ["Consecration"] = true, ["Hurricane"] = true, ["Volley"] = true,
     ["Drain Life"] = true, ["Drain Soul"] = true, ["Drain Mana"] = true, ["Health Funnel"] = true,
     ["Mind Flay"] = true, ["Arcane Missiles"] = true, ["Starshards"] = true,
-    ["Explosive Trap"] = true, ["Wyvern Sting"] = true,
+    ["Explosive Trap"] = true,
 }
 
 -- The name-keyed tables also answer to the German names, and on ADDON_LOADED to the names this client reports
@@ -92,11 +93,13 @@ ns.refreshNames = {
 
 -- Traps that put a DoT on the first enemy to walk in (ProcDots.lua): placing one only arms it.
 ns.TRAP_DOTS = { ["Immolation Trap"] = true }
+-- Cast at a mob, but the DoT starts later (ProcDots.lua finds the start by its rhythm).
+ns.DELAYED_DOTS = { ["Wyvern Sting"] = true }
 -- Any new Fire trap replaces the armed one (by name, so it works in every language).
 ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
-    ns.TRAP_DOTS, ns.FIRE_TRAPS }
+    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS }
 ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -953,6 +956,12 @@ local function onPlayerCast(spellID, castGUID)
 
     -- A trap only arms: the DoT starts when it springs (ProcDots.lua).
     if ns.ProcDots and ns.TRAP_DOTS[name] and ns.ProcDots.ArmTrap(spellID, name, desc, total, school, duration, statedInterval) then
+        return
+    end
+
+    -- Wyvern Sting: the DoT starts when the sleep ends (ProcDots.lua).
+    if ns.ProcDots and ns.DELAYED_DOTS[name] then
+        ns.ProcDots.ArmDelayed(key, spellID, name, total, school, duration, statedInterval or KNOWN_TICK_INTERVALS[name] or 3)
         return
     end
 
