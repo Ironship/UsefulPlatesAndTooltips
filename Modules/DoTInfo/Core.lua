@@ -1299,7 +1299,10 @@ local combatFrameHits = {}
 -- Field, not local: this file is at Lua's 200-local limit.
 function ns.onHiddenAmountHit(key, unit, school)
     local dots = dotsByTarget[key]
-    if not dots then return end
+    local tracked = dots ~= nil
+    -- An armed trap needs the hit even where no DoT runs (ProcDots.lua).
+    if not dots and not (ns.ProcDots and ns.ProcDots.Wants(false, school)) then return end
+    dots = dots or {}
     local now = GetTime()
     if combatFrameAt ~= now then
         combatFrameHits = {}
@@ -1326,7 +1329,9 @@ function ns.onHiddenAmountHit(key, unit, school)
         end
     end
     if not best then
-        trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit))
+        -- An armed trap's ticks, told by their rhythm alone.
+        if ns.ProcDots and ns.ProcDots.OnHiddenHit(key, unit, school, now) then return key end
+        if tracked then trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit)) end
         return
     end
     local wasWaiting = isWaiting(best)

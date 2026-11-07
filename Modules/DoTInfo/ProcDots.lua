@@ -36,6 +36,7 @@ local armed          -- an armed trap: { spellID, name, total, school, duration,
 local recent = {}    -- [mob key] = when you last cast at it
 local lastCast       -- { key, at }
 local pending        -- an unattributed crit, kept for a moment: { key, unit, amount, school, at }
+local chains = {}    -- hidden-amount hits that may be a trap's ticks: [mob key] = { at = last, first = first, noisy = bool }
 
 local function isSecret(v)
     if type(issecretvalue) ~= "function" then return false end
@@ -119,6 +120,7 @@ function P.ArmTrap(spellID, name, desc, total, school, duration, statedInterval)
     local lifetime = type(desc) == "string" and not isSecret(desc) and tonumber(desc:match("[Tt]rap will exist for (%d+) min"))
     armed = { spellID = spellID, name = name, total = total, school = school, duration = duration,
         interval = interval, placedAt = now, expiresAt = now + (lifetime or 1) * 60 }
+    chains = {}
     local learned = db().ticks[spellID]
     trace(string.format("TRAP %s (id %d) armed: %.0f dmg over %ss, school %d, per-tick %s", name, spellID, total,
         duration, school, learned and ("learned " .. learned) or "from description"))
@@ -151,6 +153,47 @@ local function springTrap(key, unit, amount, school, isCrit, now)
     local tickIndex = recordTick(dot, amount, isCrit, 1, now)
     trace(string.format("TRAP %s sprung on %s: first tick %d%s %.1fs after placing (tick %d/%d)", trap.name, unit,
         amount, isCrit and " CRIT" or "", now - trap.placedAt, tickIndex, dot.totalTicks))
+    return true
+end
+
+-- The same, when the client hides the tick sizes (amounts secret, the school still readable): no size can say
+-- which hit is the trap's, so the rhythm does. A trap's mob takes a hit of the trap's school every interval and
+-- nothing in between; the second such hit, one interval after the first and with no other hit of that school on
+-- that mob between them, springs the trap, and both count as its ticks. A mob that takes hits more often (someone
+-- else's spells) never qualifies. Another player's Fire DoT of the same rhythm on a mob while a trap is armed can
+-- still pass for it: the size check that rules that out needs readable amounts.
+local HIDDEN_RHYTHM_SLACK = 0.3
+function P.OnHiddenHit(key, unit, school, now)
+    local trap = armed
+    if not trap or school ~= trap.school then return false end
+    if now > trap.expiresAt + trap.interval + 0.45 then armed, chains = nil, {} return false end
+    local interval = trap.interval
+    for k, c in pairs(chains) do
+        if now - c.at > interval + HIDDEN_RHYTHM_SLACK then chains[k] = nil end
+    end
+    local c = chains[key]
+    if not c then
+        -- Too soon after placing it: the trap's first tick comes one interval after it, at the earliest.
+        if now >= trap.placedAt + interval - 0.45 then chains[key] = { at = now, first = now } end
+        return false
+    end
+    local gap = now - c.at
+    if gap < interval - HIDDEN_RHYTHM_SLACK then c.noisy = true return false end
+    if c.noisy then chains[key] = { at = now, first = now } return false end
+    local internals = I()
+    local dot = internals.newDot(trap.spellID, trap.spellID, trap.name, trap.total, trap.school, trap.duration,
+        interval, c.first - interval)
+    armed, chains = nil, {}
+    internals.dotsByTarget[key] = internals.dotsByTarget[key] or {}
+    internals.dotsByTarget[key][trap.name] = dot
+    for index, at in ipairs({ c.first, now }) do
+        dot.ticksSeen = dot.ticksSeen + 1
+        dot.lastTickCrit = true -- a tick nobody read: keeps the learned size and the swap check out of it
+        dot.offBeatCandidate = nil
+        internals.anchorTick(dot, index - 1, at) -- slots count from the first tick, as anchorTick expects
+    end
+    trace(string.format("TRAP %s sprung on %s (amounts hidden): hits %.1fs apart, ticks 1-2 of %d", trap.name, unit,
+        now - c.first, dot.totalTicks))
     return true
 end
 
@@ -277,5 +320,5 @@ end
 
 function P.Reset()
     armed, lastCast, pending = nil, nil, nil
-    recent = {}
+    recent, chains = {}, {}
 end
