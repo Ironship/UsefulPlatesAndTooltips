@@ -1841,8 +1841,10 @@ local function scanFinishers(module)
     local ids, seen = {}, {}
     if type(GetActionInfo) ~= "function" or type(module.Compute) ~= "function" then return ids end
     for slot = 1, ACTION_SLOTS do
-        local ok, kind, id = pcall(GetActionInfo, slot)
-        if ok and kind == "spell" and not isSecret(id) and type(id) == "number" and not seen[id] then
+        local ok, kind, id, sub = pcall(GetActionInfo, slot)
+        if ok and not isSecret(kind) and not isSecret(id) and not isSecret(sub)
+            and (kind == "spell" or (kind == "macro" and sub == "spell"))
+            and type(id) == "number" and not seen[id] then
             seen[id] = true
             local okView, view = pcall(module.Compute, id, false)
             local finisher = okView and type(view) == "table" and view.finisher
