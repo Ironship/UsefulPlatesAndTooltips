@@ -1434,7 +1434,13 @@ local function onUnitCombat(unit, action, flag, amount, school)
         end
     end
     -- No size to tell two same-school DoTs apart, and no candidate to anchor.
-    if zeroAbsorb and candidates ~= 1 then return end
+    if zeroAbsorb and candidates ~= 1 then
+        if candidates == 0 and ns.ProcDots and ns.ProcDots.Wants(false, school) then
+            local now = GetTime()
+            if ns.ProcDots.OnUnmatchedHit(key, unit, amount, school, false, now) then return key end
+        end
+        return
+    end
     if not best then
         -- Not a tick as things stand; it may still correct one (same-slot swap, or a wrong learned size).
         for name, dot in pairs(dots) do

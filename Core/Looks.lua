@@ -347,7 +347,7 @@ function Looks.Merge(list)
         local id = entry.id
         live[id] = true
         local existing = byId[id]
-        if existing and type(id) == "string" and id:sub(1, 4) == "lsm:" then
+        if existing and existing ~= entry and type(id) == "string" and id:sub(1, 4) == "lsm:" then
             for key in pairs(existing) do existing[key] = nil end
             for key, value in pairs(entry) do existing[key] = value end
         elseif not existing and not (list.noGradient and entry.gradient) then
