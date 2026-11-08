@@ -160,13 +160,15 @@ local function springTrap(key, unit, amount, school, isCrit, now)
     local internals = I()
     local dot = internals.newDot(trap.spellID, trap.spellID, trap.name, trap.total, trap.school, trap.duration,
         trap.interval, now - trap.interval)
-    if db().ticks[trap.spellID] then
-        if not internals.plausibleTickAmount(dot, amount, isCrit, 1) then return false end
-    else
-        local share = trap.total / dot.totalTicks
-        local low, high = share * 0.5, share * 2.5
-        if isCrit then low, high = low * 1.3, high * 2.3 end
-        if amount < low or amount > high then return false end
+    if amount ~= 0 then
+        if db().ticks[trap.spellID] then
+            if not internals.plausibleTickAmount(dot, amount, isCrit, 1) then return false end
+        else
+            local share = trap.total / dot.totalTicks
+            local low, high = share * 0.5, share * 2.5
+            if isCrit then low, high = low * 1.3, high * 2.3 end
+            if amount < low or amount > high then return false end
+        end
     end
     armed = nil
     internals.dotsByTarget[key] = internals.dotsByTarget[key] or {}
@@ -232,7 +234,7 @@ local function springDelayed(key, unit, amount, school, isCrit, now)
     if not d then return false end
     if now > d.expiresAt then delayed[key] = nil delayedChains[key] = nil return false end
     if school ~= d.school then return false end
-    if amount then
+    if amount ~= nil and amount ~= 0 then
         local share = d.total / math.max(1, math.floor(d.duration / d.interval + 0.5))
         local low, high = share * 0.5, share * 2.5
         if isCrit then low, high = low * 1.3, high * 2.3 end
@@ -243,7 +245,7 @@ local function springDelayed(key, unit, amount, school, isCrit, now)
     delayed[key] = nil
     local dot = startFromChain(key, d.spellID, d.name, d.total, d.school, d.duration, d.interval, first, now)
     trace(string.format("DELAYED %s started on %s%s: hits %.1fs apart, ticks 1-2 of %d", d.name, unit,
-        amount and "" or " (amounts hidden)", now - first, dot.totalTicks))
+        amount and amount ~= 0 and "" or " (amounts hidden or fully absorbed)", now - first, dot.totalTicks))
     return true
 end
 

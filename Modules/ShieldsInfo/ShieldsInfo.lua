@@ -181,6 +181,9 @@ end
 -- that raises must still not escape a paint) reads as "flat" too.
 local function chosenFill()
   local id = currentSettings().fillTexture
+  if type(id) == "string" and id:sub(1, 4) == "lsm:" and BIT.Looks then
+    return BIT.Looks.Texture(id)
+  end
   if type(id) == "string" then
     local ok, entry = pcall(function()
       for i = 1, #FILL_TEXTURES do
@@ -188,11 +191,6 @@ local function chosenFill()
       end
     end)
     if ok and type(entry) == "table" then return entry end
-    -- a shared-media texture whose library loaded after the list was built
-    if BIT.Looks and id:sub(1, 4) == "lsm:" then
-      local found = BIT.Looks.Texture(id)
-      if found and found.id == id then return found end
-    end
   end
   return FILL_TEXTURES[1]
 end

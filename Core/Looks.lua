@@ -300,8 +300,13 @@ local function mediaEntries()
         if type(name) == "string" and type(path) == "string" then names[#names + 1] = name end
     end
     table.sort(names, function(a, b) return a:lower() < b:lower() end)
-    local signature = table.concat(names, "\1")
-    if signature == mediaSignature then return mediaCache end -- the same names (a renamed or replaced one changes it)
+    local signatureParts = {}
+    for _, name in ipairs(names) do
+        local path = hash[name]
+        signatureParts[#signatureParts + 1] = #name .. ":" .. name .. #path .. ":" .. path
+    end
+    local signature = table.concat(signatureParts, "\1")
+    if signature == mediaSignature then return mediaCache end
     mediaCache, mediaSignature = {}, signature
     for i, name in ipairs(names) do
         mediaCache[i] = { id = "lsm:" .. name, label = name, path = hash[name], group = "Shared media" }
@@ -334,13 +339,25 @@ end
 
 -- Adds to a module's own list (it keeps its own order and ids) every catalog entry it lacks. Returns the list.
 function Looks.Merge(list)
-    local have = {}
-    for _, entry in ipairs(list) do have[entry.id] = true end
-    for _, entry in ipairs(Looks.Textures()) do
-        if not have[entry.id] and not (list.noGradient and entry.gradient) then
+    local textures, byId, live = Looks.Textures(), {}, {}
+    for _, entry in ipairs(list) do
+        if entry.id ~= nil then byId[entry.id] = entry end
+    end
+    for _, entry in ipairs(textures) do
+        local id = entry.id
+        live[id] = true
+        local existing = byId[id]
+        if existing and type(id) == "string" and id:sub(1, 4) == "lsm:" then
+            for key in pairs(existing) do existing[key] = nil end
+            for key, value in pairs(entry) do existing[key] = value end
+        elseif not existing and not (list.noGradient and entry.gradient) then
             list[#list + 1] = entry
-            have[entry.id] = true
+            byId[id] = entry
         end
+    end
+    for i = #list, 1, -1 do
+        local id = list[i].id
+        if type(id) == "string" and id:sub(1, 4) == "lsm:" and not live[id] then table.remove(list, i) end
     end
     return list
 end

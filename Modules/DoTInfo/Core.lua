@@ -1695,12 +1695,11 @@ end
 local SMOOTH_RATE = 10 -- how fast the marker glides to a new value (higher = snappier)
 
 local function findById(list, id)
-    for _, entry in ipairs(list) do
-        if entry.id == id then return entry end
-    end
-    -- A shared-media texture is not in the list until something merged it: the catalog knows it live.
     if list == FILL_STYLES and BIT.Looks and type(id) == "string" and id:sub(1, 4) == "lsm:" then
         return BIT.Looks.Texture(id)
+    end
+    for _, entry in ipairs(list) do
+        if entry.id == id then return entry end
     end
     return list[1]
 end
