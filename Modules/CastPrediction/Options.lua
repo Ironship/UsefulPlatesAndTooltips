@@ -18,16 +18,18 @@ local areas
 local tabButtons
 local controls = {}
 local panel
-local preview = { health = 62, spell = 1 } -- TRY IT: the preview's own numbers, never settings
+local preview = { health = 35, spell = 3 } -- TRY IT: a lethal Shadow Bolt by default, never settings
 
 -- The sample casts the preview walks through, in the order of the button.
 local SAMPLE_SPELLS = {
-    { name = "Frostbolt",      min = 410, max = 450, school = 16 },
-    { name = "Fireball",       min = 600, max = 760, school = 4 },
-    { name = "Shadow Bolt",    min = 480, max = 540, school = 32 },
-    { name = "Lightning Bolt", min = 430, max = 490, school = 8 },
-    { name = "Pyroblast",      min = 780, max = 980, school = 4 },
-    { name = "Arcane Missiles (channel)", min = 280, max = 320, school = 64, channel = true },
+    { name = "Frostbolt",      spellID = 116,   min = 410, max = 450, school = 16 },
+    { name = "Fireball",       spellID = 133,   min = 600, max = 760, school = 4 },
+    { name = "Shadow Bolt",    spellID = 686,   min = 480, max = 540, school = 32 },
+    { name = "Lightning Bolt", spellID = 403,   min = 430, max = 490, school = 8 },
+    { name = "Pyroblast",      spellID = 11366, min = 780, max = 980, school = 4 },
+    { name = "Arcane Missiles (channel)", spellID = 5143, min = 280, max = 320, school = 64, channel = true },
+    { name = "Eviscerate",     spellID = 2098,  min = 410, max = 500, school = 1, preview = true },
+    { name = "Ferocious Bite", spellID = 22568, min = 520, max = 640, school = 1, preview = true },
 }
 
 local function db() return ns._settings() end
@@ -43,11 +45,13 @@ local function previewState()
     local health = preview.health * HEALTH_SCALE
     return {
         name = spell.name,
+        spellID = spell.spellID,
         min = spell.min,
         max = spell.max,
         value = (spell.min + spell.max) / 2,
         school = spell.school,
         channel = spell.channel,
+        preview = spell.preview,
         health = health,
         maxHealth = 100 * HEALTH_SCALE,
     }
@@ -62,6 +66,10 @@ end
 local function updatePreview()
     if not panel then return end
     ns.setPreviewState(previewState())
+    if panel.targetHealthBar then panel.targetHealthBar:SetValue(preview.health) end
+    if panel.plateHealthBar then panel.plateHealthBar:SetValue(preview.health) end
+    if panel.healthPercent then panel.healthPercent:SetText(string.format("%d%%", preview.health)) end
+    if panel.healthValue then panel.healthValue:SetText(tostring(preview.health * 10)) end
     if panel.spellButton then panel.spellButton:SetText(currentSpell().name) end
     if panel.healthSlider then panel.healthSlider:Refresh() end
     ns._refresh()
@@ -260,13 +268,16 @@ local function buildMarkerTab(parent)
     y = place(checkRow(parent, "Pulse the outline", "pulseOutline",
         "A soft breathing of the outline while the cast is in flight."), y)
     y = place(checkRow(parent, "Kill icon on the portrait", "showKillIcon",
-        "A skull when even the lowest end of the cast's range would finish the target. Drawn by a "
+        "An icon when even the lowest end of the cast's range would finish the target. Drawn by a "
         .. "status bar, so it works with hidden health too."), y)
-    y = place(choiceRow(parent, "Kill icon", "killIcon", {
+    y = place(checkRow(parent, "Show killing spell icon", "showKillSpellIcon",
+        "Enabled by default. When a cast or finisher would kill, show its spell icon instead of the generic kill icon. "
+        .. "The finisher preview uses the icon for the finisher that would kill."), y)
+    y = place(choiceRow(parent, "Fallback kill icon", "killIcon", {
         { id = "skull", label = "Raid skull" },
         { id = "cross", label = "Red X" },
         { id = "impact", label = "Impact" },
-    }, "Which icon the lethal cue uses."), y)
+    }, "Shown when the spell icon option is off or that spell's icon is unavailable."), y)
     y = section(parent, y, "FINISHER PREVIEW")
     y = place(choiceRow(parent, "Preview fill style", "finisherTexture", textureList(),
         "The fill of the finisher preview (Prediction tab), so it never reads as a real cast."), y)
@@ -467,10 +478,14 @@ local function buildPreview(pane)
     local mock = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = preview.health })
     mock.frame:SetPoint("TOP", scene, "TOP", 0, -6)
     pane.host = mock.host
+    pane.targetHealthBar = mock.healthBar
+    pane.healthPercent = mock.healthPercent
+    pane.healthValue = mock.healthValue
 
     local plateMock = BIT.UI.Preview.Nameplate(scene, { name = "Murloc Raider", level = "12", health = preview.health })
     plateMock.frame:SetPoint("BOTTOM", scene, "BOTTOM", 0, 10)
     pane.plateHost = { plate = plateMock.frame, healthBar = plateMock.bar }
+    pane.plateHealthBar = plateMock.bar
 
     -- While a fight is on, the marker is on the real target; the preview returns after combat.
     pane.combatNote = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -498,7 +513,7 @@ local function buildPreview(pane)
     spellRow:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
     local spellLabel = spellRow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     spellLabel:SetPoint("LEFT", 0, 0)
-    spellLabel:SetText("Sample cast")
+    spellLabel:SetText("Sample spell")
     pane.spellButton = BIT.UI.Button(spellRow, currentSpell().name, 150, function()
         preview.spell = preview.spell % #SAMPLE_SPELLS + 1
         updatePreview()
@@ -509,8 +524,8 @@ local function buildPreview(pane)
     hint:SetPoint("TOPLEFT", spellRow, "BOTTOMLEFT", 0, -10)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
-    hint:SetText("The same marker the game shows, on mock frames. While this window is open out of "
-        .. "combat the marker draws here; a fight hands it back to your target.")
+    hint:SetText("Same marker on mock frames; sample damage is illustrative. Raise target health to hide "
+        .. "the kill icon. While in combat, the marker returns to your target.")
 
     pane.title = title
     pane.hint = hint

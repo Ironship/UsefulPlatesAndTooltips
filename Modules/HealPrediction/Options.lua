@@ -98,7 +98,10 @@ local function buildSettings(parent)
     local y = section(parent, 0, "FRAMES")
     y = place(checkRow(parent, "Target frame", "target",
         "The segment starts where the target's green ends and reaches as far as the incoming heal will."), y)
-    y = place(checkRow(parent, "Player frame", "player", "Your own frame, off by default."), y)
+    y = place(checkRow(parent, "Player frame", "player", "Your own health bar."), y)
+    y = place(checkRow(parent, "Focus frame", "focus", "Incoming heals and your HoTs on your focus."), y)
+    y = place(checkRow(parent, "Target of target frame", "targettarget",
+        "Blizzard's small target-of-target health bar, including when it shows you."), y)
     y = place(checkRow(parent, "Party frames", "party",
         "Blizzard's classic party frames and the compact party members."), y)
     y = place(checkRow(parent, "Raid frames", "raid",
@@ -114,8 +117,9 @@ local function buildSettings(parent)
         "Rejuvenation, Renew, Regrowth and Riptide are not part of the client's projection. After you cast one, "
         .. "the amount its description promises is drawn after your direct heal for the next few seconds of "
         .. "the effect. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on "
-        .. "its known primary target, not guessed party recipients. Channels, pet heals and triggered heals are "
-        .. "not treated as target HoTs. A dispelled effect keeps showing until its time is up."), y)
+        .. "readable buff recipients or its known primary cast target, not guessed party recipients. Channels, pet heals and triggered heals are "
+        .. "not treated as target HoTs. Readable own buffs recover existing effects and removals; "
+        .. "when aura data is hidden, the last known expiry is used."), y)
     y = place(sliderRow(parent, "Heal over time horizon", "hotHorizon", 1, 15, 1,
         function(value) return math.floor(value + 0.5) .. " s" end,
         "How many seconds of each heal over time are drawn ahead."), y, 40)
@@ -135,7 +139,8 @@ local function buildSettings(parent)
     y = place(sliderRow(parent, "Height", "heightPercent", 15, 100, 5, nil,
         "How tall the segment is against the health bar; the top edge is the anchor."), y, 40)
     y = place(checkRow(parent, "Show a number", "showText",
-        "A small ~ number at the segment's right end, when the client gives a readable amount."), y)
+        "A small ~ number for the direct heal plus your HoT horizon at the segment's right end, "
+        .. "when the amounts are readable."), y)
     y = section(parent, y, "DIAGNOSTICS")
     y = place(buttonRow(parent, "What the client says", "Print", function()
         ns.Probe()
@@ -177,11 +182,14 @@ local function buildPreview(pane)
     mock.bar:SetMinMaxValues(0, 100)
     mock.bar:SetValue(60)
 
-    local state = { health = 60, heal = 25, others = 12, hot = 10 }
+    local state = { health = 60, heal = 25, others = 12 }
+    local sampleHotTotal, sampleHotDuration = 30, 12
     local function redraw()
         mock.bar:SetValue(state.health)
         if mock.healthPercent then mock.healthPercent:SetText(string.format("%d%%", state.health)) end
-        ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, state.hot)
+        local horizon = tonumber(db().hotHorizon) or 4
+        local hot = sampleHotTotal * math.min(horizon, sampleHotDuration) / sampleHotDuration
+        ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, hot)
     end
 
     -- The two sliders are the sample's own numbers, never settings.
@@ -205,8 +213,9 @@ local function buildPreview(pane)
     hint:SetPoint("TOPLEFT", healSlider, "BOTTOMLEFT", 6, -12)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
-    hint:SetText("The same segment the game draws, starting at the health edge (the green bar's "
-        .. "end) and cropping at the bar's right end when the heal would overheal.")
+    hint:SetText("The Target frame option controls this sample; the other frame options control live frames. "
+        .. "The segment starts at the health edge (the green bar's "
+        .. "end) and is cropped at the bar's right end when the heal would overheal.")
 
     pane.title = title
     pane.hint = hint
@@ -228,8 +237,8 @@ end
 if BIT.RegisterTab then
     BIT.RegisterTab("HealPrediction", {
         title = "Heal prediction",
-        summary = "Incoming healing, drawn where the target's, party's and raid's health ends "
-            .. "(the client's own projection; nothing is computed here).",
+        summary = "Incoming healing on player, target, focus, target-of-target, party and raid frames "
+            .. "(native direct heals and estimates for your own HoTs).",
         width = WINDOW_WIDTH, height = WINDOW_HEIGHT,
         build = function(parent)
             if window == parent then return end
@@ -240,7 +249,7 @@ if BIT.RegisterTab then
             note1:SetPoint("RIGHT", -12, 0)
             note1:SetJustifyH("LEFT")
             note1:SetText("The client already knows how much healing is coming (UnitGetIncomingHeals). "
-                .. "This module redraws that number on Blizzard's frames instead of calculating it.")
+                .. "This module redraws direct heals and adds estimates for your own heals over time.")
             local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
             pane:SetPoint("TOPLEFT", 10, -46)
             buildPreview(pane)

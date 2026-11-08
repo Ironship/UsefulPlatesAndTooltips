@@ -1,5 +1,5 @@
 -- UsefulPlatesAndTooltips module HealPrediction: the incoming healing the client already knows,
--- drawn on Blizzard's unit frames -- target, party and raid -- as a segment that starts at the
+-- drawn on Blizzard's unit frames as a segment that starts at the
 -- health edge and reaches as far as the heal will (the classic heal-prediction look).
 --
 -- The number comes straight from the client (UnitGetIncomingHeals): on both clients this is the
@@ -18,7 +18,9 @@ local UPDATE_INTERVAL = 0.2
 
 local DEFAULTS = {
     target = true,   -- the target frame
-    player = false,  -- the player frame (your own frame rarely needs it)
+    player = true,   -- the player frame
+    focus = true,
+    targettarget = true,
     party = true,    -- classic and compact party frames
     raid = true,     -- raid frames (the compact container)
     allHealers = false, -- ask for the client's total instead of only your own heals
@@ -190,12 +192,12 @@ end
 
 -- Anchors the clip at the health edge and the segment inside it, so the fill starts where the
 -- green ends and is cropped at the bar's right end (overheal spills nowhere).
-local function layoutOverlay(o, healthBar)
+local function layoutOverlay(o, healthBar, hasDirectHeal)
     local width = healthBarWidth(healthBar)
     local height = healthBarHeight(healthBar)
     local fraction = (tonumber(db().heightPercent) or 45) / 100
     local segmentHeight = math.max(2, math.floor(height * fraction + 0.5))
-    local signature = width .. ":" .. height .. ":" .. segmentHeight
+    local signature = width .. ":" .. height .. ":" .. segmentHeight .. ":" .. tostring(hasDirectHeal)
     local fill = ask(healthBar.GetStatusBarTexture, healthBar)
     if isSecret(fill) then fill = nil end
     local ownFill = ask(o.bar.GetStatusBarTexture, o.bar)
@@ -228,7 +230,7 @@ local function layoutOverlay(o, healthBar)
     end
     if o.hot then
         -- after the end of the direct heal: the own bar's fill reaches health + heal
-        local after = (ownFill ~= nil and (type(ownFill) == "table" or type(ownFill) == "userdata")) and ownFill
+        local after = hasDirectHeal and (ownFill ~= nil and (type(ownFill) == "table" or type(ownFill) == "userdata")) and ownFill
             or (hasFill and fill or nil)
         anchorClip(o.hot.clip, after)
         sizeBar(o.hot)
@@ -279,6 +281,20 @@ local function setLayer(layer, maxHealth, value)
     layer.clip:Show()
 end
 
+local function setLabel(o, incoming, hot)
+    local amount
+    if not isSecret(incoming) and (incoming == nil or type(incoming) == "number") then
+        amount = (incoming or 0) + (hot or 0)
+    end
+    local shown = db().showText and amount and amount > 0
+    o.label:SetShown(shown and true or false)
+    if shown then
+        o.label:ClearAllPoints()
+        o.label:SetPoint("LEFT", (hot and hot > 0 and o.hot.bar or o.bar):GetStatusBarTexture(), "RIGHT", 2, 0)
+        o.label:SetText(string.format("~%d", math.floor(amount + 0.5)))
+    end
+end
+
 -- One unit's incoming heals on one health bar. Secret-safe: the reading (plain or secret) is
 -- fed only into SetMinMaxValues/SetValue; only a proven-plain zero hides the segment.
 local function updateBar(unit, healthBar, enabled)
@@ -317,10 +333,9 @@ local function updateBar(unit, healthBar, enabled)
     end
     o.unit = unit
     local ok, err = pcall(function()
-        layoutOverlay(o, healthBar)
+        layoutOverlay(o, healthBar, not plainZero)
         paintOverlay(o)
-        -- Your own band stays shown (empty) while a heal over time follows it, so that band has a fill
-        -- edge to start from.
+        -- Keep the direct band empty while only the other bands carry healing.
         if plainZero then
             o.bar:SetMinMaxValues(0, maxHealth)
             o.bar:SetValue(0)
@@ -331,11 +346,7 @@ local function updateBar(unit, healthBar, enabled)
         end
         setLayer(o.others, maxHealth, everyone)
         setLayer(o.hot, maxHealth, hot)
-        local showLabel = db().showText and not plainZero and not isSecret(incoming)
-        o.label:SetShown(showLabel and true or false)
-        if showLabel then
-            o.label:SetText(string.format("~%d", math.floor(incoming + 0.5)))
-        end
+        setLabel(o, plainZero and 0 or incoming, hot)
     end)
     if not ok then
         o.layoutSignature = nil
@@ -361,6 +372,20 @@ end
 local function targetBar()
     if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("target")) end
     return type(_G.TargetFrameHealthBar) == "table" and _G.TargetFrameHealthBar or nil
+end
+
+local function focusBar()
+    if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("focus")) end
+    return type(_G.FocusFrameHealthBar) == "table" and _G.FocusFrameHealthBar or nil
+end
+
+local function targetTargetBar()
+    local frame = _G.TargetFrameToT or (type(_G.TargetFrame) == "table" and _G.TargetFrame.totFrame)
+    if type(frame) == "table" then
+        local bar = frame.HealthBar or frame.healthbar or frame.healthBar
+        if type(bar) == "table" then return bar end
+    end
+    return type(_G.TargetFrameToTHealthBar) == "table" and _G.TargetFrameToTHealthBar or nil
 end
 
 local function memberUnit(frame)
@@ -462,6 +487,8 @@ local function updateAll()
     end
     update("player", playerBar(), settings.player)
     update("target", targetBar(), settings.target)
+    update("focus", focusBar(), settings.focus)
+    update("targettarget", targetTargetBar(), settings.targettarget)
     if settings.party or settings.raid then
         for _, entry in ipairs(groupBars()) do
             local isRaid = entry.unit:match("^raid%d+$") ~= nil
@@ -492,6 +519,7 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 frame:RegisterEvent("PLAYER_TARGET_CHANGED")
+frame:RegisterEvent("PLAYER_FOCUS_CHANGED")
 for event in pairs(UNIT_EVENTS) do frame:RegisterEvent(event) end
 
 frame:SetScript("OnEvent", function(self, event, arg1)
@@ -515,7 +543,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         -- the group scans off the event path (a 40-man health tick storm stays cheap).
         return
     end
-    -- PLAYER_ENTERING_WORLD / GROUP_ROSTER_UPDATE / PLAYER_TARGET_CHANGED
+    -- World, group, target or focus changes.
     updateAll()
 end)
 
@@ -576,6 +604,29 @@ end
 
 if BIT.RegisterCommand then
     BIT.RegisterCommand("healprobe", function() ns.Probe() end)
+    -- ponytail: temporary HoT diagnosis; remove once the overlay is confirmed in game.
+    BIT.RegisterCommand("healdebug", function(unit)
+        if not unit or unit == "" then unit = "player" end
+        local bars = { player = playerBar, target = targetBar, focus = focusBar, targettarget = targetTargetBar }
+        if not bars[unit] then print("/upt healdebug player|target|focus|targettarget") return end
+        if not ns.Hots then print("Hots module not loaded") return end
+        for _, text in ipairs(ns.Hots.Debug(unit)) do print(text) end
+        local bar = bars[unit]()
+        local o = type(bar) == "table" and overlays[bar] or nil
+        local function safe(value)
+            if isSecret(value) then return "SECRET" end
+            return tostring(value)
+        end
+        local function shown(f) local ok, v = pcall(f.IsShown, f) return ok and safe(v) or "?" end
+        print(string.format("%s bar=%s width=%s overlay=%s enabled=%s", unit, tostring(bar),
+            type(bar) == "table" and safe(ask(bar.GetWidth, bar)) or "-", o and "yes" or "no", tostring(settings and settings[unit])))
+        if o and o.hot then
+            local ok, v = pcall(o.hot.bar.GetValue, o.hot.bar)
+            local okW, w = pcall(o.hot.clip.GetWidth, o.hot.clip)
+            print(string.format("hot layer: clip shown=%s bar shown=%s value=%s clipWidth=%s", shown(o.hot.clip),
+                shown(o.hot.bar), ok and safe(v) or "?", okW and safe(w) or "?"))
+        end
+    end)
 end
 
 -- The settings tab's sample: the very same overlay, on a mock bar, with plain numbers.
@@ -583,19 +634,24 @@ function ns.DrawSample(healthBar, maxHealth, heal, others, hot)
     if not settings then return false end
     local o = overlayFor(healthBar)
     if not o then return false end
+    if settings.target == false then
+        hideOverlay(o)
+        return true
+    end
+    local incoming = settings.allHealers and others or heal
     local ok = pcall(function()
-        layoutOverlay(o, healthBar)
+        layoutOverlay(o, healthBar, incoming ~= nil and incoming > 0)
         paintOverlay(o)
-        setLayer(o, maxHealth, heal)
-        if not heal or heal <= 0 then
+        setLayer(o, maxHealth, incoming)
+        if not incoming or incoming <= 0 then
             o.bar:SetMinMaxValues(0, maxHealth)
             o.bar:SetValue(0)
             o.clip:Show()
         end
         setLayer(o.others, maxHealth, settings.showOthers ~= false and not settings.allHealers and others or nil)
-        setLayer(o.hot, maxHealth, settings.showHots ~= false and hot or nil)
-        o.label:SetShown((settings.showText and heal and heal > 0) and true or false)
-        if settings.showText and heal and heal > 0 then o.label:SetText(string.format("~%d", math.floor(heal + 0.5))) end
+        local shownHot = settings.showHots ~= false and hot or nil
+        setLayer(o.hot, maxHealth, shownHot)
+        setLabel(o, incoming, shownHot)
     end)
     return ok
 end

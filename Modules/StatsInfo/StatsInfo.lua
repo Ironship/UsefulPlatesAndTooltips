@@ -19,7 +19,7 @@ local DEFAULTS = {
   specs = true,   -- how each spec of the class rates the item (Weights.lua)
   icons = true,   -- icons and one line each, instead of words
   bagMarkers = true,   -- the small green/red arrows over the game's own bag buttons
-  questMarkers = true, -- the one badge over a quest's reward buttons (an upgrade, or the coin)
+  questMarkers = true, -- every upgrade reward; double arrow on the best, or the coin if none
   bagSpecIcons = true, -- on an up arrow, the beneficiary spec's icon (+N for the rest)
   worldMarkers = true, -- the same arrows on loot, need/greed rolls and merchant buttons
   detail = "full",  -- tooltip density: "compact" (one line; Shift or "full" expands it)
@@ -1490,6 +1490,20 @@ local function bestPart(ratings)
   return best, spec, changed, allDown
 end
 
+-- The same best positive rating shown in the compact tooltip line, across all legal
+-- replacement paths. Quest rewards use it to identify the strongest visible upgrade.
+function M.BestUpgradePercent(link)
+  local best
+  for _, comparison in ipairs(M.Compare(link) or EMPTY) do
+    local ratings = M.SpecRatings(link, comparison.against, comparison.slots, comparison.offHand)
+    local part = ratings and bestPart(ratings)
+    if part and part.percent > 0 and (not best or part.percent > best) then
+      best = part.percent
+    end
+  end
+  return best
+end
+
 -- The small stream arrows BagMarkers paints on a bag button's corner, in a line of text.
 -- UI-MicroStream-Green ships pointing down (a download chevron), so the up arrow's |T
 -- escape mirrors it vertically (the top and bottom texels swapped) and its tip points up;
@@ -2242,12 +2256,12 @@ local function sampleLines(iconSize)
   return out
 end
 
--- The mock tooltip inside scene: a dark tooltip card, and under it a bag button mock with
--- the green up arrow and the beneficiary spec's icon. The arrow is the game's own small
+-- The mock tooltip inside scene: a dark tooltip card, a bag button mock, and sample quest
+-- reward buttons. The arrows are the game's own small
 -- stream arrow -- Interface\Buttons\UI-MicroStream-Green, the same file BagMarkers paints in
 -- a real bag button's corner -- not the old WHITE8X8 pieces (commit 221cdee moved the bag
--- and quest badges to the Blizzard arrows; the mock follows). scene.tipLines and the bag's
--- corner badge are re-laid-out by renderMockTooltip on every change.
+-- and quest badges to the Blizzard arrows; the mock follows). The tooltip, bag badge and
+-- sample quest markers are re-laid-out by renderMockTooltip on every change.
 local TIP_LINES = 20 -- the sample never needs more; the pool is padded with blanks
 local function buildMockTooltip(scene)
   local tip = CreateFrame("Frame", nil, scene, "BackdropTemplate")
@@ -2293,8 +2307,43 @@ local function buildMockTooltip(scene)
   scene.bagPlusN = plusN
   scene.caption = scene:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   scene.caption:SetJustifyH("LEFT")
-  scene.caption:SetText("on a bag button: green up for Affliction and one more spec -- "
-    .. "the game's own stream arrow")
+  scene.caption:SetText("Static sample: bag and quest arrows follow their settings; live upgrades "
+    .. "are rated against your gear.")
+  local rewards = CreateFrame("Frame", nil, scene)
+  rewards:SetSize(184, 48)
+  scene.questRewardRow = rewards
+  local rewardLabel = rewards:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  rewardLabel:SetJustifyH("LEFT")
+  rewardLabel:SetText("Quest rewards (sample)")
+  scene.questRewardLabel = rewardLabel
+  scene.questRewardIcons, scene.questRewardArrows, scene.questBestArrows = {}, {}, {}
+  local rewardTextures = {
+    "Interface\\Icons\\INV_Weapon_Shortblade_01",
+    "Interface\\Icons\\INV_Staff_13",
+    "Interface\\Icons\\INV_Misc_QuestionMark",
+  }
+  for i, texture in ipairs(rewardTextures) do
+    local item = CreateFrame("Frame", nil, rewards)
+    item:SetSize(32, 32)
+    local itemIcon = item:CreateTexture(nil, "BACKGROUND")
+    itemIcon:SetAllPoints()
+    itemIcon:SetTexture(texture)
+    scene.questRewardIcons[i] = item
+    if i < 3 then
+      local arrow = item:CreateTexture(nil, "OVERLAY")
+      arrow:SetTexture("Interface\\Buttons\\UI-MicroStream-Green")
+      arrow:SetTexCoord(0, 1, 1, 0)
+      arrow:SetVertexColor(1, 1, 1, 1)
+      scene.questRewardArrows[i] = arrow
+      if i == 2 then
+        local bestArrow = item:CreateTexture(nil, "OVERLAY")
+        bestArrow:SetTexture("Interface\\Buttons\\UI-MicroStream-Green")
+        bestArrow:SetTexCoord(0, 1, 1, 0)
+        bestArrow:SetVertexColor(1, 1, 1, 1)
+        scene.questBestArrows[i] = bestArrow
+      end
+    end
+  end
 end
 
 -- The mock tooltip redrawn at a style: font size, scale and opacity all show here, whether
@@ -2389,6 +2438,9 @@ local function renderMockTooltip(scene, style)
   scene.bagPlusN:ClearAllPoints()
   scene.bagPlusN:SetPoint("TOPRIGHT", scene.bagBadge, "TOPRIGHT", PLUSN_DX * k, PLUSN_DY * k)
   scene.bagPlusN:SetFont(font, math.max(7, math.floor(10 * k + 0.5)), outline)
+  local rewardSize = math.max(18, math.floor(30 * scale + 0.5))
+  local markerSize = math.max(14, math.floor(22 * scale + 0.5))
+  local showQuestArrows = (settings or DEFAULTS).questMarkers ~= false
   local iconSize = clamp(math.floor(12 * scale + 0.5), 8, 24)
   local lines = sampleLines(iconSize)
   local tip = scene.tip
@@ -2401,7 +2453,7 @@ local function renderMockTooltip(scene, style)
   -- The line box a row is laid out in: the row's own wrapped height, never shorter than the
   -- scaled one, so the rows spread apart when the scale grows.
   local rowBox = (fs + 4) * scale
-  -- Keep every sample row; place the bag and controls after the measured tooltip.
+  -- Keep every sample row; place the bag and reward preview after the measured tooltip.
   local y = 6
   for i, slot in ipairs(scene.tipLines) do
     local entry = lines[i]
@@ -2423,7 +2475,35 @@ local function renderMockTooltip(scene, style)
   tip:SetHeight(y + 2)
   bagTop = titleDepth + y + 16
   scene.bag:SetPoint("TOPLEFT", 12, -bagTop)
-  scene:SetHeight(bagTop + bagSize + captionH + 10)
+  local rewardRow = scene.questRewardRow
+  rewardRow:ClearAllPoints()
+  rewardRow:SetPoint("TOPLEFT", scene, "TOPLEFT", 12 + bagSize + 12, -bagTop)
+  rewardRow:SetSize(math.max(184, 3 * rewardSize + 16), captionFont + rewardSize + 8)
+  rewardRow:SetAlpha(opacity)
+  scene.questRewardLabel:ClearAllPoints()
+  scene.questRewardLabel:SetPoint("TOPLEFT", rewardRow, "TOPLEFT", 0, 0)
+  scene.questRewardLabel:SetFont(font, captionFont, outline)
+  scene.questRewardLabel:SetTextColor(0.7, 0.7, 0.7, opacity)
+  for i, item in ipairs(scene.questRewardIcons) do
+    item:ClearAllPoints()
+    item:SetPoint("TOPLEFT", rewardRow, "TOPLEFT", (i - 1) * (rewardSize + 8), -captionFont - 4)
+    item:SetSize(rewardSize, rewardSize)
+    local arrow = scene.questRewardArrows[i]
+    if arrow then
+      arrow:SetSize(markerSize, markerSize)
+      arrow:ClearAllPoints()
+      arrow:SetPoint("TOPRIGHT", item, "TOPRIGHT", -1, -1)
+      arrow:SetShown(showQuestArrows)
+    end
+    local bestArrow = scene.questBestArrows[i]
+    if bestArrow then
+      bestArrow:SetSize(math.floor(markerSize * 0.75), math.floor(markerSize * 0.75))
+      bestArrow:ClearAllPoints()
+      bestArrow:SetPoint("TOPRIGHT", item, "TOPRIGHT", -8, -8)
+      bestArrow:SetShown(showQuestArrows)
+    end
+  end
+  scene:SetHeight(bagTop + math.max(bagSize, captionFont + rewardSize + 8) + captionH + 10)
   if scene.onLayout then scene.onLayout() end
 end
 
@@ -2660,8 +2740,9 @@ BIT.RegisterTab("StatsInfo", {
       "+N for the rest of the specs it is an upgrade for, ~ for the approximate healer score. "
         .. "Needs the arrows on.")
     box("questMarkers", "Quest reward arrows",
-      "One badge over a quest's rewards: a green up arrow on the first upgrade, or a coin on "
-        .. "the choice that sells for the most when nothing is an upgrade.")
+      "A green up arrow on every usable upgrade. The reward with the highest positive "
+        .. "'% better' rating shown in its tooltip gets a second arrow. If nothing is an "
+        .. "upgrade, a coin marks the choice with the highest vendor price.")
     box("worldMarkers", "Arrows on loot, rolls and merchants",
       "The same bag verdict on loot slots, need/greed rolls and merchant buttons.")
     -- The row dims and disables its check box itself while the bag arrows are off.

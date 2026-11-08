@@ -66,6 +66,7 @@ local DEFAULTS = {
     pulseOutline = true,
     showKillIcon = true,
     killIcon = "skull",
+    showKillSpellIcon = true,
     -- The label
     showLabel = true,
     labelMode = "amount",  -- amount | range | percent
@@ -252,6 +253,24 @@ local function spellName(spellID)
     if type(fn) ~= "function" then return nil end
     local ok, name = pcall(fn, spellID)
     if ok and not isSecret(name) and type(name) == "string" then return name end
+    return nil
+end
+
+local function spellTexture(spellID)
+    if isSecret(spellID) or type(spellID) ~= "number" then return nil end
+    local fn = C_Spell and C_Spell.GetSpellTexture
+    if type(fn) == "function" then
+        local ok, texture = pcall(fn, spellID)
+        if ok and not isSecret(texture) and (type(texture) == "number" or type(texture) == "string") then
+            return texture
+        end
+    end
+    if type(GetSpellTexture) == "function" then
+        local ok, texture = pcall(GetSpellTexture, spellID)
+        if ok and not isSecret(texture) and (type(texture) == "number" or type(texture) == "string") then
+            return texture
+        end
+    end
     return nil
 end
 
@@ -1026,6 +1045,7 @@ end
 -- end; the icon rides the bar's fill edge. Short of lethal, that edge sits left of the window
 -- (clipped away); at lethal it reaches the window's right edge and slides into view.
 local KILL_BAR_LENGTH = 10000
+local TARGET_KILL_SPELL_ICON_SIZE = 36
 local killWindow = CreateFrame("Frame", "UsefulPlatesAndTooltips_CastPredictionKill", UIParent)
 killWindow:SetClipsChildren(true)
 killWindow:Hide()
@@ -1054,8 +1074,16 @@ labelLayer:Hide()
 -- settings preview's mock frames. previewState is tried first: while the settings window is open
 -- out of combat, the preview keeps the marker (see Options.lua).
 local healthBar, skullAnchor, targetHost
-local previewHost, previewState
+local previewHost, previewState, previewPlate
 local appliedSignature
+
+local function updatePreviewHealth(host)
+    if not (host and host.healthBar and previewState) then return end
+    local health, maxHealth = number(previewState.health), number(previewState.maxHealth)
+    if not health or not maxHealth or maxHealth <= 0 then return end
+    host.healthBar:SetMinMaxValues(0, 100)
+    host.healthBar:SetValue(math.max(0, math.min(100, health / maxHealth * 100)))
+end
 
 -- The kill icon sits centred on the portrait (the preview's host carries one too).
 local function positionKill()
@@ -1070,6 +1098,7 @@ end
 
 function ns.setDisplayHost(host)
     previewHost = host
+    updatePreviewHealth(host)
     healthBar = host and host.healthBar or nil
     skullAnchor = host and (host.portrait or host.layerFrame) or nil
     targetHost = host and host.layerFrame or nil
@@ -1090,6 +1119,8 @@ end
 -- state: { name, min, max, value, school, health (percent of max), samples } or nil.
 function ns.setPreviewState(state)
     previewState = state
+    updatePreviewHealth(previewHost)
+    updatePreviewHealth(previewPlate)
     appliedSignature = nil
 end
 
@@ -1207,7 +1238,7 @@ local function applyAppearance(state)
     if not settings then return end
     local parts = {}
     for _, key in ipairs({ "fillColor", "fillOpacity", "outlineStyle", "outlineColor",
-        "outlineOpacity", "pulseOutline", "showKillIcon", "killIcon", "showLabel", "labelMode", "labelPosition",
+        "outlineOpacity", "pulseOutline", "showKillIcon", "killIcon", "showKillSpellIcon", "showLabel", "labelMode", "labelPosition",
         "labelSize", "labelColor", "plateIconSize", "castTexture", "channelTexture", "finisherTexture",
         "finisherColor", "finisherOpacity" }) do
         parts[#parts + 1] = tostring(settings[key])
@@ -1215,6 +1246,7 @@ local function applyAppearance(state)
     parts[#parts + 1] = tostring(state and state.school)
     parts[#parts + 1] = tostring(state and state.channel)
     parts[#parts + 1] = tostring(state and state.preview)
+    parts[#parts + 1] = tostring(state and state.spellID)
     local signature = table.concat(parts, "|")
     if signature == appliedSignature then return end
     appliedSignature = signature
@@ -1237,10 +1269,12 @@ local function applyAppearance(state)
     end
 
     local icon = findById(KILL_ICONS, settings.killIcon)
-    killIcon:SetTexture(icon.path)
-    killIcon:SetSize(settings.plateIconSize, settings.plateIconSize)
-    killWindow:SetSize(settings.plateIconSize, settings.plateIconSize)
-    killBar:SetSize(KILL_BAR_LENGTH, settings.plateIconSize)
+    local spellIcon = settings.showKillSpellIcon and spellTexture(state and state.spellID)
+    local size = spellIcon and TARGET_KILL_SPELL_ICON_SIZE or settings.plateIconSize
+    killIcon:SetTexture(spellIcon or icon.path)
+    killIcon:SetSize(size, size)
+    killWindow:SetSize(size, size)
+    killBar:SetSize(KILL_BAR_LENGTH, size)
     if settings.showKillIcon then killPulse:Play() else killPulse:Stop() end
     positionKill()
 
@@ -1309,7 +1343,7 @@ local function drawMarker(damage, maxHealth, health, state)
     markerClip:SetShown(settings.showMarker)
     marker:SetShown(settings.showMarker)
     labelLayer:SetShown(settings.showMarker)
-    killWindow:SetShown(settings.showMarker and settings.showKillIcon and state.kill ~= false)
+    killWindow:SetShown(settings.showKillIcon and state.kill ~= false)
     label:SetText(labelText(state, maxHealth))
     return true
 end
@@ -1335,7 +1369,7 @@ local function updateMarker(now)
         local prediction = cast.prediction
         return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
             name = cast.name, min = prediction.min, max = prediction.max,
-            value = prediction.value, school = cast.view.school,
+            value = prediction.value, school = cast.view.school, spellID = cast.spellID,
         })
     end
     if not UnitExists("target") or targetIsDead() then
@@ -1351,7 +1385,7 @@ local function updateMarker(now)
     local prediction = cast.prediction
     return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
         name = cast.name, min = prediction.min, max = prediction.max, value = prediction.value,
-        school = cast.view.school, channel = cast.channel, preview = cast.preview,
+        school = cast.view.school, channel = cast.channel, preview = cast.preview, spellID = cast.spellID,
     })
 end
 
@@ -1529,7 +1563,7 @@ local function drawFrameWidgets(w, entry, now)
     local prediction = cast.prediction
     local state = {
         name = cast.name, min = prediction.min, max = prediction.max, value = prediction.value,
-        school = cast.view.school, channel = cast.channel, preview = cast.preview,
+        school = cast.view.school, channel = cast.channel, preview = cast.preview, spellID = cast.spellID,
     }
     if not layoutDamage(w.marker, w.clip, bar) then hideFrameWidgets(w); return end
     local barMask = BIT.UI and BIT.UI.BarMask
@@ -1566,14 +1600,14 @@ local function drawFrameWidgets(w, entry, now)
     w.killWindow:ClearAllPoints()
     w.killWindow:SetPoint("CENTER", entry.portrait or entry.host or bar, "CENTER")
     local icon = findById(KILL_ICONS, settings.killIcon)
-    w.killIcon:SetTexture(icon.path)
+    w.killIcon:SetTexture((settings.showKillSpellIcon and spellTexture(cast.spellID)) or icon.path)
     local size = settings.plateIconSize
     w.killWindow:SetSize(size, size)
     w.killBar:SetSize(KILL_BAR_LENGTH, size)
     w.killIcon:SetSize(size, size)
     w.killBar:SetMinMaxValues(0, UnitHealth(unit))
     w.killBar:SetValue(number(state.min) or prediction.value)
-    w.killWindow:SetShown(settings.showMarker and settings.showKillIcon)
+    w.killWindow:SetShown(settings.showKillIcon)
 end
 
 local function refreshFrameOverlays(now, recipient)
@@ -1756,10 +1790,10 @@ end
 
 -- The options window's mock nameplate: { plate, healthBar }, drawn by the same code as real
 -- plates with plain numbers (see Options.lua).
-local previewPlate
 function ns.setPlatePreview(host)
     local old = previewPlate
     previewPlate = host
+    updatePreviewHealth(host)
     if old and old ~= host then
         local w = widgetsByPlate[old.plate]
         if w then hidePlateWidgets(w) end
@@ -1939,6 +1973,11 @@ end
 
 function ns.ensureDB()
     settings = BIT.Settings("CastPrediction", DEFAULTS)
+    if settings.killingSpellIconDefaultVersion ~= 1 then
+        -- Legacy saves cannot distinguish the old default from a manually selected false.
+        settings.showKillSpellIcon = true
+        settings.killingSpellIconDefaultVersion = 1
+    end
     if settings.markerStyleVersion ~= 2 then
         settings.fillColor, settings.plateFillColor = "school", "school"
         settings.markerStyleVersion = 2

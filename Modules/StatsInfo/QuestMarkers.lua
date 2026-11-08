@@ -1,6 +1,6 @@
--- UsefulPlatesAndTooltips module StatsInfo: over a quest's reward buttons, one small badge that answers
--- the only question the screen asks -- which reward to take: a green up arrow on an upgrade,
--- or a coin on the choice that sells for the most when nothing is an upgrade.
+-- UsefulPlatesAndTooltips module StatsInfo: arrows over every usable quest reward upgrade,
+-- doubled on the one with the strongest positive rating; a coin marks the best sale choice
+-- only when no reward upgrades.
 -- Copyright (c) 2026 Ironship. GPL-3.0-or-later, see LICENSE.
 --
 -- Written from scratch after the IDEA of Pawn's quest reward advisor (Pawn is CC BY-NC-ND,
@@ -9,14 +9,14 @@
 -- M.SpecRatings and the tri-state M.BagVerdictState against what the character wears -- never
 -- another addon's weights, so a badge never disagrees with the tooltip's score lines.
 --
--- Decision rules (quest-reward-advisor-r1):
---   * exactly ONE badge per rewards screen (a reward button never carries two), chosen by
---     priority: an upgrade first, the vendor coin only when nothing is an upgrade.
---   * upgrade: a reward whose item M.BagVerdictState rates unequivocally "up" against what is
---     worn in its slot AND which the player can use now (the quest API's isUsable or the
---     client's own C_Item.IsUsableItem; an explicit "cannot use" from either side vetoes).
---     The first such reward in display order gets the arrow: choices before fixed rewards,
---     each in its own index order -- that is also the order the reward buttons are numbered.
+-- Decision rules:
+--   * every usable reward whose item M.BagVerdictState rates unequivocally "up" gets one
+--     arrow; the highest positive "% better" rating shown by the tooltip gets a second.
+--   * ties and unrated fallback upgrades keep the first in display order as the best marker.
+--   * an upgrade must be usable now (the quest API's isUsable or the client's own
+--     C_Item.IsUsableItem; an explicit "cannot use" from either side vetoes).
+--     Choices precede fixed rewards, each in its index order, matching the quest UI buttons.
+--   * the vendor coin is considered only when nothing is an upgrade.
 --   * coin: the CHOICE with the highest vendor sell price (C_Item.GetItemInfo's 11th return),
 --     strictly greater than the rest so a tie keeps the first; only among choices (a fixed
 --     reward is granted anyway) and only for a real positive price.
@@ -71,15 +71,14 @@ local UP_R, UP_G, UP_B = 0.302, 1, 0.302
 local COIN = "Interface\\Icons\\INV_Misc_Coin_01"
 local ARROW_SIZE = 24                      -- the bag badges' corner box, drawn the same way
 local ARROW_DX, ARROW_DY = -2, -2          -- TOPRIGHT of the button, 2px inside the corner
+local SECOND_ARROW_SIZE = 18
+local SECOND_ARROW_DX, SECOND_ARROW_DY = -9, -9
 -- The FALLBACK's up arrow pieces (tip at the TOP): { width, height, TOPRIGHT-x, TOPRIGHT-y } in
 -- the button's corner, edge to edge like the bag badges' fallback.
 local UP_PIECES = { { 2, 2, -4, -4 }, { 6, 3, -2, -6 }, { 10, 3, 0, -9 }, { 2, 8, -4, -12 } }
 local COIN_SIZE, COIN_DX, COIN_DY = 12, -2, -2
 
--- One badge per reward index, lazily created and reused: QuestInfo reuses its reward buttons
--- between quests, so the textures are pooled by index (and moved along when another button
--- stands at that index) exactly like the bag markers pool per button. Hide first, show at
--- most one: a hidden badge never leaves stale pixels behind for the next quest.
+-- Markers are pooled by reward index because QuestInfo reuses its buttons between quests.
 local overlays = {} -- reward index -> { button, arrow = texture, pieces = {texture x4} on the
                     -- primitive fallback only, coin = texture, mode }
 M._questOverlays = overlays -- the tests read these; not part of the addon's interface
@@ -98,7 +97,9 @@ end
 local function hideOverlays()
   for _, o in pairs(overlays) do
     if o.arrow then o.arrow:Hide() end
+    if o.bestArrow then o.bestArrow:Hide() end
     for _, t in ipairs(o.pieces or {}) do t:Hide() end
+    for _, t in ipairs(o.bestPieces or {}) do t:Hide() end
     if o.coin then o.coin:Hide() end
     o.mode = nil
   end
@@ -106,17 +107,18 @@ end
 
 -- The fallback's four primitive pieces: created once per overlay and only when this client
 -- cannot draw the Blizzard arrow, then pooled like every texture here (never created twice).
-local function fallbackPieces(o, button)
-  if o.pieces then return o.pieces end
-  o.pieces = {}
+local function fallbackPieces(o, button, best)
+  local key = best and "bestPieces" or "pieces"
+  if o[key] then return o[key] end
+  o[key] = {}
   for i = 1, #UP_PIECES do
     local t = button:CreateTexture(nil, "OVERLAY")
     -- ElvUI-style skins repaint a button's own OVERLAY layers; draw sublayer 7 keeps the
     -- badge above whatever the skin puts there (the pattern Pawn's overlay uses too).
     if type(t.SetDrawLayer) == "function" then t:SetDrawLayer("OVERLAY", 7) end
-    o.pieces[i] = t
+    o[key][i] = t
   end
-  return o.pieces
+  return o[key]
 end
 
 local function overlayFor(index, button)
@@ -125,8 +127,9 @@ local function overlayFor(index, button)
   if o then
     -- the reward button pool moved this index to another button: the same textures move too
     o.button = button
-    local kids = { o.arrow, o.coin }
+    local kids = { o.arrow, o.bestArrow, o.coin }
     for _, t in ipairs(o.pieces or {}) do kids[#kids + 1] = t end
+    for _, t in ipairs(o.bestPieces or {}) do kids[#kids + 1] = t end
     for _, t in ipairs(kids) do
       if type(t) == "table" and type(t.SetParent) == "function" then t:SetParent(button) end
     end
@@ -134,8 +137,9 @@ local function overlayFor(index, button)
   end
   o = { button = button }
   o.arrow = button:CreateTexture(nil, "OVERLAY")
+  o.bestArrow = button:CreateTexture(nil, "OVERLAY")
   o.coin = button:CreateTexture(nil, "OVERLAY")
-  for _, t in ipairs({ o.arrow, o.coin }) do
+  for _, t in ipairs({ o.arrow, o.bestArrow, o.coin }) do
     -- ElvUI-style skins repaint a button's own OVERLAY layers; draw sublayer 7 keeps the
     -- badge above whatever the skin puts there (the pattern Pawn's overlay uses too).
     if type(t.SetDrawLayer) == "function" then t:SetDrawLayer("OVERLAY", 7) end
@@ -144,32 +148,47 @@ local function overlayFor(index, button)
   return o
 end
 
-local function drawUpgrade(o, button)
+local function drawUpgrade(o, button, best)
   decideArrowMode(o.arrow)
   if arrowMode == "blizzard" then
     for _, t in ipairs(o.pieces or {}) do t:Hide() end
-    local t = o.arrow
-    t:SetTexture(UP_TEXTURE)
-    -- the file ships pointing down (a download chevron): mirrored vertically the tip is at
-    -- the top. Set on every draw -- the pooled texture is shared with whatever drew before.
-    t:SetTexCoord(0, 1, 1, 0)
-    t:SetVertexColor(1, 1, 1, 1) -- the file's own Blizzard green, never tinted here
-    t:SetSize(ARROW_SIZE, ARROW_SIZE)
-    t:ClearAllPoints()
-    t:SetPoint("TOPRIGHT", button, "TOPRIGHT", ARROW_DX, ARROW_DY)
-    t:Show()
-  else
-    -- the white-primitive fallback: the old arrow, unchanged geometry and colours
-    o.arrow:Hide()
-    local ts = fallbackPieces(o, button)
-    for i, p in ipairs(UP_PIECES) do
-      local t = ts[i]
-      t:SetTexture(WHITE)
-      t:SetVertexColor(UP_R, UP_G, UP_B, 1)
-      t:SetSize(p[1], p[2])
+    for _, t in ipairs(o.bestPieces or {}) do t:Hide() end
+    local function draw(t, size, dx, dy)
+      t:SetTexture(UP_TEXTURE)
+      t:SetTexCoord(0, 1, 1, 0)
+      t:SetVertexColor(1, 1, 1, 1)
+      t:SetSize(size, size)
       t:ClearAllPoints()
-      t:SetPoint("TOPRIGHT", button, "TOPRIGHT", p[3], p[4])
+      t:SetPoint("TOPRIGHT", button, "TOPRIGHT", dx, dy)
       t:Show()
+    end
+    draw(o.arrow, ARROW_SIZE, ARROW_DX, ARROW_DY)
+    if best then
+      draw(o.bestArrow, SECOND_ARROW_SIZE, SECOND_ARROW_DX, SECOND_ARROW_DY)
+    else
+      o.bestArrow:Hide()
+    end
+  else
+    -- the white-primitive fallback keeps the old arrow geometry for ordinary upgrades
+    o.arrow:Hide()
+    o.bestArrow:Hide()
+    local function draw(ts, size, dx, dy)
+      local scale = size / ARROW_SIZE
+      for i, p in ipairs(UP_PIECES) do
+        local t = ts[i]
+        t:SetTexture(WHITE)
+        t:SetVertexColor(UP_R, UP_G, UP_B, 1)
+        t:SetSize(p[1] * scale, p[2] * scale)
+        t:ClearAllPoints()
+        t:SetPoint("TOPRIGHT", button, "TOPRIGHT", dx + p[3] * scale, dy + p[4] * scale)
+        t:Show()
+      end
+    end
+    draw(fallbackPieces(o, button), ARROW_SIZE, 0, 0)
+    if best then
+      draw(fallbackPieces(o, button, true), SECOND_ARROW_SIZE, SECOND_ARROW_DX, SECOND_ARROW_DY)
+    else
+      for _, t in ipairs(o.bestPieces or {}) do t:Hide() end
     end
   end
   if o.coin then o.coin:Hide() end
@@ -178,7 +197,9 @@ end
 
 local function drawCoin(o, button)
   if o.arrow then o.arrow:Hide() end
+  if o.bestArrow then o.bestArrow:Hide() end
   for _, t in ipairs(o.pieces or {}) do t:Hide() end
+  for _, t in ipairs(o.bestPieces or {}) do t:Hide() end
   o.coin:SetTexture(COIN)
   o.coin:SetSize(COIN_SIZE, COIN_SIZE)
   o.coin:ClearAllPoints()
@@ -331,7 +352,24 @@ local function isUpgrade(entry)
   return state == "ok" and type(verdict) == "table" and verdict.verdict == "up"
 end
 
--- What the rewards on screen get: clear every badge first, then show at most one. Called
+local function selectUpgradeRewards(rewards)
+  local upgrades, best, bestPercent = {}, nil, nil
+  for _, reward in ipairs(rewards) do
+    if reward.upgrade then
+      upgrades[#upgrades + 1] = reward
+      local percent = reward.bestPercent
+      if type(percent) == "number" and percent == percent and percent > 0 and percent < math.huge
+          and (not bestPercent or percent > bestPercent) then
+        best, bestPercent = reward, percent
+      end
+    end
+  end
+  return upgrades, best or upgrades[1]
+end
+M._selectUpgradeRewards = selectUpgradeRewards -- the selection regression test uses this pure seam
+
+-- What the rewards on screen get: clear every pooled marker first, then draw every upgrade
+-- and the coin fallback only if none qualify. Called
 -- after QuestInfo_Display (when the template draws the rewards block) and on the quest
 -- events, coalesced through scheduleRefresh below.
 local function updateQuestRewards()
@@ -356,32 +394,38 @@ local function updateQuestRewards()
     -- the fixed rewards sit after the choices on the button row (the quest UI's own numbering)
     rewards[#rewards + 1] = rewardEntry("reward", i, i + nChoices, questLog, questID)
   end
-  -- One badge on the whole screen: the first upgrade in display order, else the coin on the
-  -- most valuable choice. A second upgrade never earns a second badge (one look, one answer),
-  -- and a coin never shares the screen with an upgrade.
-  local picked, mode
   for _, r in ipairs(rewards) do
     if isUpgrade(r) then
-      picked, mode = r, "upgrade"
-      break
-    end
-  end
-  if not picked then
-    local best, bestPrice = nil, 0
-    for _, r in ipairs(rewards) do
-      if r.kind == "choice" then
-        local unitPrice = sellPriceOf(r.link)
-        local price = unitPrice and r.quantity and unitPrice * r.quantity
-        if price and price < math.huge and price > bestPrice then best, bestPrice = r, price end
+      r.upgrade = true
+      if type(M.BestUpgradePercent) == "function" then
+        r.bestPercent = M.BestUpgradePercent(r.link)
       end
     end
-    picked, mode = best, "coin"
+  end
+  local upgrades, bestUpgrade = selectUpgradeRewards(rewards)
+  if #upgrades > 0 then
+    for _, reward in ipairs(upgrades) do
+      local button = ask(QuestInfo_GetRewardButton, rewardsFrame, reward.index)
+      if type(button) == "table" and type(button.CreateTexture) == "function" then
+        drawUpgrade(overlayFor(reward.index, button), button, reward == bestUpgrade)
+      end
+    end
+    return
+  end
+  local picked
+  local bestPrice = 0
+  for _, r in ipairs(rewards) do
+    if r.kind == "choice" then
+      local unitPrice = sellPriceOf(r.link)
+      local price = unitPrice and r.quantity and unitPrice * r.quantity
+      if price and price < math.huge and price > bestPrice then picked, bestPrice = r, price end
+    end
   end
   if not picked then return end
   local button = ask(QuestInfo_GetRewardButton, rewardsFrame, picked.index)
   if type(button) ~= "table" or type(button.CreateTexture) ~= "function" then return end
   local o = overlayFor(picked.index, button)
-  if mode == "upgrade" then drawUpgrade(o, button) else drawCoin(o, button) end
+  drawCoin(o, button)
 end
 M.UpdateQuestRewards = updateQuestRewards -- test seam, not part of the addon's interface
 
