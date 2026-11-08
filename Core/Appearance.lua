@@ -757,7 +757,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
 
   local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", x, y)
-  title:SetText("Appearance")
+  title:SetText(BIT.L("Appearance"))
   y = y - 30
 
   -- Scope, raw role names and the font path live in this frame. It stays hidden
@@ -767,7 +767,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   panel.advanced = advanced
   local ax, ay = 12, -8
   local advancedButton
-  advancedButton = BIT.UI.Button(panel, "Advanced", 160, function()
+  advancedButton = BIT.UI.Button(panel, BIT.L("Advanced"), 160, function()
     panel:SetAdvanced(not panel.advancedOpen)
   end)
   advancedButton:SetPoint("TOPLEFT", x, y)
@@ -775,12 +775,12 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   controls.advancedButton = advancedButton
 
   local scopeButton
-  scopeButton = BIT.UI.Button(advanced, "Editing: this module", 300, function()
+  scopeButton = BIT.UI.Button(advanced, BIT.L("Editing: this module"), 300, function()
     scopeIsGlobal = not scopeIsGlobal
-    scopeButton:SetText(scopeIsGlobal and "Editing: all modules" or "Editing: this module")
+    scopeButton:SetText(BIT.L(scopeIsGlobal and "Editing: all modules" or "Editing: this module"))
     if controls.reset then
-      controls.reset:SetText(scopeIsGlobal and "Reset shared appearance (all modules)"
-        or "Reset this module's appearance")
+      controls.reset:SetText(BIT.L(scopeIsGlobal and "Reset shared appearance (all modules)"
+        or "Reset this module's appearance"))
     end
     refreshPanel()
   end)
@@ -790,7 +790,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
 
   local paletteNote = advanced:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   paletteNote:SetPoint("TOPLEFT", ax, ay)
-  paletteNote:SetText("Palette (arbitrary RGB)")
+  paletteNote:SetText(BIT.L("Palette (arbitrary RGB)"))
   ay = ay - 24
 
   local showRgbFields
@@ -806,7 +806,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     BIT.UI.RoundBorder(swatch, { 0.6, 0.6, 0.6, 0.65 })
     local label = advanced:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     label:SetPoint("LEFT", swatch, "RIGHT", 4, 0)
-    label:SetText(role)
+    label:SetText(BIT.L(role))
     local function open()
       local style = currentStyle()
       local openedScope = scopeKey() -- fixed at opening, never at drag time
@@ -881,7 +881,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     showRgbFields = function(role)
     local c = currentStyle().colors[role]
     rgbRole = role
-    rgbTitle:SetText("RGB " .. role .. ":")
+    rgbTitle:SetText(string.format(BIT.L("RGB %s:"), BIT.L(role)))
     rgbBoxes.R:SetText(string.format("%d", math.floor(c[1] * 255 + 0.5)))
     rgbBoxes.G:SetText(string.format("%d", math.floor(c[2] * 255 + 0.5)))
     rgbBoxes.B:SetText(string.format("%d", math.floor(c[3] * 255 + 0.5)))
@@ -893,7 +893,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   if capabilities.font then
     local fontLabel = advanced:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     fontLabel:SetPoint("TOPLEFT", ax, ay)
-    fontLabel:SetText("Font path:")
+    fontLabel:SetText(BIT.L("Font path:"))
     local fontBox = CreateFrame("EditBox", nil, advanced, "InputBoxTemplate")
     fontBox:SetSize(math.max(80, width - 180), 20)
     fontBox:SetFont(DEFAULTS.font, 12, "")
@@ -971,7 +971,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   -- effective defaults (product overlaid with its registered module defaults),
   -- editing all modules writes the shared product defaults only. A global preset
   -- therefore never leaks one module's palette into unrelated modules.
-  local presetButton = BIT.UI.Button(panel, "Minimal preset", 160, function()
+  local presetButton = BIT.UI.Button(panel, BIT.L("Minimal preset"), 160, function()
     local source = scopeIsGlobal and Style.Defaults or Style.GetDefaults(moduleName)
     commit("colors", source.colors)
     for key, v in pairs(source) do
@@ -979,7 +979,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     end
   end)
   presetButton:SetPoint("TOPLEFT", x, y)
-  local resetButton = BIT.UI.Button(panel, "Reset this module's appearance", 300, function()
+  local resetButton = BIT.UI.Button(panel, BIT.L("Reset this module's appearance"), 300, function()
     Style.Reset(scopeKey())
   end)
   if width < 500 then
@@ -994,8 +994,8 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
 
   local resetHint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   resetHint:SetPoint("TOPLEFT", x, y)
-  resetHint:SetText("Reset changes only the appearance: gameplay settings, sounds, anchors and "
-    .. "learned values stay.")
+  resetHint:SetText(BIT.L("Reset changes only the appearance: gameplay settings, sounds, anchors and "
+    .. "learned values stay."))
   resetHint:SetWidth(width - 24)
   resetHint:SetWordWrap(true)
   y = y - math.max(24, (resetHint:GetStringHeight() or 14) + 10)
@@ -1037,7 +1037,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     sample:SetSize(width - 24, 96)
     local sampleTitle = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     sampleTitle:SetPoint("TOPLEFT", 0, 0)
-    sampleTitle:SetText("Sample: fictitious data, not the live game")
+    sampleTitle:SetText(BIT.L("Sample: fictitious data, not the live game"))
     sample.markers = Style.CreateMarkers(sample, SAMPLE_MARKERS_TOTAL)
     sample.markers:SetPoint("TOPLEFT", 0, -22)
     sample.bar = CreateFrame("StatusBar", nil, sample)
@@ -1055,7 +1055,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
       sample.barLabel:SetText(string.format("%d/%d", SAMPLE_BAR_VALUE, SAMPLE_BAR_MAX))
       Style.ApplyText(sample.barLabel, style, "text")
       sample.textLine:SetPoint("TOPLEFT", sample.bar, "BOTTOMLEFT", 0, -10)
-      sample.textLine:SetText(SAMPLE_TEXT)
+      sample.textLine:SetText(BIT.L(SAMPLE_TEXT))
       Style.ApplyText(sample.textLine, style, "text")
       sampleHeight = 70 + sample.markers:GetHeight() + style.fontSize
       if panel.layout then panel.layout() end
@@ -1101,7 +1101,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     if panel.advancedOpen then h = h + advanced:GetHeight() end
     panel:SetSize(width, h)
     if controls.advancedButton then
-      controls.advancedButton:SetText(panel.advancedOpen and "Hide advanced" or "Advanced")
+      controls.advancedButton:SetText(BIT.L(panel.advancedOpen and "Hide advanced" or "Advanced"))
     end
     if type(panel.onLayout) == "function" then panel.onLayout() end
   end

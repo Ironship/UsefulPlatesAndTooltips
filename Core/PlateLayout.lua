@@ -412,9 +412,9 @@ function Plate.ClashText(rows)
       parts[#parts + 1] = text
     end
   end
-  check(rows.hunter, rows.dots, "Hunter rail overlaps combo dots.")
-  check(rows.hunter, rows.shards, "Hunter rail overlaps shard diamonds.")
-  check(rows.dots, rows.shards, "Combo dots overlap shard diamonds.")
-  if #parts == 0 then return "Nameplate lanes are clear." end
+  check(rows.hunter, rows.dots, BIT.L("Hunter rail overlaps combo dots."))
+  check(rows.hunter, rows.shards, BIT.L("Hunter rail overlaps shard diamonds."))
+  check(rows.dots, rows.shards, BIT.L("Combo dots overlap shard diamonds."))
+  if #parts == 0 then return BIT.L("Nameplate lanes are clear.") end
   return table.concat(parts, " ")
 end

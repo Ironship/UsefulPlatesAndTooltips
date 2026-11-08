@@ -427,7 +427,7 @@ local function buildTabs(parent, area)
         frame:Hide()
         areas[name] = frame
         local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
-        button:SetText(name)
+        button:SetText(BIT.L(name))
         button.text = button:GetFontString()
         button:SetSize(BIT.UI.TabWidth(button.text), 26)
         button.text:SetPoint("CENTER")
@@ -465,7 +465,7 @@ local function buildPreview(pane)
 
     local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText("Live preview")
+    title:SetText(BIT.L("Live preview"))
     local titleRule = pane:CreateTexture(nil, "ARTWORK")
     titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     titleRule:SetHeight(1)
@@ -492,7 +492,7 @@ local function buildPreview(pane)
     pane.combatNote:SetPoint("CENTER", scene, "CENTER")
     pane.combatNote:SetWidth(PREVIEW_WIDTH - 60)
     pane.combatNote:SetJustifyH("CENTER")
-    pane.combatNote:SetText("In combat: the marker is on your target. The preview resumes after combat.")
+    pane.combatNote:SetText(BIT.L("In combat: the marker is on your target. The preview resumes after combat."))
     pane.combatNote:Hide()
 
     -- TRY IT: the preview's own numbers, never settings.
@@ -513,7 +513,7 @@ local function buildPreview(pane)
     spellRow:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
     local spellLabel = spellRow:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     spellLabel:SetPoint("LEFT", 0, 0)
-    spellLabel:SetText("Sample spell")
+    spellLabel:SetText(BIT.L("Sample spell"))
     pane.spellButton = BIT.UI.Button(spellRow, currentSpell().name, 150, function()
         preview.spell = preview.spell % #SAMPLE_SPELLS + 1
         updatePreview()
@@ -524,8 +524,8 @@ local function buildPreview(pane)
     hint:SetPoint("TOPLEFT", spellRow, "BOTTOMLEFT", 0, -10)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
-    hint:SetText("Same marker on mock frames; sample damage is illustrative. Raise target health to hide "
-        .. "the kill icon. While in combat, the marker returns to your target.")
+    hint:SetText(BIT.L("Same marker on mock frames; sample damage is illustrative. Raise target health to hide "
+        .. "the kill icon. While in combat, the marker returns to your target."))
 
     pane.title = title
     pane.hint = hint
@@ -564,8 +564,8 @@ if BIT.RegisterTab then
             note1:SetPoint("TOPLEFT", 12, -6)
             note1:SetPoint("RIGHT", -12, 0)
             note1:SetJustifyH("LEFT")
-            note1:SetText("The marker shows what the description and your spell power give; hits seen in "
-                .. "combat tune it. Crits, procs and resists stay unpredictable.")
+            note1:SetText(BIT.L("The marker shows what the description and your spell power give; hits seen in "
+                .. "combat tune it. Crits, procs and resists stay unpredictable."))
 
             local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
             pane:SetPoint("TOPLEFT", 10, -46)
@@ -604,10 +604,10 @@ if BIT.RegisterTab then
             sample:SetSize(PREVIEW_WIDTH, 90)
             sample.title = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             sample.title:SetPoint("TOPLEFT", 12, -8)
-            sample.title:SetText("CastPrediction sample")
+            sample.title:SetText(BIT.L("CastPrediction sample"))
             sample.label = sample:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             sample.label:SetPoint("TOPLEFT", 12, -34)
-            sample.label:SetText("Frostbolt 410-450 (estimate)")
+            sample.label:SetText(BIT.L("Frostbolt 410-450 (estimate)"))
             return sample
         end,
         previewRender = renderPreview,

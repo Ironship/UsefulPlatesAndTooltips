@@ -489,7 +489,7 @@ local function buildRangePreview(parent)
   scene:SetSize(560, 180)
   scene.title = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   scene.title:SetPoint("TOPLEFT", 12, -4)
-  scene.title:SetText("Range sample (not your target)")
+  scene.title:SetText(BIT.L("Range sample (not your target)"))
   scene.cases = {}
   for i, kind in ipairs({ "nameplate", "targetFrame" }) do
     local sample = { kind = kind }
@@ -513,7 +513,7 @@ local function buildRangePreview(parent)
     end
     sample.label = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     sample.label:SetPoint("TOPLEFT", 240, y)
-    sample.label:SetText(i == 1 and "In range - above nameplate" or "Out of range - beside target frame")
+    sample.label:SetText(i == 1 and BIT.L("In range - above nameplate") or BIT.L("Out of range - beside target frame"))
     scene.cases[i] = sample
   end
   return scene
@@ -623,14 +623,15 @@ local function updatePreview()
     plate.frame:ClearAllPoints()
     plate.frame:SetPoint("TOP", scene, "TOP", 0, -(sceneH / 2 - 18 + (above - below) / 2))
   end
-  window.previewState:SetText((state == "in" and "In range - the green checkmark" or "Out of range - the red X")
-    .. (on and "" or " (off on your target)"))
+  local stateText = state == "in" and BIT.L("In range - the green checkmark") or BIT.L("Out of range - the red X")
+  if not on then stateText = string.format(BIT.L("%s (off on your target)"), stateText) end
+  window.previewState:SetText(stateText)
   local dim = settings.dimIcons and state == "out"
   window.previewButtonIcon:SetDesaturated(dim)
   local tone = dim and 0.6 or 1
   window.previewButtonIcon:SetVertexColor(tone, tone, tone)
-  window.previewButtonNote:SetText(dim and "Grey and dim out of range"
-    or (state == "out" and "Left alone - the dimming is off" or "Its own colours in range"))
+  window.previewButtonNote:SetText(dim and BIT.L("Grey and dim out of range")
+    or (state == "out" and BIT.L("Left alone - the dimming is off") or BIT.L("Its own colours in range")))
 end
 
 local function changed()
@@ -643,7 +644,8 @@ local function changed()
   M.RefreshDimming()
   if window and window.spellsLine then
     local names = table.concat(M.Spells(), ", ")
-    window.spellsLine:SetText("Measured by: " .. (names ~= "" and names or "no spell of this class"))
+    window.spellsLine:SetText(string.format(BIT.L("Measured by: %s"),
+      names ~= "" and names or BIT.L("no spell of this class")))
   end
 end
 
@@ -733,7 +735,7 @@ local function addTab(name)
   tab.content:Hide()
 
   local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
-  button:SetText(name)
+  button:SetText(BIT.L(name))
   button.text = button:GetFontString()
   button:SetSize(BIT.UI.TabWidth(button.text), 26)
   button.text:SetPoint("CENTER")
@@ -770,7 +772,7 @@ end
 local function applyPreset(preset)
   for key, value in pairs(preset.values) do settings[key] = value end
   changed()
-  BIT.Say(preset.label .. " preset applied.")
+  BIT.Say(string.format(BIT.L("%s preset applied."), BIT.L(preset.label)))
 end
 
 ---------------------------------------------------------------------------------------------
@@ -783,7 +785,7 @@ local function buildLivePreview(pane)
 
   local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", SIDE, -12)
-  title:SetText("Live preview")
+  title:SetText(BIT.L("Live preview"))
   local titleRule = pane:CreateTexture(nil, "ARTWORK")
   titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
   titleRule:SetHeight(1)
@@ -827,7 +829,7 @@ local function buildLivePreview(pane)
   end
 
   -- Try it: the preview's own state, not a setting.
-  local tryIt = header("TRY IT", window.previewState, 12)
+  local tryIt = header(BIT.L("TRY IT"), window.previewState, 12)
   local toggle = checkboxRow(pane, "Simulate: out of range",
     function() return preview.out end,
     function(v) preview.out = v; changed() end,
@@ -863,7 +865,7 @@ local function buildLivePreview(pane)
   hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", SIDE, 12)
   hint:SetWidth(CARD_WIDTH)
   hint:SetJustifyH("LEFT")
-  hint:SetText("A sample only: the mark and the dimming happen on your own target and bars.")
+  hint:SetText(BIT.L("A sample only: the mark and the dimming happen on your own target and bars."))
 end
 
 local function buildTabs()
@@ -908,7 +910,7 @@ local function buildContent(top, anchor)
   local presetButton = BIT.Looks.PresetButton(window, PRESETS, applyPreset)
   presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
   presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
-  presetLabel:SetText("Range")
+  presetLabel:SetText(BIT.L("Range"))
 
   local pane = CreateFrame("Frame", nil, window, "BackdropTemplate")
   pane:SetPoint("TOPLEFT", 10, -top)
@@ -930,7 +932,7 @@ local function buildContent(top, anchor)
   divider:SetPoint("TOPRIGHT", -8, -34)
 
   buildTabs()
-  local reset = pushButton(area, "Reset this tab", 120, function() resetTab(activeTab) end)
+  local reset = pushButton(area, BIT.L("Reset this tab"), 120, function() resetTab(activeTab) end)
   reset:SetPoint("BOTTOMRIGHT", -10, 10)
 
   window:SetScript("OnShow", function()

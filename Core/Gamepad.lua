@@ -39,10 +39,9 @@ function UI.Key(key)
 end
 
 function UI.Hint()
-  if UI.ConsolePortActive() then return "ConsolePort: D-pad: select · use the cursor's button hints" end
-  return UI.Key("PADDUP") .. "/" .. UI.Key("PADDDOWN") .. ": select  ·  "
-    .. UI.Key("PADDLEFT") .. "/" .. UI.Key("PADDRIGHT") .. ": move / adjust  ·  "
-    .. UI.Key("PAD1") .. ": activate  ·  " .. UI.Key("PAD2") .. ": back"
+  if UI.ConsolePortActive() then return BIT.L("ConsolePort: D-pad: select · use the cursor's button hints") end
+  return string.format(BIT.L("%s/%s: select  ·  %s/%s: move / adjust  ·  %s: activate  ·  %s: back"),
+    UI.Key("PADDUP"), UI.Key("PADDDOWN"), UI.Key("PADDLEFT"), UI.Key("PADDRIGHT"), UI.Key("PAD1"), UI.Key("PAD2"))
 end
 
 local selected, selectionHost, mark

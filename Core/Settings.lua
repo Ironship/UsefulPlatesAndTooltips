@@ -233,14 +233,15 @@ function UI.RegisterSettingsLauncher(title, tooltip, onClick)
       or type(Settings.RegisterAddOnCategory) ~= "function"
       or type(CreateSettingsButtonInitializer) ~= "function" then return false end
   local category = Settings.RegisterVerticalLayoutCategory(title)
-  local initializer = CreateSettingsButtonInitializer(title, "Open settings", onClick, tooltip, true)
+  local initializer = CreateSettingsButtonInitializer(title, BIT.L("Open settings"), onClick, tooltip, true)
   Settings.RegisterInitializer(category, initializer)
   Settings.RegisterAddOnCategory(category)
   return true
 end
 
--- A check box with its label to the right. get() and set(value) read and write the setting.
-function UI.Check(parent, labelText, get, set, tooltip)
+-- A check box with its label to the right. get() and set(value) read and write the setting. The label and the tooltip are
+-- English texts (BIT.L translates them); `translated` says the label is shown as it is (it was composed from a template).
+function UI.Check(parent, labelText, get, set, tooltip, translated)
   local box = CreateFrame("CheckButton", nil, parent)
   box:SetSize(24, 24)
   box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
@@ -248,14 +249,15 @@ function UI.Check(parent, labelText, get, set, tooltip)
   box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
   box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
   UI.SkinCheck(box)
+  local shown = translated and labelText or BIT.L(labelText)
   box.label = box:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   box.label:SetPoint("LEFT", box, "RIGHT", 4, 0)
-  box.label:SetText(labelText)
+  box.label:SetText(shown)
   if tooltip then
     box:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 0.82, 0)
-      GameTooltip:AddLine(tooltip, 1, 1, 1, true)
+      GameTooltip:SetText(shown, 1, 0.82, 0)
+      GameTooltip:AddLine(BIT.L(tooltip), 1, 1, 1, true)
       GameTooltip:Show()
     end)
     box:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -273,7 +275,7 @@ function UI.Slider(parent, labelText, min, max, step, get, set, format, tooltip)
   holder:SetSize(260, 40)
   holder.label = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   holder.label:SetPoint("TOPLEFT", 0, 0)
-  holder.label:SetText(labelText)
+  holder.label:SetText(BIT.L(labelText))
   local bar = CreateFrame("Slider", nil, holder)
   bar:SetOrientation("HORIZONTAL")
   bar:SetSize(200, 16)
@@ -319,8 +321,8 @@ function UI.Slider(parent, labelText, min, max, step, get, set, format, tooltip)
   if tooltip then
     local function enter(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 0.82, 0)
-      GameTooltip:AddLine(tooltip, 1, 1, 1, true)
+      GameTooltip:SetText(BIT.L(labelText), 1, 0.82, 0)
+      GameTooltip:AddLine(BIT.L(tooltip), 1, 1, 1, true)
       GameTooltip:Show()
     end
     local function leave() GameTooltip:Hide() end
@@ -364,7 +366,7 @@ function UI.Header(parent, text)
   row:SetHeight(20)
   row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   row.label:SetPoint("LEFT", 0, 0)
-  row.label:SetText(text)
+  row.label:SetText(BIT.L(text))
   local heading = UI.COLOR.heading
   row.label:SetTextColor(heading[1], heading[2], heading[3])
   local rule = row:CreateTexture(nil, "ARTWORK")
@@ -385,7 +387,7 @@ function UI.Note(parent, text, width)
   row.text:SetWidth(width)
   row.text:SetJustifyH("LEFT")
   row.text:SetWordWrap(true)
-  row.text:SetText(text)
+  row.text:SetText(BIT.L(text))
   local h = row.text:GetStringHeight()
   row:SetSize(width, math.max(14, type(h) == "number" and math.ceil(h) or 14))
   return row
@@ -490,9 +492,9 @@ local function stateText(name)
   local state = BIT.state[name]
   local wanted = BIT.IsSwitchedOn(name)
   if (state == "on") ~= wanted then
-    return (wanted and "Switched on" or "Switched off") .. " after a reload of the interface."
+    return BIT.L(wanted and "Switched on after a reload of the interface." or "Switched off after a reload of the interface.")
   end
-  return STATE_TEXT[state] or ""
+  return STATE_TEXT[state] and BIT.L(STATE_TEXT[state]) or ""
 end
 
 local function refreshSwitch(page)
@@ -650,7 +652,7 @@ local function buildPage(name)
   page:Hide()
   page.name = name
 
-  page.switch = UI.Check(page, "Enable " .. (tab.title or name),
+  page.switch = UI.Check(page, string.format(BIT.L("Enable %s"), BIT.L(tab.title or name)),
     function() return BIT.IsSwitchedOn(name) end,
     function(v)
       BIT.SetSwitchedOn(name, v)
@@ -669,14 +671,14 @@ local function buildPage(name)
       page:Hide()
       pages[name], parkedPages[name] = parkedPages[name], page
       selectTab(name)
-    end, tab.summary)
+    end, tab.summary, true)
   page.switch:SetPoint("TOPLEFT", 4, -6)
   page.stateLine = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   page.stateLine:SetPoint("TOPLEFT", 32, -30)
   page.stateLine:SetPoint("TOPRIGHT", -120, -30)
   page.stateLine:SetHeight(16)
   page.stateLine:SetJustifyH("LEFT")
-  page.reload = UI.Button(page, "Reload UI", 100, function()
+  page.reload = UI.Button(page, BIT.L("Reload UI"), 100, function()
     if type(ReloadUI) == "function" then ReloadUI() end
   end)
   page.reload:SetPoint("TOPRIGHT", -4, -7)
@@ -705,9 +707,9 @@ local function buildPage(name)
     note:SetPoint("TOPLEFT", 8, -8)
     note:SetPoint("RIGHT", -8, 0)
     note:SetJustifyH("LEFT")
-    note:SetText((tab.summary and (tab.summary .. "\n\n") or "")
-      .. "Its settings are here while it runs; its appearance and a sample preview are below"
-      .. " -- they need no module runtime. Tick Enable to open the settings before the next reload.")
+    note:SetText((tab.summary and (BIT.L(tab.summary) .. "\n\n") or "")
+      .. BIT.L("Its settings are here while it runs; its appearance and a sample preview are below"
+      .. " -- they need no module runtime. Tick Enable to open the settings before the next reload."))
     page.offNote = note
     page.appearance = BIT.UI.Appearance(content, name, tab.capabilities, function()
       if page.layoutOffPage then page.layoutOffPage() end
@@ -815,9 +817,9 @@ local function createWindow()
     local tab = BIT.tabs[name] or {}
     local extra
     if name == "HunterRangeFinder" and playerClass() ~= "HUNTER" then
-      extra = "Hunter only. Settings are here for an alt."
+      extra = BIT.L("Hunter only. Settings are here for an alt.")
     end
-    addTabButton(name, SHORT_LABEL[name] or tab.title or name, tab.title or name, tab.summary, extra)
+    addTabButton(name, BIT.L(SHORT_LABEL[name] or tab.title or name), BIT.L(tab.title or name), BIT.L(tab.summary), extra)
   end
   layoutTabs()
   window.baseHeight = HEADER_HEIGHT + TAB_HEIGHT * tabRows + SWITCH_HEIGHT + h + MARGIN
@@ -839,8 +841,8 @@ local function createWindow()
     local function refreshHints()
       local enabled = C_GamePad and C_GamePad.IsEnabled and C_GamePad.IsEnabled()
         or GetCVarBool and GetCVarBool("GamePadEnable")
-      hint:SetText(enabled and (pad.Hint() .. " · " .. pad.Key("PADLSHOULDER")
-        .. "/" .. pad.Key("PADRSHOULDER") .. ": tabs") or "")
+      hint:SetText(enabled and (pad.Hint() .. " · " .. string.format(BIT.L("%s/%s: tabs"),
+        pad.Key("PADLSHOULDER"), pad.Key("PADRSHOULDER"))) or "")
       hint:SetWordWrap(true)
       local padding = enabled and math.max(32, hint:GetStringHeight() + 8) or 0
       window.fit(padding)
@@ -917,8 +919,8 @@ local function slash(msg)
   for _, name in ipairs(BIT.order) do
     if word == name:lower() or BIT.tabWords[word] == name then BIT.OpenSettings(name) return end
   end
-  BIT.Say("/upt opens the settings; /upt <part> opens a part's tab ("
-    .. table.concat(BIT.order, ", ") .. "); /upt probe records what StatsInfo can read.")
+  BIT.Say(string.format(BIT.L("/upt opens the settings; /upt <part> opens a part's tab (%s); /upt probe records what StatsInfo can read; /upt lang sets the language."),
+    table.concat(BIT.order, ", ")))
 end
 
 SLASH_USEFULPLATESANDTOOLTIPS1 = "/upt"
@@ -931,15 +933,15 @@ local function registerOptionsPage()
     if not (window and window:IsShown()) then BIT.OpenSettings() end
   end
   if UI.RegisterSettingsLauncher("DoesItDiePlus",
-      "Open the settings window. You can also type /upt.", openSettings) then return end
+      BIT.L("Open the settings window. You can also type /upt."), openSettings) then return end
   local panel = CreateFrame("Frame")
   local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", 16, -16)
   title:SetText("DoesItDiePlus")
   local text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
-  text:SetText("The settings have their own window. You can also type /upt.")
-  local open = UI.Button(panel, "Open settings", 180, openSettings)
+  text:SetText(BIT.L("The settings have their own window. You can also type /upt."))
+  local open = UI.Button(panel, BIT.L("Open settings"), 180, openSettings)
   open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
   if type(Settings) == "table" and type(Settings.RegisterCanvasLayoutCategory) == "function"
     and type(Settings.RegisterAddOnCategory) == "function" then
@@ -953,6 +955,7 @@ end
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function(self)
+  BINDING_NAME_USEFULPLATESANDTOOLTIPS_SETTINGS = BIT.L("Open settings") -- the saved language is known only from ADDON_LOADED on
   local ok, err = pcall(registerOptionsPage)
   if not ok then BIT.Say("Options > AddOns page not added (" .. tostring(err) .. "); /upt still opens the settings.") end
   self:UnregisterAllEvents()

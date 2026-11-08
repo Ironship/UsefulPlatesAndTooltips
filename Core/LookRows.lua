@@ -38,7 +38,7 @@ local function makeRow(parent, labelText, opts)
     row.label:SetPoint("LEFT", 6, 0)
     row.label:SetWidth(layout.label - 8)
     row.label:SetJustifyH("LEFT")
-    if opts.localize then opts.localize(row.label, labelText) else row.label:SetText(labelText) end
+    if opts.localize then opts.localize(row.label, labelText) else row.label:SetText(BIT.L(labelText)) end
     if BIT.UI and BIT.UI.FitRow then BIT.UI.FitRow(row, Looks.ROW_HEIGHT) end -- a long label wraps and the row grows
     row.enabledIf = opts.enabledIf
     row.settings = opts.settings
@@ -46,7 +46,11 @@ local function makeRow(parent, labelText, opts)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
             local title, body = labelText, opts.tooltip
-            if opts.tooltipFor then title, body = opts.tooltipFor() end -- a localized module builds both at hover time
+            if opts.tooltipFor then
+                title, body = opts.tooltipFor() -- a localized module builds both at hover time
+            elseif not opts.localize then
+                title, body = BIT.L(title), BIT.L(body)
+            end
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(title, 1, 0.82, 0)
             GameTooltip:AddLine(body, 1, 1, 1, true)
@@ -92,7 +96,7 @@ function Rows.Choice(parent, labelText, list, get, set, opts)
     arrow:SetPoint("RIGHT", -8, 0)
     arrow:SetText("v")
     local kind = list.kind
-    local labelOf = opts.labelOf or function(entry) return entry.label end
+    local labelOf = opts.labelOf or function(entry) return entry.literal and entry.label or BIT.L(entry.label) end
     local function entryFor(value)
         if kind == "texture" then Looks.Merge(list) end
         for _, entry in ipairs(list) do
@@ -116,12 +120,12 @@ function Rows.Choice(parent, labelText, list, get, set, opts)
         else
             if kind == "texture" then Looks.Merge(list) end
             local menuList = list
-            if opts.labelOf then -- the menu shows the translated names
+            if opts.labelOf then -- the menu shows the owner's own names, so the pick list must not translate them again
                 menuList = { kind = kind }
                 for i, entry in ipairs(list) do
                     local copy = {}
                     for k, v in pairs(entry) do copy[k] = v end
-                    copy.label = labelOf(entry)
+                    copy.label, copy.literal = labelOf(entry), true
                     menuList[i] = copy
                 end
             end
@@ -251,7 +255,7 @@ function Rows.Button(parent, labelText, buttonText, onClick, opts)
     button:SetSize(row.layout.control, 22)
     button:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
     if BIT.UI and BIT.UI.SkinButton then BIT.UI.SkinButton(button) end
-    button:SetText(buttonText)
+    button:SetText(BIT.L(buttonText))
     button:SetScript("OnClick", function() onClick() end)
     function row:Refresh() self:ApplyEnabled(button) end
     row.widget = button
@@ -267,7 +271,8 @@ function Looks.PresetButton(parent, presets, apply, width)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     button:SetSize(width or 140, 22)
     if BIT.UI and BIT.UI.SkinButton then BIT.UI.SkinButton(button) end
-    button:SetText("Look presets  v")
+    button:SetText(BIT.L("Look presets  v"))
+    button:SetWidth(math.max(width or 140, button:GetFontString():GetStringWidth() + 24))
     button:SetScript("OnClick", function(self)
         local list = {}
         for _, preset in ipairs(presets) do list[#list + 1] = { id = preset.id or preset.label, label = preset.label } end
@@ -285,7 +290,8 @@ function Looks.ResetButton(parent, onClick, width)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     button:SetSize(width or 120, 22)
     if BIT.UI and BIT.UI.SkinButton then BIT.UI.SkinButton(button) end
-    button:SetText("Reset this tab")
+    button:SetText(BIT.L("Reset this tab"))
+    button:SetWidth(math.max(width or 120, button:GetFontString():GetStringWidth() + 24))
     button:SetScript("OnClick", function() onClick() end)
     return button
 end
@@ -294,7 +300,7 @@ end
 function Looks.TryItHeader(parent, anchor, x, y)
     local text = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     text:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x or 4, y or -12)
-    text:SetText("TRY IT")
+    text:SetText(BIT.L("TRY IT"))
     text:SetTextColor(1, 0.82, 0)
     return text
 end

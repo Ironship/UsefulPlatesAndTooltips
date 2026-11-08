@@ -594,12 +594,12 @@ SlashCmdList.RESOURCEDING = function(message)
     Addon.db.enabled = true
     Addon.ResetPowerState()
     Addon.RefreshMarks()
-    print("|cff66ccffResourceDing:|r enabled")
+    print(BIT.L("|cff66ccffResourceDing:|r enabled"))
   elseif command == "off" then
     Addon.db.enabled = false
     Addon.ResetPowerState()
     Addon.RefreshMarks()
-    print("|cff66ccffResourceDing:|r disabled")
+    print(BIT.L("|cff66ccffResourceDing:|r disabled"))
   elseif Addon.OpenSettings then
     Addon.OpenSettings()
   end

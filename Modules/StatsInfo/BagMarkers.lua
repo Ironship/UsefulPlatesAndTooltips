@@ -967,7 +967,7 @@ local function registerBaganator()
   end
   baganatorRegistered = true
   Baganator.API.RegisterCornerWidget(
-    "DoesItDiePlus StatsInfo: green up / red down against what you wear",
+    BIT.L("DoesItDiePlus StatsInfo: green up / red down against what you wear"),
     WIDGET_ID, baganatorOnUpdate, baganatorOnInit, { corner = "top_right", priority = 5 })
   requestBaganatorRefresh()
 end

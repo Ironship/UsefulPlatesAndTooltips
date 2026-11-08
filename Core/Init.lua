@@ -85,7 +85,7 @@ function BIT.IsRunning(name) return BIT.state[name] == "on" end
 
 -- A module's own slash command while the module is off.
 function BIT.SayOff(name)
-  say(name .. " is switched off. /upt opens the settings, where it can be switched on.")
+  say(string.format(BIT.L("%s is switched off. /upt opens the settings, where it can be switched on."), name))
 end
 
 ---------------------------------------------------------------------------------------------

@@ -165,7 +165,7 @@ local function buildPreview(pane)
 
     local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText("Live preview")
+    title:SetText(BIT.L("Live preview"))
     local rule = pane:CreateTexture(nil, "ARTWORK")
     rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     rule:SetHeight(1)
@@ -213,9 +213,9 @@ local function buildPreview(pane)
     hint:SetPoint("TOPLEFT", healSlider, "BOTTOMLEFT", 6, -12)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
-    hint:SetText("The Target frame option controls this sample; the other frame options control live frames. "
+    hint:SetText(BIT.L("The Target frame option controls this sample; the other frame options control live frames. "
         .. "The segment starts at the health edge (the green bar's "
-        .. "end) and is cropped at the bar's right end when the heal would overheal.")
+        .. "end) and is cropped at the bar's right end when the heal would overheal."))
 
     pane.title = title
     pane.hint = hint
@@ -248,8 +248,8 @@ if BIT.RegisterTab then
             note1:SetPoint("TOPLEFT", 12, -6)
             note1:SetPoint("RIGHT", -12, 0)
             note1:SetJustifyH("LEFT")
-            note1:SetText("The client already knows how much healing is coming (UnitGetIncomingHeals). "
-                .. "This module redraws direct heals and adds estimates for your own heals over time.")
+            note1:SetText(BIT.L("The client already knows how much healing is coming (UnitGetIncomingHeals). "
+                .. "This module redraws direct heals and adds estimates for your own heals over time."))
             local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
             pane:SetPoint("TOPLEFT", 10, -46)
             buildPreview(pane)
@@ -284,10 +284,10 @@ if BIT.RegisterTab then
             sample:SetSize(PREVIEW_WIDTH, 90)
             sample.title = sample:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             sample.title:SetPoint("TOPLEFT", 12, -8)
-            sample.title:SetText("HealPrediction sample")
+            sample.title:SetText(BIT.L("HealPrediction sample"))
             sample.label = sample:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             sample.label:SetPoint("TOPLEFT", 12, -34)
-            sample.label:SetText("+25 incoming, from the health edge")
+            sample.label:SetText(BIT.L("+25 incoming, from the health edge"))
             return sample
         end,
         previewRender = renderPreview,

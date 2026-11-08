@@ -797,7 +797,7 @@ local function buildShieldsPreview(parent)
   scene:SetSize(560, 120)
   scene.title = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   scene.title:SetPoint("TOPLEFT", 12, -4)
-  scene.title:SetText("Shields sample (fixed data)")
+  scene.title:SetText(BIT.L("Shields sample (fixed data)"))
   -- The mock health bar: a plain full bar the overlay lies on, like the live frames.
   scene.bar = CreateFrame("StatusBar", nil, scene)
   scene.bar:SetSize(180, 20)
@@ -1127,7 +1127,7 @@ local function buildLivePreview(pane)
 
   local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", pane, "TOPLEFT", SIDE, -12)
-  title:SetText("Live preview")
+  title:SetText(BIT.L("Live preview"))
   local titleRule = pane:CreateTexture(nil, "ARTWORK")
   titleRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
   titleRule:SetHeight(1)
@@ -1175,7 +1175,7 @@ local function buildLivePreview(pane)
   scene.overlay:SetValue(clampPercent(preview.absorb))
 
   -- The frame switch: which of the module's frames the mock stands for.
-  local which = header("FRAME", scene, 12)
+  local which = header(BIT.L("FRAME"), scene, 12)
   local switch = CreateFrame("Frame", nil, pane)
   switch:SetSize(CARD_WIDTH, 24)
   switch:SetPoint("TOPLEFT", which, "BOTTOMLEFT", 0, -4)
@@ -1186,11 +1186,12 @@ local function buildLivePreview(pane)
   local left = 0
   for i = 1, #FRAME_MOCKS do
     local m = FRAME_MOCKS[i]
-    local b = pushButton(switch, m.label, 56, function()
+    local label = BIT.L(m.label)
+    local b = pushButton(switch, label, 56, function()
       preview.frame = m.id
       changed()
     end)
-    local width = math.max(56, math.ceil(labelWidth(switch, m.label)) + 18)
+    local width = math.max(56, math.ceil(labelWidth(switch, label)) + 18)
     b:SetWidth(width)
     b:SetPoint("TOPLEFT", switch, "TOPLEFT", left, 0)
     left = left + width + 3
@@ -1206,7 +1207,7 @@ local function buildLivePreview(pane)
 
   -- TRY IT: the preview's own numbers, in % of the sample bar. Plain sample percentages --
   -- the live overlays read the real absorb in combat, and no reading is taken here.
-  local tryIt = header("TRY IT", switch, 12)
+  local tryIt = header(BIT.L("TRY IT"), switch, 12)
   local health = sliderRow(pane, "Bar health", 0, 100, 1,
     function() return preview.health end,
     function(value)
@@ -1233,8 +1234,8 @@ local function buildLivePreview(pane)
   hint:SetPoint("TOPLEFT", absorb, "BOTTOMLEFT", 6, -12)
   hint:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
   hint:SetJustifyH("LEFT")
-  hint:SetText("The preview paints a fixed sample with the same painter as the live overlays; "
-    .. "no live absorb is read here.")
+  hint:SetText(BIT.L("The preview paints a fixed sample with the same painter as the live overlays; "
+    .. "no live absorb is read here."))
   local hintRule = pane:CreateTexture(nil, "ARTWORK")
   hintRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
   hintRule:SetHeight(1)
@@ -1252,7 +1253,7 @@ local function buildLivePreview(pane)
       scene.bar = kit.bar
       kit.bar:SetMinMaxValues(0, 100)
       kit.bar:SetValue(clampPercent(preview.health))
-      scene.caption:SetText(m.caption)
+      scene.caption:SetText(BIT.L(m.caption))
       scene.caption:ClearAllPoints()
       scene.caption:SetPoint("TOPLEFT", kit.frame, "BOTTOMLEFT", 0, -6)
       scene.overlay:SetParent(kit.bar)
@@ -1276,7 +1277,7 @@ local function buildTabs(area)
   M._checks = checks
 
   -- Frames: the saved switches, exactly the four the runtime reads.
-  local frames = addTab("Frames", area)
+  local frames = addTab(BIT.L("Frames"), area)
   local function toggle(key, labelText, tooltip)
     local row = checkbox(frames.inner, key, labelText, { tooltip = tooltip })
     frames:add(row, ROW_HEIGHT, key)
@@ -1301,7 +1302,7 @@ local function buildTabs(area)
     "The shields over every accessible nameplate.")
 
   -- Fill: the art, its translucency and the absorb colour.
-  local fill = addTab("Fill", area)
+  local fill = addTab(BIT.L("Fill"), area)
   local fillRow = BIT.Looks.Rows.Choice(fill.inner, "Fill style", FILL_TEXTURES, function() return settings.fillTexture end, function(id)
     settings.fillTexture = id
     styleChanged()
@@ -1336,13 +1337,13 @@ local function buildTabs(area)
   -- Effects: room for the future (glow, flash), with the shared appearance editor today.
   -- The editor is taller than the tab area: it lives in the tab's scroll child and the tab
   -- scrolls to it (addTab), so "Reset this tab" and the window's bottom stay in view.
-  local effects = addTab("Effects", area)
+  local effects = addTab(BIT.L("Effects"), area)
   local note = effects.inner:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   note:SetPoint("TOPLEFT", effects.inner, "TOPLEFT", 0, 0)
   note:SetWidth(400)
   note:SetJustifyH("LEFT")
-  note:SetText("Extra shield effects land here later. The shared appearance editor below "
-    .. "paints the overlay's colour, opacity and text.")
+  note:SetText(BIT.L("Extra shield effects land here later. The shared appearance editor below "
+    .. "paints the overlay's colour, opacity and text."))
   effects.y = effects.y + 34
   if type(BIT.UI) == "table" and type(BIT.UI.Appearance) == "function" then
     local caps = { roles = CAPABILITIES.roles, shapes = false, geometry = false, border = false,
@@ -1379,13 +1380,13 @@ local function buildContent(parent)
   presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
   presetButton:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Look presets", 1, 0.82, 0)
-    GameTooltip:AddLine("Only the fill style and its opacity change; your frame switches stay.", nil, nil, nil, true)
+    GameTooltip:SetText(BIT.L("Look presets"), 1, 0.82, 0)
+    GameTooltip:AddLine(BIT.L("Only the fill style and its opacity change; your frame switches stay."), nil, nil, nil, true)
     GameTooltip:Show()
   end)
   presetButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
   presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
-  presetLabel:SetText("Shields")
+  presetLabel:SetText(BIT.L("Shields"))
 
   local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
   pane:SetPoint("TOPLEFT", 10, -44)
@@ -1407,7 +1408,9 @@ local function buildContent(parent)
   buildLivePreview(pane)
   buildTabs(area)
 
-  local reset = pushButton(area, "Reset this tab", 120, function() resetTab(activeTab) end)
+  local resetText = BIT.L("Reset this tab")
+  local reset = pushButton(area, resetText, math.max(120, math.ceil(labelWidth(area, resetText)) + 18),
+    function() resetTab(activeTab) end)
   reset:SetPoint("BOTTOMRIGHT", -10, 10)
 
   -- Style writes made elsewhere (the OFF-page editor, the shared scope) repaint the preview too.

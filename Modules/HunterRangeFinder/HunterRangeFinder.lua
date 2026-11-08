@@ -581,7 +581,7 @@ local function renderScene(frame, style, bandName, scatter)
     end
     -- Range text off: the rail (and the MELEE/DEAD icons) stay, the label is empty and takes no room.
     local showText = settings == nil or settings.showRangeText ~= false
-    frame.zone:SetText(showText and BAND_LABEL[bandName] or "")
+    frame.zone:SetText(showText and BIT.L(BAND_LABEL[bandName]) or "")
     -- Role-colored label for the close bands (MELEE good, DEAD bad), plain
     -- text for distance bands so the rail gradient stays the signal.
     local labelRole = "text"
@@ -1073,7 +1073,7 @@ local function bandIndex(name)
     end
 end
 
-local function bandText(name) return BAND_SWITCH_TEXT[name] or name end
+local function bandText(name) return BIT.L(BAND_SWITCH_TEXT[name]) or name end
 
 local function setPreviewBand(name)
     if not bandIndex(name) then return end
@@ -1260,13 +1260,13 @@ end
 local function buildTabs(parent, isHunter)
     local hunterOnly = function() return isHunter end
 
-    local display = addTab("Display")
+    local display = addTab(BIT.L("Display"))
     parent.lockButton = display:action("Position",
-        function() return settings.locked and "Unlock and move" or "Lock position" end,
+        function() return settings.locked and BIT.L("Unlock and move") or BIT.L("Lock position") end,
         function() setLocked(not settings.locked) end,
         { enabledIf = hunterOnly,
             tooltip = "Unlock, drag the rail to a screen spot of your own, then lock to save its position." })
-    parent.resetPosition = display:action("Dragged position", "Reset position", function()
+    parent.resetPosition = display:action("Dragged position", BIT.L("Reset position"), function()
         resetPosition()
         refreshAll()
     end, { enabledIf = hunterOnly, tooltip = "Back to the requested centre offset." })
@@ -1277,7 +1277,7 @@ local function buildTabs(parent, isHunter)
     parent.plateOffset = display:slider("plateOffset", "Vertical offset (- = above)", -80, 30, 1,
         { enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
             tooltip = "How far the rail sits from the plate's health bar. The same seat as the combo dots: top of the row, -offset under the bar." })
-    plateClashLine = display:note("Nameplate lanes")
+    plateClashLine = display:note(BIT.L("Nameplate lanes"))
     refreshPlateClash()
     display:gap()
     parent.rangeText = display:checkbox("showRangeText", "Show range text",
@@ -1292,21 +1292,22 @@ local function buildTabs(parent, isHunter)
         setLocked(DEFAULTS.locked)
     end
 
-    local range = addTab("Range")
+    local range = addTab(BIT.L("Range"))
     parent.longRange = range:checkbox("longRange", "Extended range past 35 yd (Hawk Eye)",
         { enabledIf = hunterOnly,
             tooltip = "Seven dots instead of six. Auto-detected from Auto Shot's reach when the spellbook "
                 .. "answers; tick manually otherwise." })
     range:info("Auto Shot's reach reads", function()
-        return detectedAutoMax and (tostring(detectedAutoMax) .. " yd") or "not answered by this client"
+        return detectedAutoMax and string.format(BIT.L("%s yd"), tostring(detectedAutoMax))
+            or BIT.L("not answered by this client")
     end, { enabledIf = hunterOnly,
         tooltip = "Auto Shot's own maximum range, read from the spellbook. Past 35 yd the seventh dot exists." })
     range:gap()
-    range:note("The bands are approximate item probes, never exact yards: 8-10, 10-15, 15-20, 20-25, "
+    range:note(BIT.L("The bands are approximate item probes, never exact yards: 8-10, 10-15, 15-20, 20-25, "
         .. "25-30 and 30-35 yd. MELEE is Wing Clip's reach; the 5-8 yd dead zone sits between melee and the "
-        .. "first dot. /upt hunterprobe prints what the client answers for the probes.")
+        .. "first dot. /upt hunterprobe prints what the client answers for the probes."))
 
-    local appearance = addTab("Appearance")
+    local appearance = addTab(BIT.L("Appearance"))
     local editor = BIT.UI.Appearance(appearance.inner, M.moduleName, CAPABILITIES, refreshAll, hunterLegacy)
     editor:SetPoint("TOPLEFT", appearance.inner, "TOPLEFT", 0, 0)
     editor.onLayout = function()
@@ -1333,7 +1334,7 @@ local function buildLivePreview(pane)
 
     local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText("Live preview")
+    title:SetText(BIT.L("Live preview"))
     local titleRule = pane:CreateTexture(nil, "ARTWORK")
     titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     titleRule:SetHeight(1)
@@ -1372,7 +1373,7 @@ local function buildLivePreview(pane)
     end
 
     -- TRY IT: the mock target's own band, never a saved setting.
-    local tryIt = header("TRY IT", scene, 14)
+    local tryIt = header(BIT.L("TRY IT"), scene, 14)
     local bandRow = sliderRow(pane, "Target band", 1, #BAND_ORDER, 1,
         function() return bandIndex(previewBand) or 1 end,
         function(value) setPreviewBand(BAND_ORDER[value]) end,
@@ -1387,8 +1388,8 @@ local function buildLivePreview(pane)
     hint:SetPoint("TOPLEFT", bandRow, "BOTTOMLEFT", 6, -14)
     hint:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
     hint:SetJustifyH("LEFT")
-    hint:SetText("Drawn by the same code as the live HUD, on a mock enemy nameplate. Six dots by "
-        .. "default; a seventh past 35 yd only with Hawk Eye.")
+    hint:SetText(BIT.L("Drawn by the same code as the live HUD, on a mock enemy nameplate. Six dots by "
+        .. "default; a seventh past 35 yd only with Hawk Eye."))
 end
 
 local function build(parent)
@@ -1406,17 +1407,17 @@ local function build(parent)
     presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
     parent.hunterPresets = { presetButton }
     presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
-    presetLabel:SetText("Rail")
+    presetLabel:SetText(BIT.L("Rail"))
 
     local note = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", 12, -6)
     note:SetPoint("RIGHT", presetLabel, "LEFT", -12, 0)
     note:SetJustifyH("LEFT")
     note:SetText(isHunter
-        and "The rail rides above the target's nameplate while a living hostile target is selected; "
-            .. "unlock to drag it to a screen spot of your own."
-        or "The native range rail appears only on a Hunter. On another class these settings wait for the "
-            .. "hunter alt; the preview and the appearance editor need no hunter and no target.")
+        and BIT.L("The rail rides above the target's nameplate while a living hostile target is selected; "
+            .. "unlock to drag it to a screen spot of your own.")
+        or BIT.L("The native range rail appears only on a Hunter. On another class these settings wait for the "
+            .. "hunter alt; the preview and the appearance editor need no hunter and no target."))
     parent.hunterNote = note
 
     local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -1441,7 +1442,9 @@ local function build(parent)
     parent.hunterSample = sample
     buildTabs(parent, isHunter)
 
-    local reset = pushButton(area, "Reset this tab", 120, function() resetTab(activeTab) end)
+    local reset = pushButton(area, BIT.L("Reset this tab"), 120, function() resetTab(activeTab) end)
+    local resetFont = reset:GetFontString()
+    reset:SetWidth(math.max(120, math.ceil(resetFont and resetFont:GetStringWidth() or 0) + 18))
     reset:SetPoint("BOTTOMRIGHT", -10, 10)
     parent.hunterResetTab = reset
     parent.hunterTabs = tabs

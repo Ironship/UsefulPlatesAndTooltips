@@ -111,7 +111,7 @@ function Looks.ColorEntry(list, id)
         if entry.id == id then return entry end
     end
     local rgb = Looks.Rgb(id)
-    if rgb then return { id = id, label = "Custom " .. id, rgb = rgb } end
+    if rgb then return { id = id, label = string.format(BIT.L("Custom %s"), id), literal = true, rgb = rgb } end
     return nil
 end
 
@@ -309,7 +309,7 @@ local function mediaEntries()
     if signature == mediaSignature then return mediaCache end
     mediaCache, mediaSignature = {}, signature
     for i, name in ipairs(names) do
-        mediaCache[i] = { id = "lsm:" .. name, label = name, path = hash[name], group = "Shared media" }
+        mediaCache[i] = { id = "lsm:" .. name, label = name, literal = true, path = hash[name], group = "Shared media" }
     end
     return mediaCache
 end
@@ -331,7 +331,7 @@ function Looks.Texture(id)
         local lib = sharedMedia()
         if lib and type(lib.Fetch) == "function" then
             local ok, path = pcall(lib.Fetch, lib, "statusbar", id:sub(5), true)
-            if ok and type(path) == "string" then return { id = id, label = id:sub(5), path = path, group = "Shared media" } end
+            if ok and type(path) == "string" then return { id = id, label = id:sub(5), literal = true, path = path, group = "Shared media" } end
         end
     end
     return BUILTIN_BY_ID.flat
@@ -447,10 +447,11 @@ local function build()
                 button.text:ClearAllPoints()
                 if entry.header then
                     button.text:SetPoint("LEFT", 6, 0)
-                    button.text:SetText("|cff888888" .. entry.label .. "|r")
+                    button.text:SetText("|cff888888" .. BIT.L(entry.label) .. "|r")
                 else
+                    local label = entry.literal and entry.label or BIT.L(entry.label)
                     button.text:SetPoint("LEFT", hasSwatch and ((entry.rgb and 28) or (icons and 30) or 54) or 8, 0)
-                    button.text:SetText(entry.id == current and ("|cffffd100" .. entry.label .. "|r") or entry.label)
+                    button.text:SetText(entry.id == current and ("|cffffd100" .. label .. "|r") or label)
                 end
                 button:SetEnabled(not entry.header)
                 button:SetScript("OnClick", function()
@@ -462,7 +463,7 @@ local function build()
             end
         end
         local more = #list - ROWS
-        self.scroll:SetText(more > 0 and string.format("%d-%d of %d", self.offset + 1,
+        self.scroll:SetText(more > 0 and string.format(BIT.L("%d-%d of %d"), self.offset + 1,
             math.min(#list, self.offset + ROWS), #list) or "")
     end
 end

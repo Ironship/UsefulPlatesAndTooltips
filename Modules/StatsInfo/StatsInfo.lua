@@ -1037,7 +1037,7 @@ local function worthValue(kind, value) return PERCENT_KINDS[kind] and percent(va
 -- hover builds the same handful of segments every time it is hovered.
 local worthWordMemo, worthWordCount = {}, 0
 local function worthWord(kind, value)
-  if value ~= value then return worthValue(kind, value) .. " " .. WORTH_WORDS[kind] end -- NaN keys raise
+  if value ~= value then return worthValue(kind, value) .. " " .. BIT.L(WORTH_WORDS[kind]) end -- NaN keys raise
   local byValue = worthWordMemo[kind]
   if not byValue then
     byValue = {}
@@ -1045,7 +1045,7 @@ local function worthWord(kind, value)
   end
   local hit = byValue[value]
   if hit then return hit end
-  local text = worthValue(kind, value) .. " " .. WORTH_WORDS[kind]
+  local text = worthValue(kind, value) .. " " .. BIT.L(WORTH_WORDS[kind])
   if worthWordCount >= TEXT_MEMO_MAX then
     for k in pairs(worthWordMemo) do worthWordMemo[k] = nil end
     worthWordCount = 0
@@ -1208,9 +1208,20 @@ end
 -- What a tank's two numbers are for, and a damage spec's one: terse, so it cannot read
 -- as the character's own damage going up ("+52% damage"). "60% better dmg spec".
 -- A healer's part is a score of the heuristic model (Weights.lua), not an actual healing gain,
--- and ratingText marks it "(approx.)".
-local MEASURE_WORDS = { damage = "dmg spec", survival = "for survival", threat = "for threat gen.",
-  healing = "healer score" }
+-- and ratingText marks it "(approx.)". One template per line (the number is the %s), so a
+-- language can place the words as it needs to.
+local function ratingTemplate(kind, better)
+  if kind == "damage" then
+    return better and BIT.L("%s%% better dmg spec") or BIT.L("%s%% worse dmg spec")
+  elseif kind == "survival" then
+    return better and BIT.L("%s%% better for survival") or BIT.L("%s%% worse for survival")
+  elseif kind == "threat" then
+    return better and BIT.L("%s%% better for threat gen.") or BIT.L("%s%% worse for threat gen.")
+  elseif kind == "healing" then
+    return better and BIT.L("%s%% better healer score") or BIT.L("%s%% worse healer score")
+  end
+  return better and BIT.L("%s%% better") or BIT.L("%s%% worse")
+end
 
 -- A number to one decimal under 10, whole from 10 up, and no ".0" on a whole number: "+8 Agility", as
 -- the stat line says it, and 9.96 is "10", not "10.0". Memoized (see memo1/memo2).
@@ -1228,13 +1239,10 @@ end)
 local ratingMemo, ratingCount = {}, 0
 local function ratingTextBuild(part)
   local v = part.percent or 0
-  local what = MEASURE_WORDS[part.kind]
-  local word = (v > 0 and "better" or "worse") .. (what and (" " .. what) or "")
-  local approx = part.approx and " (approx.)" or ""
-  if part.capped then
-    return coloured(v, (v > 0 and ">" or "<-") .. MAX_PERCENT .. "% " .. word .. approx)
-  end
-  return coloured(v, shortNumber(math.abs(v)) .. "% " .. word .. approx)
+  local number = part.capped and ((v > 0 and ">" or "<-") .. MAX_PERCENT) or shortNumber(math.abs(v))
+  local text = string.format(ratingTemplate(part.kind, v > 0), number)
+  if part.approx then text = string.format(BIT.L("%s (approx.)"), text) end
+  return coloured(v, text)
 end
 
 local function ratingText(part)
@@ -1360,7 +1368,7 @@ local function specLines(lines, ratings, alloc)
         measures[#measures + 1] = ratingText(part)
       end
       local piece = take("specTextPart")
-      piece.text = icon(r.spec.icon) .. " " .. r.spec.name .. ": " .. table.concat(measures, ", ")
+      piece.text = icon(r.spec.icon) .. " " .. BIT.L(r.spec.name) .. ": " .. table.concat(measures, ", ")
       piece.long = #r.parts > 1
       parts[#parts + 1] = piece
     end
@@ -1400,7 +1408,7 @@ local function specLines(lines, ratings, alloc)
       clear(words)
       for _, part in ipairs(r.parts) do words[#words + 1] = ratingText(part) end
       local l = alloc("line")
-      l[1], l[2], l[3], l[4] = "  " .. r.spec.name .. ": " .. table.concat(words, ", "), 0.8, 0.8, 0.8
+      l[1], l[2], l[3], l[4] = "  " .. BIT.L(r.spec.name) .. ": " .. table.concat(words, ", "), 0.8, 0.8, 0.8
       lines[#lines + 1] = l
     end
   end
@@ -1443,7 +1451,7 @@ local function slotLabel(c, allEmpty)
   local word = SLOT_WORDS[slots[1]]
   if not word then return "" end
   if #c.against == 0 and not allEmpty then return "" end
-  return " (" .. word .. ")"
+  return " (" .. BIT.L(word) .. ")"
 end
 
 -- Whether the game's inspect window is open on someone else's character: the tooltip being
@@ -1517,16 +1525,18 @@ local ARROW_DOWN = "|TInterface\\Buttons\\UI-MicroStream-Red:12:12:0:0:1:1:0:1:0
 -- 25% better dmg spec)").
 local function gearLine(part, spec, comparison)
   local v = part.percent or 0
-  local arrow, word = ARROW_UP, "Better than your gear"
-  if v < 0 then arrow, word = ARROW_DOWN, "Worse than your gear" end
-  local who = spec and spec.name or "best spec"
+  local arrow, word = ARROW_UP, BIT.L("Better than your gear")
+  if v < 0 then arrow, word = ARROW_DOWN, BIT.L("Worse than your gear") end
+  local who = spec and BIT.L(spec.name) or BIT.L("best spec")
   if comparison and part.noBaseline then
     if #comparison.against == 0 then
-      local emptyWord = v > 0 and "Fills an empty slot" or "Lower score in an empty slot"
-      return arrow .. " " .. coloured(v, emptyWord) .. " (" .. who .. (part.approx and ", approx." or "") .. ")"
+      local emptyWord = v > 0 and BIT.L("Fills an empty slot") or BIT.L("Lower score in an empty slot")
+      if part.approx then who = string.format(BIT.L("%s, approx."), who) end
+      return arrow .. " " .. coloured(v, emptyWord) .. " (" .. who .. ")"
     end
-    return arrow .. " " .. coloured(v, word) .. " (" .. who .. ": "
-      .. coloured(v, "score changes from zero" .. (part.approx and " (approx.)" or "")) .. ")"
+    local zero = BIT.L("score changes from zero")
+    if part.approx then zero = string.format(BIT.L("%s (approx.)"), zero) end
+    return arrow .. " " .. coloured(v, word) .. " (" .. who .. ": " .. coloured(v, zero) .. ")"
   end
   return arrow .. " " .. coloured(v, word) .. " (" .. who .. ": " .. ratingText(part) .. ")"
 end
@@ -1537,7 +1547,7 @@ end
 -- Shown when it matters: the player has a tank spec in M.SPECS, or the item itself carries
 -- defensive stats. Every number comes from the client's live APIs behind ask/pcall with an
 -- isSecret guard; when no API answers, the line is left out entirely (fail silent, nothing
--- guessed). English throughout, colours as the rest (UP green when capped, DOWN red below).
+-- guessed). Worded through BIT.L, colours as the rest (UP green when capped, DOWN red below).
 ---------------------------------------------------------------------------------------------
 
 local UNCRITTABLE_DEFENSE = 440
@@ -1631,7 +1641,8 @@ local function tankExtraLines(link, alloc)
     local target = (lvl and lvl > 0) and (lvl * 5 + 140) or UNCRITTABLE_DEFENSE
     local need = target - def
     if need < 0 then need = 0 end
-    local text = "Uncrittable: " .. wholeText(def) .. "/" .. wholeText(target) .. " (need " .. wholeText(need) .. ")"
+    local text = string.format(BIT.L("Uncrittable: %s/%s (need %s)"),
+      wholeText(def), wholeText(target), wholeText(need))
     local l = alloc("line")
     l[1], l[2], l[3], l[4] = ((def >= target) and UP or DOWN) .. text .. "|r", 1, 1, 1
     out[#out + 1] = l
@@ -1644,10 +1655,10 @@ local function tankExtraLines(link, alloc)
     local total, text
     if miss then
       total = miss + dodge + parry + block
-      text = string.format("Avoidance: %.2f%% / 102.4%% (miss+dodge+parry+block)", total)
+      text = string.format(BIT.L("Avoidance: %.2f%% / 102.4%% (miss+dodge+parry+block)"), total)
     else
       total = dodge + parry + block
-      text = string.format("Avoidance: %.2f%% / 102.4%% (dodge+parry+block, no miss)", total)
+      text = string.format(BIT.L("Avoidance: %.2f%% / 102.4%% (dodge+parry+block, no miss)"), total)
     end
     local l = alloc("line")
     l[1], l[2], l[3], l[4] = ((total + 1e-9 >= AVOIDANCE_CAP) and UP or DOWN) .. text .. "|r", 1, 1, 1
@@ -1675,7 +1686,7 @@ end
 local worthSegMemo, worthSegCount = {}, 0
 local function worthSegBuild(kind, value)
   -- the icons line's own short words (WORTH_SHORT: "AP"), not the words-mode ones
-  return icon(ICONS[kind], 12) .. " " .. bySign(value, worthValue(kind, value) .. " " .. WORTH_SHORT[kind])
+  return icon(ICONS[kind], 12) .. " " .. bySign(value, worthValue(kind, value) .. " " .. BIT.L(WORTH_SHORT[kind]))
 end
 
 local function worthSeg(kind, value)
@@ -1754,7 +1765,7 @@ local function tooltipLinesCompact(link, alloc)
     lines[#lines + 1] = line
   elseif changed then
     local line = alloc("line")
-    line[1], line[2], line[3], line[4] = "No clear upgrade; hold Shift for details", 0.7, 0.7, 0.7
+    line[1], line[2], line[3], line[4] = BIT.L("No clear upgrade; hold Shift for details"), 0.7, 0.7, 0.7
     lines[#lines + 1] = line
   end
   return lines
@@ -1767,7 +1778,7 @@ local function tooltipLinesBody(link, gameCompares, alloc)
     local loc = allowed == false and equipLoc(link)
     if loc and (SLOTS[loc] or BOTH_HANDS[loc]) and settings and (settings.compare or settings.specs) then
       local line = alloc("line")
-      line[1], line[2], line[3], line[4] = "Cannot use this item", 1, 0.35, 0.35
+      line[1], line[2], line[3], line[4] = BIT.L("Cannot use this item"), 1, 0.35, 0.35
       lines[#lines + 1] = line
     end
     return lines
@@ -1784,9 +1795,17 @@ local function tooltipLinesBody(link, gameCompares, alloc)
   local foreign = settings.compare and inspecting()
   for _, c in ipairs(comps) do
     if settings.compare then
-    local against = #c.against > 0 and namesJoined(c.against) or "an empty slot"
+    local against = #c.against > 0 and namesJoined(c.against) or BIT.L("an empty slot")
     against = against .. slotLabel(c, allEmpty)
-    local head = (foreign and "Compared with your gear: " or "Against ") .. against
+    -- one whole template per heading, colon included, so a language can word it as it needs to
+    local head
+    if foreign then
+      head = string.format(BIT.L("Compared with your gear: %s"), against)
+    elseif settings.icons then
+      head = string.format(BIT.L("Against %s"), against)
+    else
+      head = string.format(BIT.L("Against %s:"), against)
+    end
     -- The differences, unless the tooltip has them already: the game's own comparison, or an empty slot,
     -- where they are the item's own stats.
     local showDiffs = #c.against > 0 and not gameCompares
@@ -1796,7 +1815,7 @@ local function tooltipLinesBody(link, gameCompares, alloc)
       lines[#lines + 1] = l
       if showDiffs and #c.diffs == 0 then
         l = alloc("line")
-        l[1], l[2], l[3], l[4] = "the same stats", 0.7, 0.7, 0.7
+        l[1], l[2], l[3], l[4] = BIT.L("the same stats"), 0.7, 0.7, 0.7
         lines[#lines + 1] = l
       end
       -- the differences, three to a line, and below them what they give, summed, with icons
@@ -1846,11 +1865,11 @@ local function tooltipLinesBody(link, gameCompares, alloc)
       end
     else
       local l = alloc("line")
-      l[1], l[2], l[3], l[4] = foreign and head or (head .. ":"), 0.4, 0.73, 1
+      l[1], l[2], l[3], l[4] = head, 0.4, 0.73, 1
       lines[#lines + 1] = l
       if showDiffs and #c.diffs == 0 then
         l = alloc("line")
-        l[1], l[2], l[3], l[4] = "  the same stats", 0.7, 0.7, 0.7
+        l[1], l[2], l[3], l[4] = "  " .. BIT.L("the same stats"), 0.7, 0.7, 0.7
         lines[#lines + 1] = l
       end
       for _, d in ipairs(c.diffs) do
@@ -1888,7 +1907,7 @@ local function tooltipLinesBody(link, gameCompares, alloc)
           lines[#lines + 1] = l
         elseif changed then
           local l = alloc("line")
-          l[1], l[2], l[3], l[4] = "No clear upgrade for this slot", 0.7, 0.7, 0.7
+          l[1], l[2], l[3], l[4] = BIT.L("No clear upgrade for this slot"), 0.7, 0.7, 0.7
           lines[#lines + 1] = l
         end
       end
@@ -2186,7 +2205,9 @@ end)
 -- API is ever read for it, and it measures nothing and hooks nothing.
 
 -- The sample item and its numbers, fixed: an item against an empty slot, so the worth line
--- carries the whole story ("Against an empty slot: +30 health +45 mana").
+-- carries the whole story ("Against an empty slot: +30 health +45 mana"). The words are the
+-- English keys of the locale files, translated when the lines are built; the worth and rating
+-- words come from the same helpers the real lines use, so the sample cannot drift from them.
 local SAMPLE = {
   title = "Embossed Leather Vest (sample)",
   itemLines = {
@@ -2197,12 +2218,12 @@ local SAMPLE = {
   },
   against = "an empty slot",
   stats = {
-    { stat = "+3 Stamina", worth = "+30 health", kind = "health" },
-    { stat = "+3 Intellect", worth = "+45 mana", kind = "mana" },
+    { stat = "+3 Stamina", value = 30, kind = "health" },
+    { stat = "+3 Intellect", value = 45, kind = "mana" },
   },
   specs = {
-    { icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", name = "Affliction", rating = ">300% better dmg spec" },
-    { icon = "Interface\\Icons\\Spell_Shadow_RainOfFire", name = "Destruction", rating = "25% better dmg spec" },
+    { icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", name = "Affliction", number = ">300" },
+    { icon = "Interface\\Icons\\Spell_Shadow_RainOfFire", name = "Destruction", number = "25" },
   },
 }
 
@@ -2213,8 +2234,8 @@ local function sampleLines(iconSize)
   local s = settings or DEFAULTS
   local out = {}
   local function add(text, r, g, b) out[#out + 1] = { text = text, r = r, g = g, b = b } end
-  add(SAMPLE.title, 1, 1, 1)
-  for _, l in ipairs(SAMPLE.itemLines) do add(l[1], l[2], l[3], l[4]) end
+  add(BIT.L(SAMPLE.title), 1, 1, 1)
+  for _, l in ipairs(SAMPLE.itemLines) do add(BIT.L(l[1]), l[2], l[3], l[4]) end
   if not tooltipWantsFull() then
     if s.compare or s.specs then
       local best = SAMPLE.specs[1]
@@ -2225,20 +2246,22 @@ local function sampleLines(iconSize)
   end
   if s.compare then
     add(DIVIDER, 1, 1, 1)
+    local against = BIT.L(SAMPLE.against)
     if s.icons then
-      add("Against " .. SAMPLE.against, 0.4, 0.73, 1)
+      add(string.format(BIT.L("Against %s"), against), 0.4, 0.73, 1)
       if s.worth then
         local row = {}
         for _, d in ipairs(SAMPLE.stats) do
-          row[#row + 1] = icon(ICONS[d.kind], iconSize) .. " " .. UP .. d.worth .. "|r"
+          row[#row + 1] = icon(ICONS[d.kind], iconSize) .. " " .. UP .. worthValue(d.kind, d.value)
+            .. " " .. BIT.L(WORTH_SHORT[d.kind]) .. "|r"
         end
         add(table.concat(row, "   "), 0.7, 0.7, 0.7)
       end
     else
-      add("Against " .. SAMPLE.against .. ":", 0.4, 0.73, 1)
+      add(string.format(BIT.L("Against %s:"), against), 0.4, 0.73, 1)
       for _, d in ipairs(SAMPLE.stats) do
         if s.worth then
-          add("  " .. UP .. d.stat .. "|r: " .. UP .. d.worth .. "|r", 0.7, 0.7, 0.7)
+          add("  " .. UP .. BIT.L(d.stat) .. "|r: " .. UP .. worthWord(d.kind, d.value) .. "|r", 0.7, 0.7, 0.7)
         end
       end
     end
@@ -2246,10 +2269,11 @@ local function sampleLines(iconSize)
   if s.specs then
     add(DIVIDER, 1, 1, 1)
     for _, r in ipairs(SAMPLE.specs) do
+      local rating = string.format(ratingTemplate("damage", true), r.number)
       if s.icons then
-        add(icon(r.icon, iconSize) .. " " .. r.name .. ": " .. r.rating, 1, 1, 1)
+        add(icon(r.icon, iconSize) .. " " .. BIT.L(r.name) .. ": " .. rating, 1, 1, 1)
       else
-        add("  " .. r.name .. ": " .. r.rating, 0.8, 0.8, 0.8)
+        add("  " .. BIT.L(r.name) .. ": " .. rating, 0.8, 0.8, 0.8)
       end
     end
   end
@@ -2307,14 +2331,14 @@ local function buildMockTooltip(scene)
   scene.bagPlusN = plusN
   scene.caption = scene:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   scene.caption:SetJustifyH("LEFT")
-  scene.caption:SetText("Static sample: bag and quest arrows follow their settings; live upgrades "
-    .. "are rated against your gear.")
+  scene.caption:SetText(BIT.L("Static sample: bag and quest arrows follow their settings; live upgrades "
+    .. "are rated against your gear."))
   local rewards = CreateFrame("Frame", nil, scene)
   rewards:SetSize(184, 48)
   scene.questRewardRow = rewards
   local rewardLabel = rewards:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   rewardLabel:SetJustifyH("LEFT")
-  rewardLabel:SetText("Quest rewards (sample)")
+  rewardLabel:SetText(BIT.L("Quest rewards (sample)"))
   scene.questRewardLabel = rewardLabel
   scene.questRewardIcons, scene.questRewardArrows, scene.questBestArrows = {}, {}, {}
   local rewardTextures = {
@@ -2402,7 +2426,7 @@ local function renderMockTooltip(scene, style)
     scene.title:ClearAllPoints()
     scene.title:SetPoint("TOPLEFT", 12, -4)
     scene.title:SetPoint("RIGHT", scene, "RIGHT", -12, 0) -- wrapped into the card
-    scene.title:SetText("Preview: sample item")
+    scene.title:SetText(BIT.L("Preview: sample item"))
     scene.title:SetHeight(0)
   end
   local titleDepth = scene.title and (measure(scene.title, fs + 8) + 8) or (fs + 16)
@@ -2511,7 +2535,7 @@ local function buildStatsPreview(parent)
   local scene = CreateFrame("Frame", nil, parent)
   scene:SetSize(560, SCENE_HEIGHT)
   scene.title = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  scene.title:SetText("StatsInfo sample (not your gear)")
+  scene.title:SetText(BIT.L("StatsInfo sample (not your gear)"))
   buildMockTooltip(scene)
   return scene
 end
@@ -2584,7 +2608,7 @@ BIT.RegisterTab("StatsInfo", {
     pane:SetPoint("TOPLEFT", 8, -8)
     pane:SetWidth(336)
     pane.title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    pane.title:SetText("Live preview (sample item, not your gear)")
+    pane.title:SetText(BIT.L("Live preview (sample item, not your gear)"))
     previewScene = pane
     pane.onLayout = function()
       parent:SetHeight(math.max(520, pane:GetHeight() + 220))
@@ -2699,7 +2723,7 @@ BIT.RegisterTab("StatsInfo", {
 
     -- Display: the boxes, each with what it does on hover. The beneficiary-icon box greys
     -- out with the arrows off: it has nothing to sit on then.
-    local display = addTab("Display")
+    local display = addTab(BIT.L("Display"))
     local checkRows = {}
     local updateBagIconState
     local function toggle(key, v)
@@ -2748,7 +2772,7 @@ BIT.RegisterTab("StatsInfo", {
     -- The row dims and disables its check box itself while the bag arrows are off.
     bagSpecIcons.enabledIf = function() return (settings or DEFAULTS).bagMarkers end
     updateBagIconState = function() bagSpecIcons:Refresh() end
-    display:body("Hover a box for what it does. The preview at the left follows these boxes at once.")
+    display:body(BIT.L("Hover a box for what it does. The preview at the left follows these boxes at once."))
     -- Reset: the seven settings above, back to their defaults. The appearance is not touched.
     local reset = BIT.Looks.ResetButton(display.content, function()
       for k, v in pairs(DEFAULTS) do settings[k] = v end
@@ -2764,40 +2788,40 @@ BIT.RegisterTab("StatsInfo", {
     display:place(reset, 12)
 
     -- Legend: the icons, and what the worth line says in words.
-    local legend = addTab("Legend")
-    legend:heading("What the icons stand for")
+    local legend = addTab(BIT.L("Legend"))
+    legend:heading(BIT.L("What the icons stand for"))
     local words = {}
     for _, kind in ipairs({ "armor", "ap", "crit", "hit", "haste", "expertise", "dodge", "parry", "block", "blockvalue", "defense",
       "health", "mana", "spellcrit", "regen", "hpregen", "healing", "spellpower" }) do
-      words[#words + 1] = icon(ICONS[kind], 12) .. " " .. WORTH_WORDS[kind]
+      words[#words + 1] = icon(ICONS[kind], 12) .. " " .. BIT.L(WORTH_WORDS[kind])
     end
     legend:body(table.concat(words, "    "))
-    legend:body("Under each difference: what the stats give this character -- the game's own numbers, "
-      .. "worked out as its character sheet works them out. Green is up, red is down.")
-    legend:body("Armor is 2 per Agility and mana regeneration a quarter of Spirit, as measured on Forever. "
+    legend:body(BIT.L("Under each difference: what the stats give this character -- the game's own numbers, "
+      .. "worked out as its character sheet works them out. Green is up, red is down."))
+    legend:body(BIT.L("Armor is 2 per Agility and mana regeneration a quarter of Spirit, as measured on Forever. "
       .. "Health regeneration from Spirit is the character sheet's own number (standing, out of combat), taken "
       .. "per point of Spirit: it assumes the two are proportional. "
-      .. "In combat the game may hide these numbers; then the line is left out.")
+      .. "In combat the game may hide these numbers; then the line is left out."))
 
     -- Ratings: how the spec numbers come about, and what they do not claim.
-    local ratings = addTab("Ratings")
-    ratings:heading("How each spec rates the item")
-    ratings:body("Each spec of your class rates the item against what you wear: \"25% better dmg spec\" "
-      .. "means its stats are worth a quarter more to that spec.")
-    ratings:body("A tank has two numbers: for survival (less damage taken) and for threat gen. (holding aggro).")
-    ratings:body("With nothing worth comparing, or a change past the cap: \">300% ...\", at most triple.")
-    ratings:body("Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is "
+    local ratings = addTab(BIT.L("Ratings"))
+    ratings:heading(BIT.L("How each spec rates the item"))
+    ratings:body(BIT.L("Each spec of your class rates the item against what you wear: \"25% better dmg spec\" "
+      .. "means its stats are worth a quarter more to that spec."))
+    ratings:body(BIT.L("A tank has two numbers: for survival (less damage taken) and for threat gen. (holding aggro)."))
+    ratings:body(BIT.L("With nothing worth comparing, or a change past the cap: \">300% ...\", at most triple."))
+    ratings:body(BIT.L("Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is "
       .. "rated by this addon's own starter heuristic, and its line is marked \"(approx.)\": "
-      .. "an approximate item score, not a measured healing gain.")
-    ratings:body("Its weights are design choices of this addon (tools/data/healer_weights.json): "
+      .. "an approximate item score, not a measured healing gain."))
+    ratings:body(BIT.L("Its weights are design choices of this addon (tools/data/healer_weights.json): "
       .. "1 x +Healing, 1 x Spell Power, 0.5 x Intellect, 0.5 x Spirit and 2 x MP5. "
-      .. "Every other stat counts for nothing to it.")
-    ratings:body("The other ratings use ForeverSim's stat weights, measured on a level 60 build of each spec "
-      .. "with its own talents, gear and buffs: below 60 they are an estimate.", true)
-    ratings:body("A weapon's damage per second counts as the simulator weighs it for the spec: main hand, "
-      .. "off hand and ranged slot apart.", true)
-    ratings:body("Not counted: what a hunter's pet gets from your stats, weapon skill, and Spirit for the "
-      .. "specs the simulator does not weigh it for.", true)
+      .. "Every other stat counts for nothing to it."))
+    ratings:body(BIT.L("The other ratings use ForeverSim's stat weights, measured on a level 60 build of each spec "
+      .. "with its own talents, gear and buffs: below 60 they are an estimate."), true)
+    ratings:body(BIT.L("A weapon's damage per second counts as the simulator weighs it for the spec: main hand, "
+      .. "off hand and ranged slot apart."), true)
+    ratings:body(BIT.L("Not counted: what a hunter's pet gets from your stats, weapon skill, and Spirit for the "
+      .. "specs the simulator does not weigh it for."), true)
     local detailBox = BIT.Looks.Rows.Check(ratings.content, "Always show the full tooltip",
       function() return (settings or DEFAULTS).detail == "full" end,
       function(v)
@@ -2807,29 +2831,29 @@ BIT.RegisterTab("StatsInfo", {
       { tooltip = "Off: one line, the best spec and its arrow. Hold Shift for the full breakdown." })
     ratings:place(detailBox)
     checkRows[#checkRows + 1] = detailBox
-    ratings:body("Hold Shift for the full breakdown.")
+    ratings:body(BIT.L("Hold Shift for the full breakdown."))
 
     -- Bag arrows: the two arrows, and when neither shows.
-    local bags = addTab("Bag arrows")
-    bags:heading("Arrows on bag items")
-    bags:body("On the game's own bags and the Baganator bag grid: green up when at least one spec's score "
-      .. "is outright better and none of it worse.")
-    bags:body("Red down only when every replacement path is strictly worse for every spec. "
-      .. "Mixed, equal or unknown: no arrow.")
-    bags:body("Always against what you wear in that slot, never a BiS verdict.")
-    bags:body("Stats the simulator does not model are compared conservatively by the raw differences, "
-      .. "with no spec icon; the healer's approximate score gets a ~ icon.")
-    bags:body("While the client hides stats (in combat) or the item's data has not arrived, no arrow is shown.")
+    local bags = addTab(BIT.L("Bag arrows"))
+    bags:heading(BIT.L("Arrows on bag items"))
+    bags:body(BIT.L("On the game's own bags and the Baganator bag grid: green up when at least one spec's score "
+      .. "is outright better and none of it worse."))
+    bags:body(BIT.L("Red down only when every replacement path is strictly worse for every spec. "
+      .. "Mixed, equal or unknown: no arrow."))
+    bags:body(BIT.L("Always against what you wear in that slot, never a BiS verdict."))
+    bags:body(BIT.L("Stats the simulator does not model are compared conservatively by the raw differences, "
+      .. "with no spec icon; the healer's approximate score gets a ~ icon."))
+    bags:body(BIT.L("While the client hides stats (in combat) or the item's data has not arrived, no arrow is shown."))
 
     selectTab(tabs[1])
 
     -- The probe row (a direct child of the tab's content): what /upt probe records.
     local count -- SI-751: declared before the button so its OnClick sees the local
-    local button = UI.Button(parent, "Record the probe", 170, function()
+    local button = UI.Button(parent, BIT.L("Record the probe"), 170, function()
       M.Probe()
       -- SI-751: the counter must refresh on click, not only on OnShow.
       local probes = BIT.DB().probes
-      count:SetText(string.format("%d recorded so far", type(probes) == "table" and #probes or 0))
+      count:SetText(string.format(BIT.L("%d recorded so far"), type(probes) == "table" and #probes or 0))
     end)
     button:SetPoint("TOPLEFT", opacitySlider, "BOTTOMLEFT", 0, -12)
     count = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -2838,7 +2862,7 @@ BIT.RegisterTab("StatsInfo", {
       -- re-asserted here too: whatever re-showed a content in between, one tab at a time
       selectTab(active or tabs[1])
       local probes = BIT.DB().probes
-      count:SetText(string.format("%d recorded so far", type(probes) == "table" and #probes or 0))
+      count:SetText(string.format(BIT.L("%d recorded so far"), type(probes) == "table" and #probes or 0))
       for _, c in ipairs(checkRows) do c:Refresh() end
       updateBagIconState()
       renderPreview()

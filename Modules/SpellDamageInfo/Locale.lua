@@ -306,8 +306,8 @@ ns.InterfaceLang = function() return interfaceLang end
 -- descriptions in one language anyway). Core.lua passes it to Parser.Parse and Parser.ParseReduction.
 -- PARSER_LANGS maps a client locale to the wording set the parser reads ("en", "de"); a locale
 -- missing from it falls back to the English wordings and stays without numbers rather than guess.
--- A new language joins here together with its wordings in Parser.lua and its "Use:" label in
--- Core.lua's USE_PREFIXES.
+-- A new language joins here together with its wordings in a pack, Parser_xxXX.lua (see the top
+-- of Parser.lua), and its "Use:" label in Core.lua's USE_PREFIXES.
 local PARSER_LANGS = { deDE = "de", enUS = "en", enGB = "en" }
 ns.PARSER_LANGS = PARSER_LANGS
 local descriptionLang = nil

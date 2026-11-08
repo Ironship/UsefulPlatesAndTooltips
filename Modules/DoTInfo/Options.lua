@@ -178,7 +178,7 @@ local function syncDisplayHost()
         if paused and simulation then
             simulation:Cancel()
             simulation = nil
-            window.simulateButton:SetText("Simulate fight")
+            window.simulateButton:SetText(BIT.L("Simulate fight"))
         end
         ns.setDisplayHost((not paused) and window.host or nil)
         ns.setPlatePreview((not paused) and window.plateHost or nil, preview)
@@ -226,13 +226,14 @@ local function updatePreview()
     window.healthPercent:SetText(pct(health))
     window.healthValue:SetText(tostring(math.floor(PREVIEW_MAX_HEALTH * health / 100 + 0.5)))
     if health <= 0 then
-        setVerdict("dead", "Target died", "")
+        setVerdict("dead", BIT.L("Target died"), "")
     elseif total <= 0 then
-        setVerdict("none", "No DoTs on the target", "")
+        setVerdict("none", BIT.L("No DoTs on the target"), "")
     elseif total >= health then
-        setVerdict("lethal", "DoTs kill it", pct(total) .. " vs " .. pct(health))
+        setVerdict("lethal", BIT.L("DoTs kill it"), string.format(BIT.L("%s vs %s"), pct(total), pct(health)))
     else
-        setVerdict("survives", "Survives by " .. pct(health - total), pct(total) .. " vs " .. pct(health))
+        setVerdict("survives", string.format(BIT.L("Survives by %s"), pct(health - total)),
+            string.format(BIT.L("%s vs %s"), pct(total), pct(health)))
     end
     ns.refresh()
 end
@@ -242,7 +243,7 @@ local function stopSimulation()
         simulation:Cancel()
         simulation = nil
     end
-    if window then window.simulateButton:SetText("Simulate fight") end
+    if window then window.simulateButton:SetText(BIT.L("Simulate fight")) end
 end
 
 -- A scripted fight: a DoT lands, ticks, a second DoT lands and makes it lethal, ticks until the target dies.
@@ -272,7 +273,7 @@ local function startSimulation()
         refreshControls()
         if preview.health <= 0 or (step > 5 and previewTotal() <= 0) then stopSimulation() end
     end)
-    window.simulateButton:SetText("Stop")
+    window.simulateButton:SetText(BIT.L("Stop"))
     updatePreview()
     refreshControls()
 end
@@ -339,8 +340,9 @@ end
 
 local function pushButton(parent, text, width, onClick)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width, 22)
-    button:SetText(text)
+    button:SetText(BIT.L(text))
+    -- A longer translation widens the button instead of overflowing it.
+    button:SetSize(math.max(width, math.ceil(button:GetFontString():GetStringWidth()) + 20), 22)
     button:SetScript("OnClick", onClick)
     return BIT.UI.SkinButton(button)
 end
@@ -380,15 +382,19 @@ local function frameRow(parent, key, labelText, kind, opts)
         if strtrim(self:GetText() or "") ~= Frames.Get(key) then save(self:GetText()) end
     end)
     local pick = (not opts.noPick) and pushButton(row, "Pick", 52, function()
-        ns.print(kind == "bar" and "Click the health bar (you may need to move this window). Right-click cancels."
-            or "Click where the kill icon should go (you may need to move this window). Right-click cancels.")
+        ns.print(kind == "bar"
+            and BIT.L("Click the health bar (you may need to move this window). Right-click cancels.")
+            or BIT.L("Click where the kill icon should go (you may need to move this window). Right-click cancels."))
         Frames.StartPick(kind, function(path)
             box:SetText(path)
             save(path)
-            ns.print("Picked " .. path .. ".")
+            ns.print(string.format(BIT.L("Picked %s."), path))
         end)
     end)
-    if pick then pick:SetPoint("LEFT", box, "RIGHT", 6, 0) end
+    if pick then
+        pick:SetPoint("LEFT", box, "RIGHT", 6, 0)
+        box:SetWidth(row.layout.control - pick:GetWidth() - 6)
+    end
     function row:Refresh()
         if not box:HasFocus() then box:SetText(Frames.Get(key)) end
         self:ApplyEnabled(box)
@@ -421,7 +427,7 @@ local function addTab(name)
     tab.content:Hide()
 
     local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
-    button:SetText(name)
+    button:SetText(BIT.L(name))
     button.text = button:GetFontString()
     button:SetSize(BIT.UI.TabWidth(button.text), TAB_HEIGHT)
     button.text:SetPoint("CENTER")
@@ -472,7 +478,7 @@ local function applyPreset(preset)
     for key, value in pairs(preset.values) do db()[key] = value end
     copyMarkerStyleToPlates()
     changed()
-    ns.print(preset.label .. " preset applied to the target frame and nameplates.")
+    ns.print(string.format(BIT.L("%s preset applied to the target frame and nameplates."), BIT.L(preset.label)))
 end
 
 ---------------------------------------------------------------------------
@@ -620,7 +626,7 @@ local function buildTabs()
             or "Prints each DoT cast, matched tick and estimate to chat." })
     if ns.Retail then
         behavior:action("Retail damage estimate", "Info", function()
-            ns.print("Rogue bleed and poison icons use WoW's aura timers. DoT damage is estimated from your casts and spell descriptions; dispels, immunities, procs and damage modifiers may change it.")
+            ns.print(BIT.L("Rogue bleed and poison icons use WoW's aura timers. DoT damage is estimated from your casts and spell descriptions; dispels, immunities, procs and damage modifiers may change it."))
         end, { tooltip = "The skull means estimated damage exceeds health. It is a prediction, not a confirmed kill." })
     else
         behavior:action("Learned tick sizes", "View", function() ns.toggleTickViewer() end, { tooltip = "What each of "
@@ -680,7 +686,7 @@ local function buildPreview(pane)
     local function header(text, anchor, gap)
         local label = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
-        label:SetText(text)
+        label:SetText(BIT.L(text))
         label:SetTextColor(0.85, 0.7, 0.3)
         local rule = pane:CreateTexture(nil, "ARTWORK")
         rule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
@@ -693,7 +699,7 @@ local function buildPreview(pane)
     -- Title row, level with the tab row on the right (its divider is also 34 px down).
     local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText("Live preview")
+    title:SetText(BIT.L("Live preview"))
     local titleRule = pane:CreateTexture(nil, "ARTWORK")
     titleRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
     titleRule:SetHeight(1)
@@ -871,8 +877,8 @@ local function buildPreview(pane)
     window.combatNote = noteLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     window.combatNote:SetPoint("CENTER", scene, "CENTER")
     window.combatNote:SetWidth(CARD_WIDTH - 24)
-    window.combatNote:SetText("In combat: the marker and kill icon are showing on your target. "
-        .. "The preview resumes after combat.")
+    window.combatNote:SetText(BIT.L("In combat: the marker and kill icon are showing on your target. "
+        .. "The preview resumes after combat."))
     window.combatNote:Hide()
 
     -- Verdict badge (242..272), right under the scene it describes: accent stripe, icon, verdict, numbers.
@@ -929,7 +935,7 @@ local function buildPreview(pane)
     hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", SIDE, 12)
     hint:SetWidth(CARD_WIDTH)
     hint:SetJustifyH("LEFT")
-    hint:SetText("While this window is open, the marker and kill icon are drawn here instead of on your target.")
+    hint:SetText(BIT.L("While this window is open, the marker and kill icon are drawn here instead of on your target."))
     local hintRule = pane:CreateTexture(nil, "ARTWORK")
     hintRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
     hintRule:SetHeight(1)
@@ -945,7 +951,7 @@ local function buildContent(top, anchor)
     local presetButton = BIT.Looks.PresetButton(window, PRESETS, applyPreset)
     presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
     presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
-    presetLabel:SetText("Both bars")
+    presetLabel:SetText(BIT.L("Both bars"))
 
     local pane = CreateFrame("Frame", nil, window, "BackdropTemplate")
     pane:SetPoint("TOPLEFT", 10, -top)
@@ -1035,7 +1041,7 @@ function ns.registerOptions()
         if not (window and window:IsShown()) then ns.openOptions() end
     end
     if type(BIT.UI.RegisterSettingsLauncher) == "function" and BIT.UI.RegisterSettingsLauncher("DoTInfo",
-        "Open the options window with a live preview. You can also type /dotinfo.", openSettings) then return end
+        BIT.L("Open the options window with a live preview. You can also type /dotinfo."), openSettings) then return end
     local panel = CreateFrame("Frame")
     local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
@@ -1043,7 +1049,7 @@ function ns.registerOptions()
     title:SetTextColor(BIT.UI.COLOR.heading[1], BIT.UI.COLOR.heading[2], BIT.UI.COLOR.heading[3])
     local text = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     text:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
-    text:SetText("Settings have their own window with a live preview. You can also type /dotinfo.")
+    text:SetText(BIT.L("Settings have their own window with a live preview. You can also type /dotinfo."))
     local open = pushButton(panel, "Open settings", 180, openSettings)
     open:SetPoint("TOPLEFT", text, "BOTTOMLEFT", 0, -14)
     local category = Settings.RegisterCanvasLayoutCategory(panel, "DoTInfo")
@@ -1058,7 +1064,7 @@ local function buildDoTPreview(parent)
   scene:SetSize(560, 120)
   scene.title = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   scene.title:SetPoint("TOPLEFT", 12, -4)
-  scene.title:SetText("DoTInfo sample (not your bars)")
+  scene.title:SetText(BIT.L("DoTInfo sample (not your bars)"))
   scene.bar = CreateFrame("StatusBar", nil, scene)
   scene.bar:SetSize(180, 20)
   scene.bar:SetPoint("TOPLEFT", 12, -30)
@@ -1071,7 +1077,7 @@ local function buildDoTPreview(parent)
   back:SetColorTexture(0.12, 0.04, 0.16, 1)
   scene.label = scene:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   scene.label:SetPoint("TOPLEFT", 12, -56)
-  scene.label:SetText("450 over 3 ticks")
+  scene.label:SetText(BIT.L("450 over 3 ticks"))
   scene.label:SetHeight(14)
   return scene
 end

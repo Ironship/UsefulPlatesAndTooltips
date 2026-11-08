@@ -120,7 +120,7 @@ C_Spell = {
     if id == 774 then return { name = "Verj\195\188ngung", castTime = 0 } end
   end,
 }
-for _, file in ipairs({ "Parser.lua", "Estimate.lua", "Core.lua" }) do
+for _, file in ipairs({ "Parser.lua", "Parser_enUS.lua", "Parser_deDE.lua", "Estimate.lua", "Core.lua" }) do
   assert(loadfile("Modules/SpellDamageInfo/" .. file))("UsefulPlatesAndTooltips", BIT)
 end
 local totalHot = assert(BIT.modules.SpellDamageInfo.ComputeHot(774)).total

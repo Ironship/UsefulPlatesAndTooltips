@@ -47,6 +47,22 @@ I wanted to have fun on a mage or a Destruction warlock too.
 English DoT descriptions correctly read thousands separators, such as `1,168` damage; localized parsing keeps
 the original text.
 
+## Languages
+
+The settings window, tooltips and chat lines follow the game language. German is translated; every other language shows English. `/upt lang` shows the language in use, `/upt lang auto`, `/upt lang en` or `/upt lang deDE` changes it (after `/reload`) and `/upt lang missing` lists the texts a language still lacks. The spell damage window has its own switch, `/sdi lang`.
+
+Some Forever clients report English even with German spell text; select `/upt lang deDE` explicitly in that case. Developer diagnostics and sample spell names remain English.
+
+Spell descriptions are read in English and German. For another language I need `/sdi dump all` from a client in that language (it is written to the saved variables on `/reload`). Russian, Korean and Chinese also need changes to the parser first, because its text handling assumes Latin letters.
+
+DoTInfo also retains partial fallback readers for Spanish, French, Korean, Brazilian Portuguese and Chinese. These do not provide full spell-parser or interface support.
+
+A language is a few files, each listed in both `.toc` files:
+
+- `Locales/<code>/*.lua`: interface texts; the English text is the key, so English has no file (see `Core/Locale.lua`).
+- `Modules/SpellDamageInfo/Parser_<code>.lua`: the wordings of the spell damage parser (see LANGUAGE PACKS in `Parser.lua`).
+- `Modules/DoTInfo/Locale_<code>.lua`: the DoT description reader (see `Locale.lua` there).
+
 ## Licence
 
 GPL-3.0-or-later, see [LICENSE](LICENSE). The resource tracker and the range indicator come from my own earlier addons.

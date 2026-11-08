@@ -564,16 +564,16 @@ function ns.LearnedLines()
     table.sort(ids)
     for index, id in ipairs(ids) do
         if index > LEARNED_LINES_MAX then
-            lines[#lines + 1] = string.format("... and %d more", #ids - LEARNED_LINES_MAX)
+            lines[#lines + 1] = string.format(BIT.L("... and %d more"), #ids - LEARNED_LINES_MAX)
             break
         end
         local entry = settings.learned[id]
         local refused = tonumber(entry.refused) or 0
-        lines[#lines + 1] = string.format("%s (%d): x%.2f from %d hit(s)%s", spellName(id) or "?", id,
+        lines[#lines + 1] = string.format(BIT.L("%s (%d): x%.2f from %d hit(s)%s"), spellName(id) or "?", id,
             tonumber(entry.factor) or 1, tonumber(entry.samples) or 0,
-            refused > 0 and string.format(", %d hit(s) too far from the estimate to learn from", refused) or "")
+            refused > 0 and string.format(BIT.L(", %d hit(s) too far from the estimate to learn from"), refused) or "")
     end
-    if #lines == 0 then lines[1] = "Nothing learned yet: cast damage spells at an enemy." end
+    if #lines == 0 then lines[1] = BIT.L("Nothing learned yet: cast damage spells at an enemy.") end
     return lines
 end
 
@@ -581,7 +581,7 @@ function ns.resetLearned()
     if not settings then return end
     settings.learned = {}
     trace("learned factors cleared")
-    print("Learned factors cleared.")
+    print(BIT.L("Learned factors cleared."))
 end
 
 ---------------------------------------------------------------------------------------------
@@ -2301,7 +2301,7 @@ if BIT.RegisterCommand then
             if BIT.OpenSettings then BIT.OpenSettings("CastPrediction") end
         elseif cmd == "line" then
             settings.showMarker = not settings.showMarker
-            print("Health bar marker " .. (settings.showMarker and "ON" or "OFF") .. ".")
+            print(settings.showMarker and BIT.L("Health bar marker ON.") or BIT.L("Health bar marker OFF."))
         elseif cmd == "reset" then
             ns.resetLearned()
         elseif cmd == "census" or cmd == "census clear" then
@@ -2351,8 +2351,8 @@ if BIT.RegisterCommand then
             settings.debug = not settings.debug
             print("Debug " .. (settings.debug and "ON" or "OFF") .. ".")
         elseif cmd == "help" then
-            print("/upt castpred - open the settings; line - toggle the marker; talents - what the talent tree "
-                .. "answers; auras - what buffs/debuffs are readable; learned - what the hits taught; census - read the whole talent tree into the saved settings (census clear removes it); reset - forget learned factors; debug - echo the trace log")
+            print(BIT.L("/upt castpred - open the settings; line - toggle the marker; talents - what the talent tree "
+                .. "answers; auras - what buffs/debuffs are readable; learned - what the hits taught; census - read the whole talent tree into the saved settings (census clear removes it); reset - forget learned factors; debug - echo the trace log"))
         else
             print("CastPrediction: /upt castpred [line|talents|auras|learned|census|census clear|reset|debug|layers]")
         end

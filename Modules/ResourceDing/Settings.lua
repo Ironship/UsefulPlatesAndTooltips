@@ -271,17 +271,21 @@ function updateLivePreview()
     end
   end
 
-  local caption = "Sample: " .. points .. " of " .. MAX_POINTS .. (shards and " soul shards" or " combo points")
-  if points >= MAX_POINTS then caption = caption .. " (full)" end
-  scene.caption:SetText(caption)
-  if scene.pointsControl then scene.pointsControl.label:SetText(shards and "Soul shards" or "Combo points") end
+  local caption
+  if shards then
+    caption = points >= MAX_POINTS and BIT.L("Sample: %d of %d soul shards (full)") or BIT.L("Sample: %d of %d soul shards")
+  else
+    caption = points >= MAX_POINTS and BIT.L("Sample: %d of %d combo points (full)") or BIT.L("Sample: %d of %d combo points")
+  end
+  scene.caption:SetText(string.format(caption, points, MAX_POINTS))
+  if scene.pointsControl then scene.pointsControl.label:SetText(shards and BIT.L("Soul shards") or BIT.L("Combo points")) end
   if scene.diamondsControl then scene.diamondsControl:SetShown(shards) end
 end
 
 local function buildLivePreview(pane)
   local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOPLEFT", 12, -12)
-  title:SetText("Live preview")
+  title:SetText(BIT.L("Live preview"))
   local titleRule = pane:CreateTexture(nil, "ARTWORK")
   titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
   titleRule:SetHeight(1)
@@ -307,7 +311,7 @@ local function buildLivePreview(pane)
 
   local tryIt = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   tryIt:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -14)
-  tryIt:SetText("TRY IT")
+  tryIt:SetText(BIT.L("TRY IT"))
   tryIt:SetTextColor(0.85, 0.7, 0.3)
   local tryRule = pane:CreateTexture(nil, "ARTWORK")
   tryRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
@@ -342,8 +346,8 @@ local function buildLivePreview(pane)
   hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", 12, 8)
   hint:SetWidth(PANE_WIDTH - 24)
   hint:SetJustifyH("LEFT")
-  hint:SetText("Hear a single cue when your class finisher resource reaches maximum. "
-    .. "The preview is a silent sample drawn with the live dots and diamonds, not your target.")
+  hint:SetText(BIT.L("Hear a single cue when your class finisher resource reaches maximum. "
+    .. "The preview is a silent sample drawn with the live dots and diamonds, not your target."))
   updateLivePreview()
 end
 
@@ -379,7 +383,7 @@ local function addTab(name)
   end)
 
   local button = CreateFrame("Button", nil, settingsArea, "PanelTopTabButtonTemplate")
-  button:SetText(name)
+  button:SetText(BIT.L(name))
   button.text = button:GetFontString()
   button:SetSize(BIT.UI.TabWidth(button.text), 26)
   button.text:SetPoint("CENTER")
@@ -448,7 +452,7 @@ local function buildTabs()
     { tooltip = "How big the circles and the shard diamonds are." })
   dots:slider("dotOffset", "Dot vertical offset (- = above)", -80, 30, 1,
     { tooltip = "How far the dots sit from the health bar. The same seat as the hunter rail: top of the row, -offset under the bar." })
-  plateClashRow = dots:note("Nameplate lanes")
+  plateClashRow = dots:note(BIT.L("Nameplate lanes"))
   if plateClashRow and plateClashRow.text and BIT.Plate and type(BIT.Plate.ClashText) == "function" then
     plateClashRow.text:SetText(BIT.Plate.ClashText())
   end
@@ -483,12 +487,12 @@ local function buildTabs()
   for _, resource in pairs(Addon.RESOURCES) do
     if not seen[resource.name] then
       seen[resource.name] = true
-      names[#names + 1] = resource.name
+      names[#names + 1] = BIT.L(resource.name)
     end
   end
   table.sort(names)
-  sound:note("Supported: " .. table.concat(names, ", ")
-    .. ". Classes without one of these get no finisher sound.")
+  sound:note(string.format(BIT.L("Supported: %s. Classes without one of these get no finisher sound."),
+    table.concat(names, ", ")))
   sound:gap()
 
   local appearance = addTab("Appearance")
@@ -566,7 +570,7 @@ function Addon.CreateSettingsPanel(parent)
   panel.manaDropdown = widgets.manaSound
   panel.tabs = tabs
 
-  panel.resetButton = pushButton(area, "Reset this tab", 120, function() resetTab(activeTab) end)
+  panel.resetButton = pushButton(area, BIT.L("Reset this tab"), 120, function() resetTab(activeTab) end)
   panel.resetButton:SetPoint("BOTTOMRIGHT", -10, 10)
 
   panel.refresh = function()
@@ -574,13 +578,13 @@ function Addon.CreateSettingsPanel(parent)
     local resource, current, maximum = Addon.GetResourceState()
     if resource and maximum > 0 and current == nil then
       -- The game is keeping the count to itself just now: Forever, in combat.
-      resourceText:SetText(string.format("Detected: %s (count hidden by the game)", resource.name))
+      resourceText:SetText(string.format(BIT.L("Detected: %s (count hidden by the game)"), BIT.L(resource.name)))
     elseif resource and maximum > 0 then
-      resourceText:SetText(string.format("Detected: %s (%d / %d)", resource.name, current, maximum))
+      resourceText:SetText(string.format(BIT.L("Detected: %s (%d / %d)"), BIT.L(resource.name), current, maximum))
     elseif resource then
-      resourceText:SetText("Detected: " .. resource.name .. " (inactive for this spec/form)")
+      resourceText:SetText(string.format(BIT.L("Detected: %s (inactive for this spec/form)"), BIT.L(resource.name)))
     else
-      resourceText:SetText("No finisher resource for this class")
+      resourceText:SetText(BIT.L("No finisher resource for this class"))
     end
     refreshControls()
     updateLivePreview()
@@ -683,13 +687,13 @@ local function buildResourceDingPreview(parent)
   scene.title = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   previewFixWidth(scene.title, PREVIEW_TITLE_WIDTH)
   scene.title:SetPoint("TOPLEFT", PREVIEW_TITLE_X, PREVIEW_TITLE_TOP)
-  scene.title:SetText("ResourceDing sample (silent, not your target)")
+  scene.title:SetText(BIT.L("ResourceDing sample (silent, not your target)"))
   scene.rows = {}
   for r, spec in ipairs(PREVIEW_ROWS) do
     local label = scene:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     previewFixWidth(label, PREVIEW_LABEL_WIDTH)
     label:SetPoint("TOPLEFT", PREVIEW_LABEL_X, -30 - (r - 1) * 30)
-    label:SetText(spec.label)
+    label:SetText(BIT.L(spec.label))
     local row = { label = label, dots = {} }
     for i = 1, spec.total do
       -- The same native circles as the live HUD (Dots.lua), fixed values, never the target.

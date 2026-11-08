@@ -2249,7 +2249,7 @@ local function breakdownText(entries)
         table.insert(parts, string.format("|cff%02x%02x%02x%s %d|r", byte(color[1]), byte(color[2]),
             byte(color[3]), entry.name, math.floor(entry.damage + 0.5)))
     end
-    return "DoTs: " .. table.concat(parts, " · ")
+    return string.format(BIT.L("DoTs: %s"), table.concat(parts, " · "))
 end
 
 local function playFlash()
@@ -2485,7 +2485,8 @@ local function refresh()
         local perDot = db.dotColors ~= "single"
         setMarkerValue(total, "preview", updateSegments(perDot and entries or nil))
         fillLayer.refreshMark:SetShown((not perDot) and anyRefreshDue(entries))
-        label:SetText(perDot and breakdownText(entries) or string.format("DoTs: %d", math.floor(total + 0.5)))
+        label:SetText(perDot and breakdownText(entries)
+            or string.format(BIT.L("DoTs: %d"), math.floor(total + 0.5)))
         showMarkers()
         return
     end
@@ -2518,7 +2519,7 @@ local function refresh()
 
     skullWindow:SetShown(db.showSkull)
     if healthBar then
-        label:SetText(perDot and breakdownText(breakdown) or string.format("DoTs: %d", damage))
+        label:SetText(perDot and breakdownText(breakdown) or string.format(BIT.L("DoTs: %d"), damage))
         showMarkers()
     else
         hideMarkers()
@@ -2759,7 +2760,7 @@ end
 function ns.resetLearnedTicks()
     wipe(db.ticks)
     ns.dropSnapshots()
-    print("Learned tick sizes cleared.")
+    print(BIT.L("Learned tick sizes cleared."))
 end
 
 function ns.forgetLearnedTick(key)
@@ -2874,9 +2875,9 @@ frame:SetScript("OnEvent", function(self, event, ...)
         if not BIT.RegisterTab then ok, err = pcall(ns.registerOptions) end
         if not ok then
             trace("Options panel registration failed: " .. tostring(err))
-            print("Couldn't create the options panel; slash commands still work (/dotinfo help).")
+            print(BIT.L("Couldn't create the options panel; slash commands still work (/dotinfo help)."))
         end
-        if not attach() then print("Target portrait not found; kill icon shown beside the target frame.") end
+        if not attach() then print(BIT.L("Target portrait not found; kill icon shown beside the target frame.")) end
         self:UnregisterEvent("ADDON_LOADED")
 
     elseif not db then
@@ -3003,36 +3004,39 @@ SlashCmdList.BITDOTINFO = function(msg)
     elseif cmd == "line" then
         db.showMarkers = not db.showMarkers
         if db.showMarkers and not healthBar then
-            print("Target frame health bar not found; health bar markers unavailable.")
+            print(BIT.L("Target frame health bar not found; health bar markers unavailable."))
         else
-            print("Health bar markers " .. (db.showMarkers and "ON" or "OFF") .. "."
-                .. ((db.showMarkers and db.targetMarkers == false) and " The target frame's stays off (Marker tab)." or ""))
+            local state = BIT.L(db.showMarkers and "Health bar markers ON." or "Health bar markers OFF.")
+            if db.showMarkers and db.targetMarkers == false then
+                state = state .. " " .. BIT.L("The target frame's stays off (Marker tab).")
+            end
+            print(state)
         end
     elseif cmd == "plates" then
         ns.probeNameplates()
     elseif cmd == "skull" then
         skullTestUntil = GetTime() + 5
-        print("Kill icon test for 5 seconds: one icon ON the portrait (the real one) and one ABOVE it (plain test).")
+        print(BIT.L("Kill icon test for 5 seconds: one icon ON the portrait (the real one) and one ABOVE it (plain test)."))
         C_Timer.After(0.5, traceSkullGeometry)
     elseif cmd == "debug" then
         db.debug = not db.debug
-        print("Debug " .. (db.debug and "ON" or "OFF") .. ".")
+        print(BIT.L(db.debug and "Debug ON." or "Debug OFF."))
     elseif cmd == "reset" then
         ns.resetLearnedTicks()
     elseif cmd == "check" then
         if ns.CheckSpellbook then ns.CheckSpellbook(trace) end
     elseif cmd == "ticks" then
         if ns.toggleTickViewer then ns.toggleTickViewer()
-        else print("Tick sizes are not learned on this client.") end
+        else print(BIT.L("Tick sizes are not learned on this client.")) end
     else
-        print("The kill icon on the target's portrait means your DoTs will kill it.")
-        print(SLASH .. " - open the options window")
-        print(SLASH .. " line - toggle health bar markers on/off")
-        print(SLASH .. " skull - show the kill icon for 5 seconds to check its position")
-        print(SLASH .. " plates - check what the addon can reach on visible nameplates (logged)")
-        print(SLASH .. " debug - toggle echoing the trace log (casts, ticks, estimates) to chat")
-        if not ns.Retail then print(SLASH .. " ticks - show the learned tick sizes") end
-        print(SLASH .. " check - read every spell in your spellbook and list the DoT descriptions it cannot read")
-        print(SLASH .. " reset - forget learned tick sizes")
+        print(BIT.L("The kill icon on the target's portrait means your DoTs will kill it."))
+        print(BIT.L("/dotinfo - open the options window"))
+        print(BIT.L("/dotinfo line - toggle health bar markers on/off"))
+        print(BIT.L("/dotinfo skull - show the kill icon for 5 seconds to check its position"))
+        print(BIT.L("/dotinfo plates - check what the addon can reach on visible nameplates (logged)"))
+        print(BIT.L("/dotinfo debug - toggle echoing the trace log (casts, ticks, estimates) to chat"))
+        if not ns.Retail then print(BIT.L("/dotinfo ticks - show the learned tick sizes")) end
+        print(BIT.L("/dotinfo check - read every spell in your spellbook and list the DoT descriptions it cannot read"))
+        print(BIT.L("/dotinfo reset - forget learned tick sizes"))
     end
 end

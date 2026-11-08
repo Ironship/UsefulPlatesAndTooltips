@@ -43,8 +43,9 @@ end
 
 local function pushButton(parent, text, width, onClick)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width, 22)
-    button:SetText(text)
+    button:SetText(BIT.L(text))
+    -- A longer translation widens the button instead of overflowing it.
+    button:SetSize(math.max(width, math.ceil(button:GetFontString():GetStringWidth()) + 20), 22)
     button:SetScript("OnClick", onClick)
     return BIT.UI.SkinButton(button)
 end
@@ -54,22 +55,22 @@ local function showTooltip(row)
     if not entry then return end
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
     local shown = GameTooltip.SetSpellByID and pcall(GameTooltip.SetSpellByID, GameTooltip, entry.spellID)
-    if not shown then GameTooltip:SetText(entry.name or ("Spell " .. entry.spellID), 1, 1, 1) end
+    if not shown then GameTooltip:SetText(entry.name or string.format(BIT.L("Spell %d"), entry.spellID), 1, 1, 1) end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine("DoTInfo", 1, 0.82, 0)
     if entry.comboPoints then
-        GameTooltip:AddDoubleLine("Combo points", entry.comboPoints, 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddDoubleLine(BIT.L("Combo points"), entry.comboPoints, 0.8, 0.8, 0.8, 1, 1, 1)
     end
-    GameTooltip:AddDoubleLine("Learned per tick", formatTick(entry.perTick), 0.8, 0.8, 0.8, 1, 1, 1)
+    GameTooltip:AddDoubleLine(BIT.L("Learned per tick"), formatTick(entry.perTick), 0.8, 0.8, 0.8, 1, 1, 1)
     if entry.tooltipPerTick then
-        GameTooltip:AddDoubleLine("Tooltip per tick", formatTick(entry.tooltipPerTick), 0.8, 0.8, 0.8, 1, 1, 1)
-        GameTooltip:AddDoubleLine("Ticks", string.format("%d, every %gs (%gs)", entry.ticks, entry.interval,
-            entry.duration), 0.8, 0.8, 0.8, 1, 1, 1)
-        GameTooltip:AddDoubleLine("Full duration", formatTick(entry.perTick * entry.ticks), 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddDoubleLine(BIT.L("Tooltip per tick"), formatTick(entry.tooltipPerTick), 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddDoubleLine(BIT.L("Ticks"), string.format(BIT.L("%d, every %gs (%gs)"), entry.ticks,
+            entry.interval, entry.duration), 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddDoubleLine(BIT.L("Full duration"), formatTick(entry.perTick * entry.ticks), 0.8, 0.8, 0.8, 1, 1, 1)
     end
-    GameTooltip:AddLine("Learned from this spell's ticks on your targets; used instead of the tooltip's number, "
-        .. "which leaves out spell power and attack power.", 0.6, 0.6, 0.6, true)
-    GameTooltip:AddLine("Shift-click to link it in chat.", 0.5, 0.8, 1)
+    GameTooltip:AddLine(BIT.L("Learned from this spell's ticks on your targets; used instead of the tooltip's number, "
+        .. "which leaves out spell power and attack power."), 0.6, 0.6, 0.6, true)
+    GameTooltip:AddLine(BIT.L("Shift-click to link it in chat."), 0.5, 0.8, 1)
     GameTooltip:Show()
 end
 
@@ -122,8 +123,8 @@ local function createRow(parent, index)
     forgetHighlight:SetColorTexture(1, 0.3, 0.3, 0.25)
     forget:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText("Forget this tick size", 1, 1, 1)
-        GameTooltip:AddLine("The next cast starts from the tooltip again and learns it anew.", nil, nil, nil, true)
+        GameTooltip:SetText(BIT.L("Forget this tick size"), 1, 1, 1)
+        GameTooltip:AddLine(BIT.L("The next cast starts from the tooltip again and learns it anew."), nil, nil, nil, true)
         GameTooltip:Show()
     end)
     forget:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -150,10 +151,10 @@ local function fillRow(row, entry)
     local color = entry.color or { 0.5, 0.5, 0.5 }
     row.school:SetColorTexture(color[1], color[2], color[3], 1)
     row.icon:SetTexture(spellCall("GetSpellTexture", entry.spellID) or "Interface\\Icons\\INV_Misc_QuestionMark")
-    row.name:SetText(entry.name or ("Spell " .. entry.spellID))
+    row.name:SetText(entry.name or string.format(BIT.L("Spell %d"), entry.spellID))
     row.name:SetTextColor(SPELL_LINK_COLOR[1], SPELL_LINK_COLOR[2], SPELL_LINK_COLOR[3])
     local rank = spellCall("GetSpellSubtext", entry.spellID)
-    row.rank:SetText(rank and rank ~= "" and rank or ("ID " .. entry.spellID))
+    row.rank:SetText(rank and rank ~= "" and rank or string.format(BIT.L("ID %d"), entry.spellID))
     row.cells.combo:SetText(entry.comboPoints or "")
     row.cells.learned:SetText(formatTick(entry.perTick))
     row.cells.tooltip:SetText(entry.tooltipPerTick and formatTick(entry.tooltipPerTick) or "-")
@@ -206,16 +207,16 @@ local function createViewer()
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText("Learned tick sizes")
+    title:SetText(BIT.L("Learned tick sizes"))
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -6, -10)
     local intro = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     intro:SetWidth(width - 32)
     intro:SetJustifyH("LEFT")
-    intro:SetText("What each DoT really ticks for, learned from your casts and used instead of its tooltip. "
+    intro:SetText(BIT.L("What each DoT really ticks for, learned from your casts and used instead of its tooltip. "
         .. "Tooltips leave out spell power and attack power: Bonus is how much more yours do. "
-        .. "Hover a spell for details, shift-click to link it.")
+        .. "Hover a spell for details, shift-click to link it."))
 
     local list = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     list:SetPoint("TOPLEFT", 10, -100)
@@ -224,8 +225,8 @@ local function createViewer()
     BIT.UI.Backdrop(list, 0.09)
     list:EnableMouseWheel(true)
 
-    local headers = { spell = "Spell", combo = "Combo", learned = "Per tick", tooltip = "Tooltip", bonus = "Bonus",
-        total = "Total" }
+    local headers = { spell = BIT.L("Spell"), combo = BIT.L("Combo"), learned = BIT.L("Per tick"),
+        tooltip = BIT.L("Tooltip"), bonus = BIT.L("Bonus"), total = BIT.L("Total") }
     for column, text in pairs(headers) do
         local header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         header:SetPoint("BOTTOMLEFT", list, "TOPLEFT", COLUMNS[column][1], 4)
@@ -243,7 +244,7 @@ local function createViewer()
     local empty = list:CreateFontString(nil, "OVERLAY", "GameFontDisable")
     empty:SetPoint("CENTER")
     empty:SetWidth(width - 80)
-    empty:SetText("Nothing learned yet. Tick sizes are learned as your DoTs tick on your targets.")
+    empty:SetText(BIT.L("Nothing learned yet. Tick sizes are learned as your DoTs tick on your targets."))
 
     local count = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     count:SetPoint("BOTTOMLEFT", 16, 18)
@@ -263,9 +264,10 @@ local function createViewer()
             if entry then fillRow(row, entry) else row.entry = nil; row:Hide() end
         end
         empty:SetShown(#entries == 0)
-        local scrolled = maxOffset > 0 and string.format("  (%d-%d shown; scroll for more)",
+        local scrolled = maxOffset > 0 and "  " .. string.format(BIT.L("(%d-%d shown; scroll for more)"),
             self.offset + 1, math.min(#entries, self.offset + VISIBLE_ROWS)) or ""
-        local counted = #entries == 1 and "1 learned tick size" or string.format("%d learned tick sizes", #entries)
+        local counted = #entries == 1 and BIT.L("1 learned tick size")
+            or string.format(BIT.L("%d learned tick sizes"), #entries)
         count:SetText(counted .. scrolled)
         forgetAll:SetEnabled(#entries > 0)
     end

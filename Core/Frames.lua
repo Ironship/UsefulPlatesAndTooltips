@@ -286,9 +286,11 @@ local function createPickFrame()
     else
       highlight:Hide()
     end
-    local what = picker.kind == "bar" and "the health bar" or "where the kill icon should go"
-    local text = candidate and (Frames.PathOf(candidate) or "(this frame has no name to save)") or "nothing under the mouse"
-    pickLabel:SetText("DoesItDiePlus: click " .. what .. " (right-click to cancel)\n|cff33ff4d" .. text .. "|r")
+    local what = picker.kind == "bar" and BIT.L("the health bar") or BIT.L("where the kill icon should go")
+    local text = candidate and (Frames.PathOf(candidate) or BIT.L("(this frame has no name to save)"))
+      or BIT.L("nothing under the mouse")
+    pickLabel:SetText(string.format(BIT.L("DoesItDiePlus: click %s (right-click to cancel)"), what)
+      .. "\n|cff33ff4d" .. text .. "|r")
   end
 
   -- Runs 20 times a second over frames we do not own: an error stops picking (reported once) instead of repeating.
@@ -300,7 +302,7 @@ local function createPickFrame()
     local ok, err = pcall(update)
     if not ok then
       Frames.StopPick()
-      BIT.Say("Frame pick stopped after an error: " .. tostring(err) .. ". You can still type a frame name.")
+      BIT.Say(string.format(BIT.L("Frame pick stopped after an error: %s. You can still type a frame name."), tostring(err)))
     end
   end)
 
@@ -311,16 +313,16 @@ local function createPickFrame()
     local current = picker
     Frames.StopPick()
     if button == "RightButton" then
-      BIT.Say("Frame pick cancelled.")
+      BIT.Say(BIT.L("Frame pick cancelled."))
       return
     end
     if not current.candidate then
-      BIT.Say("Nothing to pick there.")
+      BIT.Say(BIT.L("Nothing to pick there."))
       return
     end
     local path = Frames.PathOf(current.candidate)
     if not path then
-      BIT.Say("That frame has no name to save, so it cannot be found again after a reload. Try the frame around it, or type a path.")
+      BIT.Say(BIT.L("That frame has no name to save, so it cannot be found again after a reload. Try the frame around it, or type a path."))
       return
     end
     current.onPick(path)
@@ -341,9 +343,10 @@ end
 
 local function describe(key)
   local path = Frames.Get(key)
-  if path == "" then return "automatic" end
+  if path == "" then return BIT.L("automatic") end
   if key == "plate" then return path end
-  return Frames.Resolve(path) and ("|cff66ff66" .. path .. "|r") or ("|cffff6666" .. path .. " not found|r")
+  return Frames.Resolve(path) and ("|cff66ff66" .. path .. "|r")
+    or ("|cffff6666" .. string.format(BIT.L("%s not found"), path) .. "|r")
 end
 
 if BIT.RegisterCommand then
@@ -359,18 +362,19 @@ if BIT.RegisterCommand then
     for _, k in ipairs({ "target", "icon", "focus", "player", "plate" }) do
       BIT.Say(string.format("%s: %s", k, describe(k)))
     end
-    BIT.Say("/upt frame target|icon|focus|player|plate <path> sets one (\"clear\" removes it); /upt pick target|icon|focus|player")
+    BIT.Say(BIT.L("/upt frame target|icon|focus|player|plate <path> sets one (\"clear\" removes it); /upt pick target|icon|focus|player"))
   end)
   BIT.RegisterCommand("pick", function(rest)
     local key = ((rest or ""):match("^(%S+)") or ""):lower()
     if not KEYS[key] or key == "plate" then
-      BIT.Say("/upt pick target|icon|focus|player, then click the frame on screen (right-click cancels).")
+      BIT.Say(BIT.L("/upt pick target|icon|focus|player, then click the frame on screen (right-click cancels)."))
       return
     end
-    BIT.Say("Click the " .. (key == "icon" and "spot for the kill icon" or key .. "'s health bar") .. ". Right-click cancels.")
+    BIT.Say(key == "icon" and BIT.L("Click the spot for the kill icon. Right-click cancels.")
+      or string.format(BIT.L("Click the health bar of %s. Right-click cancels."), key))
     Frames.StartPick(key == "icon" and "anchor" or "bar", function(path)
       Frames.Set(key, path)
-      BIT.Say(string.format("Picked %s for %s.", path, key))
+      BIT.Say(string.format(BIT.L("Picked %s for %s."), path, key))
     end)
   end)
 end
