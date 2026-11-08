@@ -4,6 +4,24 @@ DoesItDiePlus, formerly Useful Plates and Tooltips, is my take on [Does It Die](
 
 What it adds:
 
+## Compared with Does It Die
+
+Based on the [Does It Die source at `a771a3d`](https://github.com/swirllyman/DoesItDie/tree/a771a3de41e3881eee7e86fd0bcf207d116fbb1f), checked on November 8, 2026, these capabilities are implemented here but not in that upstream version:
+
+| Added capability | What the code does |
+| --- | --- |
+| [Direct-spell and channel prediction](Modules/CastPrediction/Core.lua) | Predicts damage from spells such as Frostbolt and Shadow Bolt during casting and projectile travel, plus remaining channel damage. Upstream's casting estimate covers only the periodic part of DoT spells. |
+| [Healing prediction](Modules/HealPrediction/Core.lua) and [HoTs](Modules/HealPrediction/Hots.lua) | Draws client-reported incoming healing on unit frames, with an optional all-healers view and separate estimates for your own targeted HoTs. |
+| [Shield overlays](Modules/ShieldsInfo/ShieldsInfo.lua) | Draws client-reported remaining absorbs on unit frames and accessible nameplates. |
+| [Action-bar and tooltip estimates](Modules/SpellDamageInfo/Core.lua) | Adds spell and item damage, healing, absorb and mana numbers, including supported macro and pet-action slots. |
+| [Equipment comparison](Modules/StatsInfo/StatsInfo.lua) | Adds stat changes against equipped items and specialization-based item scores, using ForeverSim weights and an approximate healer model. |
+| [Resource tracking](Modules/ResourceDing/Core.lua) and [Soul Shards](Modules/ResourceDing/Shards.lua) | Shows resource markers and configurable sounds for a full resource bar or shard gains; counts bag-item shards on Classic/Forever and power-based shards on Retail. |
+| [Hunter range HUD](Modules/HunterRangeFinder/HunterRangeFinder.lua) | Uses spell/item range checks for approximate distance bands, melee range and the dead zone, not exact yard measurements. |
+| [Crit-triggered DoT estimates](Modules/DoTInfo/ProcDots.lua) | Estimates Ignite and Deep Wounds from readable hits on Forever, with heuristic ownership attribution. |
+| [Gamepad navigation](Core/Gamepad.lua) | Adds directional navigation, activation and tab switching to the settings UI. |
+
+DoT damage markers, kill icons, focus/nameplate displays, custom-frame attachment and a public DoT API already exist upstream; they are not unique additions here. Availability still depends on the client's APIs and readable combat data.
+
 ## CastPrediction of normal spells
 
 I wanted to have fun on a mage or a Destruction warlock too.

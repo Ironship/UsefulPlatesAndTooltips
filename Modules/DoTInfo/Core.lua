@@ -113,7 +113,8 @@ local DEFAULTS = {
     -- Skull
     showSkull = true,
     skullIcon = "cross",
-    skullSize = 64,
+    skullSize = 72,
+    skullPosition = "portrait",
     skullPulse = true,
     skullOffsetX = 0,
     skullOffsetY = 0,
@@ -158,12 +159,13 @@ local DEFAULTS = {
     -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
     nameplateMode = "markerIcon",
     focusMode = "markerIcon",       -- the focus frame's marker (Focus.lua), in the nameplates' look
-    nameplateIconSize = 18,
-    nameplateIconPosition = "left", -- the level badge sits right of the bar on Forever's plates
+    nameplateIconSize = 24,
+    nameplateIconPosition = "above",
     plateIconOffsetX = 0,
-    plateIconOffsetY = 15,          -- clear of the level number, which draws over the icon
+    plateIconOffsetY = 0,
     plateIcon = "skull",
     plateDotColors = "single",
+    plateFillDirection = "auto",
     plateFillTexture = "flat",
     plateFillColor = "white",
     plateFillOpacity = 45,
@@ -233,6 +235,68 @@ local function isSecret(v)
     if type(issecretvalue) ~= "function" then return false end
     local ok, r = pcall(issecretvalue, v)
     return ok and r or false
+end
+
+-- ponytail: known shields/immunities only; extend this list when another relevant aura is identified.
+do
+local protectionSpells = {
+    [17] = true, [11426] = true, [1463] = true, [7812] = true, -- priest, mage, warlock shields
+    [642] = true, [1022] = true, [45438] = true, [31224] = true, [48707] = true,
+    [212295] = true, -- Nether Ward
+}
+local protectionNames = {}
+for id in pairs(protectionSpells) do
+    local getName = (C_Spell and C_Spell.GetSpellName) or GetSpellInfo
+    if type(getName) == "function" then
+        local ok, name = pcall(getName, id)
+        if ok and not isSecret(name) and type(name) == "string" then protectionNames[name] = true end
+    end
+end
+
+local protectionUnavailableReported = false
+local function protectionUnknown()
+    if not protectionUnavailableReported then
+        protectionUnavailableReported = true
+        trace("Shield or immunity state unavailable; hiding the DoT kill icon")
+    end
+    return true
+end
+
+function ns.shielded(unit)
+    local absorbUnknown = false
+    if type(UnitGetTotalAbsorbs) == "function" then
+        local ok, amount = pcall(UnitGetTotalAbsorbs, unit)
+        if not ok or isSecret(amount) or type(amount) ~= "number" then
+            absorbUnknown = true
+        elseif amount > 0 then
+            return true
+        end
+    end
+    local getAura = C_UnitAuras and (C_UnitAuras.GetBuffDataByIndex or C_UnitAuras.GetAuraDataByIndex)
+    if type(getAura) ~= "function" and type(UnitBuff) ~= "function" then return protectionUnknown() end
+    for i = 1, 40 do
+        local ok, aura, name, id
+        if type(getAura) == "function" then
+            ok, aura = pcall(getAura, unit, i, "HELPFUL")
+            if not ok or isSecret(aura) then return protectionUnknown() end
+            if aura == nil then return absorbUnknown and protectionUnknown() or false end
+            if type(aura) ~= "table" then return protectionUnknown() end
+            ok, name, id = pcall(function() return aura.name, aura.spellId end)
+            if not ok then return protectionUnknown() end
+        else
+            local icon, count, debuffType, duration, expires, source, stealable, consolidate
+            ok, name, icon, count, debuffType, duration, expires, source, stealable, consolidate, id =
+                pcall(UnitBuff, unit, i)
+            if not ok or isSecret(name) then return protectionUnknown() end
+            if name == nil then return absorbUnknown and protectionUnknown() or false end
+        end
+        local readableID = not isSecret(id) and type(id) == "number"
+        local readableName = not isSecret(name) and type(name) == "string"
+        if (readableID and protectionSpells[id]) or (readableName and protectionNames[name]) then return true end
+        if not readableID and not readableName then return protectionUnknown() end
+    end
+    return protectionUnknown()
+end
 end
 
 -- The nameplate token ("nameplate3") of the mob behind `unit`, or nil (no plate, plates off, or unreadable).
@@ -1317,7 +1381,7 @@ local combatFrameAt
 local combatFrameHits = {}
 
 -- Forever hides amounts, not schools (DoesItDie #26): match timing without learning damage.
--- ponytail: same-school foreign hits inside a tick window can anchor it; use spell/source identity if exposed.
+-- ponytail: foreign hits can consume a hidden tick slot, but physical hits must not move the cast's rhythm.
 -- Field, not local: this file is at Lua's 200-local limit.
 function ns.onHiddenAmountHit(key, unit, school)
     local dots = dotsByTarget[key]
@@ -1344,7 +1408,7 @@ function ns.onHiddenAmountHit(key, unit, school)
         if not dot.predictionOnly and not hit.fed[name] and dot.school == school then
             local distance, index = distanceToExpectedTick(dot, now)
             local window = dot.firstTickAt and TICK_MATCH_WINDOW_ANCHORED or TICK_MATCH_WINDOW
-            local freshSlot = not dot.firstTickAt or index > dot.lastTickIndex
+            local freshSlot = index > (dot.firstTickAt and dot.lastTickIndex or (dot.hiddenSlot or 0))
             if freshSlot and distance <= window and (not bestDistance or distance < bestDistance) then
                 best, bestName, bestDistance, bestIndex = dot, name, distance, index
             end
@@ -1356,13 +1420,21 @@ function ns.onHiddenAmountHit(key, unit, school)
         if tracked then trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit)) end
         return
     end
+    if school == SCHOOL_MASKS.Physical and best.firstTickAt then return end
     local wasWaiting = isWaiting(best)
     best.ticksSeen = best.ticksSeen + 1
     -- lastTickAmount keeps the last readable tick (referenceTickSize subtracts it from tickSum); flagged like a
     -- crit so a readable hit in the same slot isn't judged against a size nobody saw (trySwapSameSlot).
     best.lastTickCrit = true
     best.offBeatCandidate, best.rhythmCandidate, best.oldRhythmAt = nil, nil, nil
-    local tickIndex = anchorTick(best, bestIndex, now)
+    local tickIndex
+    if school == SCHOOL_MASKS.Physical and not best.firstTickAt then
+        best.missed, best.hiddenSlot = 0, bestIndex
+        best.nextTickAt = math.max(best.nextTickAt, best.appliedAt + (bestIndex + 1) * best.interval)
+        tickIndex = bestIndex
+    else
+        tickIndex = anchorTick(best, bestIndex, now)
+    end
     hit.fed[bestName] = true
     trace(string.format("TICK %s (amount hidden) on %s (tick %d/%d, expecting %.1f for this tick)%s", bestName,
         unit, tickIndex, best.totalTicks, expectedTick(best) * tickShape(best, tickIndex),
@@ -1983,7 +2055,7 @@ local label = remainingBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall
 -- Pushes the options onto the widgets, but only when one of them changed since the last call, so it
 -- can run on every refresh and option changes still show up immediately.
 local APPEARANCE_KEYS = {
-    "showMarkers", "targetMarkers", "skullIcon", "skullSize", "skullPulse", "skullOffsetX", "skullOffsetY",
+    "showMarkers", "targetMarkers", "skullIcon", "skullSize", "skullPosition", "skullPulse", "skullOffsetX", "skullOffsetY",
     "showSpark", "showGlow", "glowSize", "showShine", "shineInterval", "scrollStripes",
     "fillTexture", "fillColor", "fillOpacity", "dotColors",
     "outlineStyle", "dashLength", "outlineThickness", "outlineColor", "outlineOpacity", "pulseOutline",
@@ -1994,7 +2066,16 @@ local skullAnchor -- what the skull is centered on (portrait, else target frame,
 
 local function positionSkull()
     skullWindow:ClearAllPoints()
-    if skullAnchor == UIParent then
+    local x, y = db.skullOffsetX, db.skullOffsetY
+    if healthBar and db.skullPosition == "above" then
+        skullWindow:SetPoint("BOTTOM", healthBar, "TOP", x, 4 + y)
+    elseif healthBar and db.skullPosition == "below" then
+        skullWindow:SetPoint("TOP", healthBar, "BOTTOM", x, -4 + y)
+    elseif healthBar and db.skullPosition == "left" then
+        skullWindow:SetPoint("RIGHT", healthBar, "LEFT", -4 + x, y)
+    elseif healthBar and db.skullPosition == "right" then
+        skullWindow:SetPoint("LEFT", healthBar, "RIGHT", 4 + x, y)
+    elseif skullAnchor == UIParent then
         skullWindow:SetPoint("CENTER", UIParent, "CENTER", db.skullOffsetX, 120 + db.skullOffsetY)
     elseif skullAnchor then
         skullWindow:SetPoint("CENTER", skullAnchor, "CENTER", db.skullOffsetX, db.skullOffsetY)
@@ -2517,7 +2598,7 @@ local function refresh()
         return hideAll()
     end
 
-    skullWindow:SetShown(db.showSkull)
+    skullWindow:SetShown(db.showSkull and not ns.shielded("target"))
     if healthBar then
         label:SetText(perDot and breakdownText(breakdown) or string.format(BIT.L("DoTs: %d"), damage))
         showMarkers()

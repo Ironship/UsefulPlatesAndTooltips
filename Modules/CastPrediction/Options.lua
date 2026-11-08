@@ -267,9 +267,9 @@ local function buildMarkerTab(parent)
     y = place(sliderRow(parent, "Outline opacity", "outlineOpacity", 0, 100, 5, nil, nil), y, 40)
     y = place(checkRow(parent, "Pulse the outline", "pulseOutline",
         "A soft breathing of the outline while the cast is in flight."), y)
-    y = place(checkRow(parent, "Kill icon on the portrait", "showKillIcon",
-        "An icon when even the lowest end of the cast's range would finish the target. Drawn by a "
-        .. "status bar, so it works with hidden health too."), y)
+    y = place(checkRow(parent, "Show kill icon", "showKillIcon",
+        "An icon when even the lowest end of the cast's range would finish the target. "
+        .. "With secret health, native clipping can reveal part of the icon shortly before lethal."), y)
     y = place(checkRow(parent, "Show killing spell icon", "showKillSpellIcon",
         "Enabled by default. When a cast or finisher would kill, show its spell icon instead of the generic kill icon. "
         .. "The finisher preview uses the icon for the finisher that would kill."), y)
@@ -278,6 +278,16 @@ local function buildMarkerTab(parent)
         { id = "cross", label = "Red X" },
         { id = "impact", label = "Impact" },
     }, "Shown when the spell icon option is off or that spell's icon is unavailable."), y)
+    y = place(sliderRow(parent, "Kill icon size", "killIconSize", 12, 128, 1, nil, nil), y, 40)
+    y = place(choiceRow(parent, "Kill icon position", "killIconPosition", {
+        { id = "portrait", label = "Portrait" },
+        { id = "left", label = "Left of the bar" },
+        { id = "right", label = "Right of the bar" },
+        { id = "above", label = "Above the bar" },
+        { id = "below", label = "Below the bar" },
+    }, nil), y)
+    y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -60, 60, 1, nil, nil), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -60, 60, 1, nil, nil), y, 40)
     y = section(parent, y, "FINISHER PREVIEW")
     y = place(choiceRow(parent, "Preview fill style", "finisherTexture", textureList(),
         "The fill of the finisher preview (Prediction tab), so it never reads as a real cast."), y)
@@ -315,7 +325,7 @@ local function buildNameplateTab(parent)
     y = place(choiceRow(parent, "Nameplate style", "nameplateMode", {
         { id = "off", label = "Off" },
         { id = "marker", label = "Marker on the health bar" },
-        { id = "markerIcon", label = "Marker and an impact icon" },
+        { id = "markerIcon", label = "Marker and kill icon" },
     }, "The target's own plate gets the same marker, with its own colors; enemy bars are red."), y)
     y = place(choiceRow(parent, "Fill color", "plateFillColor", colorList(true), nil), y)
     y = place(sliderRow(parent, "Fill opacity", "plateFillOpacity", 0, 100, 5, nil, nil), y, 40)
@@ -325,11 +335,11 @@ local function buildNameplateTab(parent)
     }, nil), y)
     y = place(choiceRow(parent, "Outline color", "plateOutlineColor", colorList(), nil), y)
     y = place(sliderRow(parent, "Outline opacity", "plateOutlineOpacity", 0, 100, 5, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon size", "plateIconSize", 12, 32, 1, nil,
-        "The impact icon beside or above the plate."), y, 40)
+    y = place(sliderRow(parent, "Icon size", "plateIconSize", 12, 128, 1, nil, nil), y, 40)
     y = place(choiceRow(parent, "Icon position", "plateIconPosition", {
         { id = "left", label = "Left of the bar" },
         { id = "above", label = "Above the bar" },
+        { id = "below", label = "Below the bar" },
         { id = "right", label = "Right of the bar" },
     }, nil), y)
     y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, nil), y, 40)

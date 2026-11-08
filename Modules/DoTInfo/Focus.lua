@@ -129,7 +129,7 @@ local function refresh()
     if total <= 0 then return hide() end
     widgets = ns.barMarker.widgetsFor(host, bar)
     widgets.pinned = true
-    ns.barMarker.draw(widgets, entries, total, UnitHealthMax("focus"), UnitHealth("focus"), focusLook)
+    ns.barMarker.draw(widgets, entries, total, UnitHealthMax("focus"), UnitHealth("focus"), focusLook, false, "focus")
     updateLayering(widgets, bar, GetTime())
 end
 

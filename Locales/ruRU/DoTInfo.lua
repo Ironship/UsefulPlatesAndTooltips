@@ -41,6 +41,13 @@ BIT.RegisterLocale("ruRU", {
   ["Right of the health bar"] = "Справа от полосы здоровья",
   ["Left of the health bar"] = "Слева от полосы здоровья",
   ["Above the health bar"] = "Над полосой здоровья",
+  ["Below the health bar"] = "Под полосой здоровья",
+  ["Fill direction"] = "Направление заполнения",
+  ["Follow health bar"] = "Как у полосы здоровья",
+  ["Left to right"] = "Слева направо",
+  ["Right to left"] = "Справа налево",
+  ["Shows an icon at the chosen position when your DoTs on the target will kill it."] =
+    "Показывает значок в выбранном месте, когда ваши DoT убьют цель.",
 
   -- вкладка «Значок убийства»
   ["Show icon on portrait"] = "Показывать значок на портрете",

@@ -41,6 +41,13 @@ BIT.RegisterLocale("deDE", {
   ["Right of the health bar"] = "Rechts der Gesundheitsleiste",
   ["Left of the health bar"] = "Links der Gesundheitsleiste",
   ["Above the health bar"] = "Über der Gesundheitsleiste",
+  ["Below the health bar"] = "Unter der Gesundheitsleiste",
+  ["Fill direction"] = "Füllrichtung",
+  ["Follow health bar"] = "Gesundheitsleiste folgen",
+  ["Left to right"] = "Links nach rechts",
+  ["Right to left"] = "Rechts nach links",
+  ["Shows an icon at the chosen position when your DoTs on the target will kill it."] =
+    "Zeigt ein Symbol an der gewählten Position, wenn Eure DoTs das Ziel töten werden.",
 
   -- the Kill icon tab
   ["Show icon on portrait"] = "Symbol auf Porträt zeigen",
