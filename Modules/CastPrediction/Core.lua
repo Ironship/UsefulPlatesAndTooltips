@@ -79,6 +79,10 @@ local DEFAULTS = {
     showKillIcon = true,
     killIcon = "skull",
     showKillSpellIcon = true,
+    killIconSize = 40,
+    killIconPosition = "portrait",
+    killIconOffsetX = 0,
+    killIconOffsetY = 0,
     -- The label
     showLabel = true,
     labelMode = "amount",  -- amount | range | percent
@@ -92,7 +96,7 @@ local DEFAULTS = {
     plateOutlineStyle = "solid",
     plateOutlineColor = "white",
     plateOutlineOpacity = 100,
-    plateIconSize = 18,
+    plateIconSize = 24,
     plateIconPosition = "left", -- the level badge sits right of the bar on Forever's plates
     plateIconOffsetX = 0,
     plateIconOffsetY = 15,
@@ -1061,11 +1065,21 @@ do
 end
 
 -- The kill icon: addon code cannot compare the (secret) health with the prediction, but a
--- StatusBar can. A clipped window over the portrait holds a very long bar anchored at its right
--- end; the icon rides the bar's fill edge. Short of lethal, that edge sits left of the window
--- (clipped away); at lethal it reaches the window's right edge and slides into view.
+-- StatusBar can position it, but clipping alone reveals part of it before lethal.
+-- Readable health gates visibility exactly; secret health retains the native clipping transition.
 local KILL_BAR_LENGTH = 10000
-local TARGET_KILL_SPELL_ICON_SIZE = 36
+local killHealthUnavailableReported = false
+local function setKillValue(bar, health, minimum)
+    bar:SetMinMaxValues(0, health)
+    bar:SetValue(minimum)
+    local readableHealth = number(health)
+    if not readableHealth and not killHealthUnavailableReported then
+        killHealthUnavailableReported = true
+        trace("Kill icon uses native clipping for secret health; it may appear partially before lethal")
+    end
+    bar:SetAlpha(not readableHealth and 1
+        or (readableHealth > 0 and minimum >= readableHealth and 1 or 0))
+end
 local killWindow = CreateFrame("Frame", "UsefulPlatesAndTooltips_CastPredictionKill", UIParent)
 killWindow:SetClipsChildren(true)
 killWindow:Hide()
@@ -1105,15 +1119,27 @@ local function updatePreviewHealth(host)
     host.healthBar:SetValue(math.max(0, math.min(100, health / maxHealth * 100)))
 end
 
--- The kill icon sits centred on the portrait (the preview's host carries one too).
+local function positionFrameKill(window, bar, portrait)
+    window:ClearAllPoints()
+    local position = settings.killIconPosition
+    local x, y = settings.killIconOffsetX, settings.killIconOffsetY
+    if bar and position == "above" then
+        window:SetPoint("BOTTOM", bar, "TOP", x, 4 + y)
+    elseif bar and position == "below" then
+        window:SetPoint("TOP", bar, "BOTTOM", x, -4 + y)
+    elseif bar and position == "left" then
+        window:SetPoint("RIGHT", bar, "LEFT", -4 + x, y)
+    elseif bar and position == "right" then
+        window:SetPoint("LEFT", bar, "RIGHT", 4 + x, y)
+    else
+        window:SetPoint("CENTER", portrait or bar or UIParent, "CENTER", x,
+            y + ((not portrait and not bar) and 120 or 0))
+    end
+end
+
 local function positionKill()
     if not killWindow then return end
-    killWindow:ClearAllPoints()
-    if skullAnchor then
-        killWindow:SetPoint("CENTER", skullAnchor, "CENTER")
-    else
-        killWindow:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
-    end
+    positionFrameKill(killWindow, healthBar, skullAnchor)
 end
 
 function ns.setDisplayHost(host)
@@ -1263,7 +1289,8 @@ local function applyAppearance(state)
     local parts = {}
     for _, key in ipairs({ "fillColor", "fillOpacity", "outlineStyle", "outlineColor",
         "outlineOpacity", "pulseOutline", "showKillIcon", "killIcon", "showKillSpellIcon", "showLabel", "labelMode", "labelPosition",
-        "labelSize", "labelColor", "plateIconSize", "castTexture", "channelTexture", "finisherTexture",
+        "labelSize", "labelColor", "killIconSize", "killIconPosition", "killIconOffsetX", "killIconOffsetY",
+        "castTexture", "channelTexture", "finisherTexture",
         "finisherColor", "finisherOpacity" }) do
         parts[#parts + 1] = tostring(settings[key])
     end
@@ -1294,7 +1321,7 @@ local function applyAppearance(state)
 
     local icon = findById(KILL_ICONS, settings.killIcon)
     local spellIcon = settings.showKillSpellIcon and spellTexture(state and state.spellID)
-    local size = spellIcon and TARGET_KILL_SPELL_ICON_SIZE or settings.plateIconSize
+    local size = settings.killIconSize
     killIcon:SetTexture(spellIcon or icon.path)
     killIcon:SetSize(size, size)
     killWindow:SetSize(size, size)
@@ -1361,8 +1388,7 @@ local function drawMarker(damage, maxHealth, health, state)
     end
     marker:SetMinMaxValues(0, maxHealth)
     marker:SetValue(damage)
-    killBar:SetMinMaxValues(0, health)
-    killBar:SetValue(killValue)
+    setKillValue(killBar, health, killValue)
     applyAppearance(state)
     markerClip:SetShown(settings.showMarker)
     marker:SetShown(settings.showMarker)
@@ -1621,16 +1647,14 @@ local function drawFrameWidgets(w, entry, now)
     w.label:SetText(labelText(state, UnitHealthMax(unit)))
     w.labelLayer:SetShown(settings.showMarker and settings.showLabel)
 
-    w.killWindow:ClearAllPoints()
-    w.killWindow:SetPoint("CENTER", entry.portrait or entry.host or bar, "CENTER")
+    positionFrameKill(w.killWindow, bar, entry.portrait or entry.host)
     local icon = findById(KILL_ICONS, settings.killIcon)
     w.killIcon:SetTexture((settings.showKillSpellIcon and spellTexture(cast.spellID)) or icon.path)
-    local size = settings.plateIconSize
+    local size = settings.killIconSize
     w.killWindow:SetSize(size, size)
     w.killBar:SetSize(KILL_BAR_LENGTH, size)
     w.killIcon:SetSize(size, size)
-    w.killBar:SetMinMaxValues(0, UnitHealth(unit))
-    w.killBar:SetValue(number(state.min) or prediction.value)
+    setKillValue(w.killBar, UnitHealth(unit), number(state.min) or prediction.value)
     w.killWindow:SetShown(settings.showKillIcon)
 end
 
@@ -1695,9 +1719,13 @@ local function createPlateWidgets(plate, healthBar)
     right:SetPoint("BOTTOMRIGHT", w.span, "BOTTOMRIGHT")
     right:SetWidth(1)
     local iconWindow = CreateFrame("Frame", nil, host)
-    iconWindow:SetSize(settings and settings.plateIconSize or 18, settings and settings.plateIconSize or 18)
-    w.icon = iconWindow:CreateTexture(nil, "OVERLAY")
-    w.icon:SetAllPoints()
+    iconWindow:SetClipsChildren(true)
+    w.iconBar = CreateFrame("StatusBar", nil, iconWindow)
+    w.iconBar:SetPoint("RIGHT", iconWindow, "RIGHT")
+    w.iconBar:SetStatusBarTexture(WHITE)
+    w.iconBar:SetStatusBarColor(0, 0, 0, 0)
+    w.icon = w.iconBar:CreateTexture(nil, "OVERLAY")
+    w.icon:SetPoint("RIGHT", w.iconBar:GetStatusBarTexture(), "RIGHT")
     w.iconWindow = iconWindow
     w.marker:Hide()
     iconWindow:Hide()
@@ -1710,6 +1738,7 @@ local function plateStyleSignature()
         tostring(settings.plateOutlineStyle), tostring(settings.plateOutlineColor), tostring(settings.plateOutlineOpacity),
         tostring(settings.nameplateMode), tostring(settings.plateIconSize), tostring(settings.plateIconPosition),
         tostring(settings.plateIconOffsetX), tostring(settings.plateIconOffsetY), tostring(settings.castTexture),
+        tostring(settings.showKillSpellIcon), tostring(settings.killIcon),
         tostring(settings.channelTexture), tostring(settings.finisherTexture), tostring(settings.finisherColor),
         tostring(settings.finisherOpacity) }, "|")
 end
@@ -1717,6 +1746,7 @@ end
 local function applyPlateStyle(w, state)
     local signature = plateStyleSignature() .. ":" .. tostring(state and state.school)
         .. ":" .. tostring(state and state.channel) .. ":" .. tostring(state and state.preview)
+        .. ":" .. tostring(state and state.spellID)
     if w.signature == signature then return end
     w.signature = signature
     paintDamage(w.fill, settings.plateFillColor, settings.plateFillOpacity, state)
@@ -1727,14 +1757,18 @@ local function applyPlateStyle(w, state)
     end
     local size = settings.plateIconSize
     w.iconWindow:SetSize(size, size)
+    w.iconBar:SetSize(KILL_BAR_LENGTH, size)
     w.icon:SetSize(size, size)
-    w.icon:SetTexture(findById(KILL_ICONS, "impact").path)
+    w.icon:SetTexture((settings.showKillSpellIcon and spellTexture(state and state.spellID))
+        or findById(KILL_ICONS, settings.killIcon).path)
     w.iconWindow:ClearAllPoints()
     local x, y = settings.plateIconOffsetX, settings.plateIconOffsetY
     if settings.plateIconPosition == "left" then
         w.iconWindow:SetPoint("RIGHT", w.healthBar, "LEFT", -4 + x, y)
     elseif settings.plateIconPosition == "above" then
         w.iconWindow:SetPoint("BOTTOM", w.healthBar, "TOP", x, 4 + y)
+    elseif settings.plateIconPosition == "below" then
+        w.iconWindow:SetPoint("TOP", w.healthBar, "BOTTOM", x, -4 + y)
     else
         w.iconWindow:SetPoint("LEFT", w.healthBar, "RIGHT", 4 + x, y)
     end
@@ -1763,11 +1797,13 @@ local function keepPlateAbove(w)
         w.clip:SetFrameStrata(strata)
         w.marker:SetFrameStrata(strata)
         w.iconWindow:SetFrameStrata(strata)
+        w.iconBar:SetFrameStrata(strata)
     end
     -- The icon sits well above: plate decorations beside the bar (the level badge) must not cover it.
     w.clip:SetFrameLevel(level + 5)
     w.marker:SetFrameLevel(level + 6)
     w.iconWindow:SetFrameLevel(level + 20)
+    w.iconBar:SetFrameLevel(level + 21)
 end
 
 local function drawPlate(w, damage, maxHealth, health, state)
@@ -1782,7 +1818,10 @@ local function drawPlate(w, damage, maxHealth, health, state)
     w.marker:SetShown(settings.showMarker)
     w.clip:SetShown(settings.showMarker)
     w.displayDamage = settings.showMarker and damage or 0
-    w.iconWindow:SetShown(settings.showMarker and settings.nameplateMode == "markerIcon")
+    local minimum = number(state and state.min) or damage
+    setKillValue(w.iconBar, health, minimum)
+    w.iconBar:SetShown(settings.showKillIcon and (not state or state.kill ~= false))
+    w.iconWindow:SetShown(settings.showMarker and settings.showKillIcon and settings.nameplateMode == "markerIcon")
     return true
 end
 
@@ -1874,6 +1913,7 @@ local function refreshPlates(now, unit)
                     local w = widgetsFor(plate, healthBar)
                     drawPlate(w, cast.prediction.value, UnitHealthMax(unit), UnitHealth(unit), {
                         school = cast.view.school, channel = cast.channel, preview = cast.preview,
+                        spellID = cast.spellID, min = cast.prediction.min,
                     })
                 end
             end

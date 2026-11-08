@@ -14,7 +14,7 @@ local ADDON_NAME, BIT = ...
 local ns = BIT.Module("DoTInfo")
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 600 -- two tab rows plus the longest page (Nameplates, 16 rows)
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 626 -- two tab rows plus the longest page (Nameplates, 17 rows)
 local HEADER_HEIGHT = 52 -- title bar: title, presets, close button
 local TAB_HEIGHT = 26
 local PREVIEW_WIDTH = 290
@@ -496,15 +496,22 @@ local function buildTabs()
     lists.fills.kind = "texture" -- the shared drop-down merges the whole catalog into it
 
     local icon = addTab("Kill icon")
-    icon:checkbox("showSkull", "Show icon on portrait",
-        { tooltip = "Shows an icon over the target's portrait when your DoTs on it will kill it." })
+    icon:checkbox("showSkull", "Show kill icon",
+        { tooltip = "Shows an icon at the chosen position when your DoTs on the target will kill it." })
     icon:choice("skullIcon", "Kill icon", lists.icons)
     icon:slider("skullSize", "Icon size", 20, 128, 2)
+    icon:choice("skullPosition", "Icon position", {
+        { id = "portrait", label = "Portrait" },
+        { id = "left", label = "Left of the health bar" },
+        { id = "right", label = "Right of the health bar" },
+        { id = "above", label = "Above the health bar" },
+        { id = "below", label = "Below the health bar" },
+    })
     icon:checkbox("skullPulse", "Pulse", { tooltip = "Gently pulses the icon while it's showing." })
     icon:slider("skullOffsetX", "Icon horizontal offset", -60, 60, 1,
-        { tooltip = "Pixels right (+) or left (-) of the portrait's center." })
+        { tooltip = "Pixels right (+) or left (-) of the chosen position." })
     icon:slider("skullOffsetY", "Icon vertical offset", -60, 60, 1,
-        { tooltip = "Pixels up (+) or down (-) from the portrait's center." })
+        { tooltip = "Pixels up (+) or down (-) from the chosen position." })
 
     local marker = addTab("Marker")
     marker:checkbox("showMarkers", "Show damage marker", { tooltip = "Marks the damage your DoTs still have to "
@@ -574,6 +581,7 @@ local function buildTabs()
     plates:choice("plateDotColors", "DoT colors", lists.dotColors, { enabledIf = platesOn,
         tooltip = "By effect type: green poisons, purple curses/shadow damage and red bleeds. Rainbow: a separate color per spell." })
     plates:choice("plateFillTexture", "Fill style", lists.fills, { enabledIf = platesOn })
+    plates:choice("plateFillDirection", "Fill direction", lists.plateFillDirections)
     plates:choice("plateFillColor", "Fill color", lists.colors, { enabledIf = plateSingle })
     plates:slider("plateFillOpacity", "Fill opacity", 0, 100, 5, { suffix = "%", enabledIf = platesOn })
     plates:choice("plateOutlineStyle", "Outline", lists.outlines, { enabledIf = platesOn })

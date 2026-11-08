@@ -38,6 +38,12 @@ ns.lists.nameplateIconPositions = {
     { id = "right", label = "Right of the health bar" },
     { id = "left",  label = "Left of the health bar" },
     { id = "above", label = "Above the health bar" },
+    { id = "below", label = "Below the health bar" },
+}
+ns.lists.plateFillDirections = {
+    { id = "auto", label = "Follow health bar" },
+    { id = "ltr", label = "Left to right" },
+    { id = "rtl", label = "Right to left" },
 }
 
 local testBars = {}
@@ -223,16 +229,45 @@ end
 local STYLE_KEYS = {
     "plateFillTexture", "plateFillColor", "plateFillOpacity", "plateDotColors", "plateOutlineStyle",
     "plateDashLength", "plateOutlineThickness", "plateOutlineColor", "plateOutlineOpacity", "plateIcon",
-    "nameplateIconSize", "nameplateIconPosition", "plateIconOffsetX", "plateIconOffsetY",
+    "nameplateIconSize", "nameplateIconPosition", "plateIconOffsetX", "plateIconOffsetY", "plateFillDirection",
 }
 
 -- Pushes the look settings onto one plate's widgets when any of them changed since the last time.
 local function applyStyle(w, db)
     local parts = {}
     for i, key in ipairs(STYLE_KEYS) do parts[i] = tostring(db[key]) end
-    local signature = table.concat(parts, "|")
+    local reverse = db.plateFillDirection == "rtl"
+    if db.plateFillDirection ~= "ltr" and db.plateFillDirection ~= "rtl"
+        and type(w.healthBar.GetReverseFill) == "function" then
+        local ok, value = pcall(w.healthBar.GetReverseFill, w.healthBar)
+        reverse = ok and not isSecret(value) and value == true
+    end
+    if type(w.marker.SetReverseFill) ~= "function" then reverse = false end
+    local signature = table.concat(parts, "|") .. "|" .. tostring(reverse)
     if signature == w.signature then return end
     w.signature = signature
+
+    if type(w.marker.SetReverseFill) == "function" then w.marker:SetReverseFill(reverse) end
+    local start, finish = reverse and "RIGHT" or "LEFT", reverse and "LEFT" or "RIGHT"
+    for i, segment in ipairs(w.segments) do
+        if type(segment.bar.SetReverseFill) == "function" then segment.bar:SetReverseFill(reverse) end
+        segment.texture:ClearAllPoints()
+        if i == 1 then
+            segment.texture:SetPoint("TOP" .. start, w.marker, "TOP" .. start)
+        else
+            segment.texture:SetPoint("TOP" .. start, w.segments[i - 1].fillEnd, "TOP" .. finish)
+        end
+        segment.texture:SetPoint("BOTTOM" .. finish, segment.fillEnd, "BOTTOM" .. finish)
+        segment.divider:ClearAllPoints()
+        segment.divider:SetPoint("TOP", segment.fillEnd, "TOP" .. finish)
+        segment.divider:SetPoint("BOTTOM", segment.fillEnd, "BOTTOM" .. finish)
+        segment.refresh:ClearAllPoints()
+        segment.refresh:SetPoint("TOP", segment.fillEnd, "TOP" .. finish)
+        segment.refresh:SetPoint("BOTTOM", segment.fillEnd, "BOTTOM" .. finish)
+    end
+    w.refresh:ClearAllPoints()
+    w.refresh:SetPoint("TOP", w.span, "TOP" .. finish)
+    w.refresh:SetPoint("BOTTOM", w.span, "BOTTOM" .. finish)
 
     local lists = ns.lists
     local style = ns.findById(lists.fills, db.plateFillTexture)
@@ -288,6 +323,8 @@ local function applyStyle(w, db)
         w.iconWindow:SetPoint("RIGHT", w.healthBar, "LEFT", -4 + x, y)
     elseif db.nameplateIconPosition == "above" then
         w.iconWindow:SetPoint("BOTTOM", w.healthBar, "TOP", x, 4 + y)
+    elseif db.nameplateIconPosition == "below" then
+        w.iconWindow:SetPoint("TOP", w.healthBar, "BOTTOM", x, -4 + y)
     else
         w.iconWindow:SetPoint("LEFT", w.healthBar, "RIGHT", 4 + x, y)
     end
@@ -302,7 +339,7 @@ end
 
 -- Draws one plate's widgets. maxHealth and health may be secret (real plates) or plain (the options preview):
 -- they only ever go into StatusBar min/max, never into Lua math. Returns false if drawing failed.
-local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly)
+local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, unit)
     keepAbove(w)
     applyStyle(w, db)
     local perDot = db.plateDotColors ~= "single"
@@ -347,7 +384,8 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly)
     if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
     -- UI-3: the kill icon is part of the marker set: with showMarkers off it
     -- must hide too, not linger alone on the plate.
-    w.iconWindow:SetShown(db.showMarkers and db.nameplateMode == "markerIcon")
+    w.iconWindow:SetShown(db.showMarkers and db.nameplateMode == "markerIcon"
+        and (not unit or not ns.shielded(unit)))
     return true
 end
 
@@ -404,7 +442,7 @@ local function updatePlate(unit, plate, db)
     end
     -- Without a visible bar, seat only the native health-clipped kill icon beside the plate.
     drawPlate(widgetsFor(plate, healthBar or plate), entries, total,
-        UnitHealthMax(unit), UnitHealth(unit), db, iconOnly)
+        UnitHealthMax(unit), UnitHealth(unit), db, iconOnly, unit)
 end
 
 -- For Focus.lua: the same widgets on another health bar (the focus frame's), hosted by a frame of its own.
@@ -430,6 +468,9 @@ function ns.setPlatePreview(host, state)
 end
 
 local function updatePreviewPlate(db)
+    if type(previewPlate.healthBar.SetReverseFill) == "function" then
+        previewPlate.healthBar:SetReverseFill(db.plateFillDirection == "rtl")
+    end
     local entries, total = {}, 0
     for _, dot in ipairs(previewState.dots) do
         if dot.damage > 0 then

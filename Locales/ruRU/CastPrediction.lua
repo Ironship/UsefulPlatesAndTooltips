@@ -92,6 +92,11 @@ BIT.RegisterLocale("ruRU", {
     "На табличке цели отображается такой же маркер в её цветах; полосы противников красные.",
   ["The impact icon beside or above the plate."] = "Значок удара рядом с табличкой или над ней.",
   ["Icon position"] = "Положение значка",
+  ["Portrait"] = "Портрет",
+  ["Show kill icon"] = "Показывать значок убийства",
+  ["An icon when even the lowest end of the cast's range would finish the target. With secret health, native clipping can reveal part of the icon shortly before lethal."] =
+    "Значок, когда даже минимальный урон заклинания убьёт цель. При скрытом здоровье нативное обрезание может показать часть значка незадолго до смертельного урона.",
+  ["Below the bar"] = "Под полосой",
   ["Above the bar"] = "Над полосой",
   ["Right of the bar"] = "Справа от полосы",
 

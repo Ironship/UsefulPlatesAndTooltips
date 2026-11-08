@@ -92,6 +92,11 @@ BIT.RegisterLocale("deDE", {
     "Die Namensplakette des Ziels erhält dieselbe Markierung, mit eigenen Farben; Gegnerleisten sind rot.",
   ["The impact icon beside or above the plate."] = "Das Einschlagsymbol neben oder über der Namensplakette.",
   ["Icon position"] = "Symbolposition",
+  ["Portrait"] = "Porträt",
+  ["Show kill icon"] = "Kill-Symbol zeigen",
+  ["An icon when even the lowest end of the cast's range would finish the target. With secret health, native clipping can reveal part of the icon shortly before lethal."] =
+    "Ein Symbol, wenn schon das untere Ende der Zauberspanne das Ziel erledigen würde. Bei verborgener Gesundheit kann das native Clipping kurz vor dem tödlichen Treffer einen Teil des Symbols zeigen.",
+  ["Below the bar"] = "Unter der Leiste",
   ["Above the bar"] = "Über der Leiste",
   ["Right of the bar"] = "Rechts der Leiste",
 
