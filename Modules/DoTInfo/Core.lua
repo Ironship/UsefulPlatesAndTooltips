@@ -1480,6 +1480,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
 end
 
 local function housekeep(now)
+    if ns.ProcDots then ns.ProcDots.Housekeep(now) end
     for guid, sent in pairs(ns._retailPending) do
         if (sent.stoppedAt and now - sent.stoppedAt > CAST_STOP_GRACE)
             or now - sent.sentAt > CAST_MAX_SECONDS then ns._retailPending[guid] = nil end

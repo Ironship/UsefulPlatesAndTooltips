@@ -251,6 +251,7 @@ end
 -- size can say which hit is the trap's, so the rhythm does. Another player's Fire DoT of the same rhythm on a mob while
 -- a trap is armed can still pass for it: the size check that rules that out needs readable amounts.
 function P.OnHiddenHit(key, unit, school, now)
+    if not I() or not enabled() then return false end
     if delayed[key] and springDelayed(key, unit, nil, school, false, now) then return true end
     local trap = armed
     if not trap or school ~= trap.school then return false end
@@ -375,7 +376,7 @@ end
 
 -- Every cast of yours at a mob (key may be nil). A new Fire trap, Explosive Trap included, replaces the armed one.
 function P.NoteCast(key, spellID, name, desc)
-    if not I() then return end
+    if not I() or not enabled() then return end
     local now = GetTime()
     if armed and (ns.FIRE_TRAPS[name] or (type(desc) == "string" and not isSecret(desc) and desc:find("Fire trap"))) then
         armed = nil
@@ -403,12 +404,12 @@ end
 
 -- Whether a hit of this kind could start something here, so Core.lua keeps it even where no DoT runs.
 function P.Wants(isCrit, school)
-    if not I() then return false end
+    if not I() or not enabled() then return false end
     if armed and school == armed.school then return true end
     for _, d in pairs(delayed) do
         if d.school == school then return true end
     end
-    if isCrit and enabled() then
+    if isCrit then
         local s = spec()
         return s ~= nil and schoolMatches(s, school)
     end
@@ -417,7 +418,7 @@ end
 
 -- A hit no DoT claimed. Returns true when it started one (the display then flashes).
 function P.OnUnmatchedHit(key, unit, amount, school, isCrit, now)
-    if not I() then return false end
+    if not I() or not enabled() then return false end
     if delayed[key] and springDelayed(key, unit, amount, school, isCrit, now) then return true end
     if armed and springTrap(key, unit, amount, school, isCrit, now) then return true end
     if not isCrit then return false end
@@ -431,4 +432,17 @@ end
 function P.Reset()
     armed, lastCast, pending = nil, nil, nil
     recent, chains, delayed, delayedChains = {}, {}, {}, {}
+end
+
+function P.Housekeep(now)
+    if not enabled() then
+        if armed or lastCast or pending or next(recent) or next(chains) or next(delayed) or next(delayedChains) then
+            P.Reset()
+        end
+        return
+    end
+    if armed and now > armed.expiresAt + armed.interval + 0.45 then armed, chains = nil, {} end
+    for key, d in pairs(delayed) do
+        if now > d.expiresAt then delayed[key], delayedChains[key] = nil, nil end
+    end
 end
