@@ -66,6 +66,17 @@ local FILL_TEXTURES = {
     hint = "The shield aura art, mirrored.",
     path = TEXTURE_DIR .. "shield_aura_mirrored.tga" },
 }
+-- Groups for the drop-down, and every texture of the shared catalog (Core/Looks.lua) as a fill too. A status bar's fill
+-- cannot fade in by gradient, so DoTInfo's gradient entry stays out.
+do
+  local groups = { flat = "Basic", smooth = "Blizzard", raid = "Blizzard", stripes = "Patterns",
+    shield_aura = "Shield art", shield_aura_mirrored = "Shield art" }
+  for i = 1, #FILL_TEXTURES do FILL_TEXTURES[i].group = groups[FILL_TEXTURES[i].id] end
+  if BIT.Looks then
+    FILL_TEXTURES.kind, FILL_TEXTURES.noGradient = "texture", true
+    BIT.Looks.Merge(FILL_TEXTURES)
+  end
+end
 
 -- The style presets under the settings: they write only the fill art and its translucency
 -- (plain style numbers), never the frame switches, so a preset cannot turn a frame off.
@@ -177,6 +188,11 @@ local function chosenFill()
       end
     end)
     if ok and type(entry) == "table" then return entry end
+    -- a shared-media texture whose library loaded after the list was built
+    if BIT.Looks and id:sub(1, 4) == "lsm:" then
+      local found = BIT.Looks.Texture(id)
+      if found and found.id == id then return found end
+    end
   end
   return FILL_TEXTURES[1]
 end
@@ -214,9 +230,15 @@ local function paintShield(bar, style)
     if type(c) == "table" then
       local base = type(c[4]) == "number" and c[4] or 1
       local op = type(style.opacity) == "number" and style.opacity or 1
-      bar:SetStatusBarColor(c[1], c[2], c[3], base * op * overlayAlpha())
+      if chosenFill().raw then
+        bar:SetStatusBarColor(1, 1, 1, base * op * overlayAlpha()) -- a texture with colours of its own
+      else
+        bar:SetStatusBarColor(c[1], c[2], c[3], base * op * overlayAlpha())
+      end
     end
   end)
+  -- The repaint above may have dropped the bar's shape mask: put it back.
+  if BIT.UI and BIT.UI.BarMask then pcall(BIT.UI.BarMask.Refresh, bar) end
 end
 
 local function styleOverlay(bar)
@@ -230,6 +252,7 @@ local function styleOverlay(bar)
   end
   -- Degraded but visible: the chosen fill, never an error.
   pcall(function() bar:SetStatusBarTexture(chosenFill().path) end)
+  if BIT.UI and BIT.UI.BarMask then pcall(BIT.UI.BarMask.Refresh, bar) end
 end
 
 -- Style writes restyle the live overlays even while the settings are closed. Fully
@@ -261,7 +284,7 @@ local function overlayFor(healthBar)
     b:SetFrameLevel((healthBar:GetFrameLevel() or 0) + 1)
     styleOverlay(b)
     -- The frame's own HealthBarMask keeps the fill inside the visible bar.
-    if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(b:GetStatusBarTexture(), healthBar, true) end
+    if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.ApplyToBar(b, healthBar, true) end
     b:Hide()
     return b
   end)
@@ -288,7 +311,7 @@ local function applyOverlayMode(o, edge)
     bar:SetAllPoints(healthBar)
   end
   -- The thin top edge sits on the frame's border art; only the full overlay takes the mask.
-  if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Apply(bar:GetStatusBarTexture(), healthBar, not edge) end
+  if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.ApplyToBar(bar, healthBar, not edge) end
   o.edge = edge
 end
 
@@ -827,8 +850,8 @@ local CAPABILITIES = { roles = { "absorb", "muted", "text" }, shapes = false,
 
 local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 230, control = 190 }
-local PREVIEW_LAYOUT = { label = 96, control = 128 }
+local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
+local PREVIEW_LAYOUT = BIT.Looks.PREVIEW_LAYOUT
 local DISABLED_ALPHA = 0.35
 -- 470 is Core/Settings.lua's MAX_CONTENT_HEIGHT: the tallest content the window shows without
 -- its own page scroll, the same as Range's tab. Shorter (the 460 a review once settled on)
@@ -861,17 +884,6 @@ local function findMock(id)
   end
   return FRAME_MOCKS[1]
 end
-
--- The absorb colours the Fill tab offers next to the native picker. The colour itself lives
--- in the shared appearance (role "absorb"), never in the module's saved settings.
-local ABSORB_PRESETS = {
-  { id = "blue", label = "Blue", rgb = { 0.45, 0.75, 1.0 } },
-  { id = "cyan", label = "Cyan", rgb = { 0.35, 0.85, 0.95 } },
-  { id = "white", label = "White", rgb = { 1, 1, 1 } },
-  { id = "gold", label = "Gold", rgb = { 1, 0.82, 0.2 } },
-  { id = "green", label = "Green", rgb = { 0.35, 1, 0.55 } },
-  { id = "violet", label = "Violet", rgb = { 0.7, 0.5, 1 } },
-}
 
 local controls = {} -- every settings/preview row, refreshed after each change
 local tabs, activeTab = {}, nil
@@ -918,105 +930,27 @@ end
 -- Controls: the DoTInfo/Options.lua rows (label left, control right, tooltips, graying)
 ---------------------------------------------------------------------------------------------
 
-local function makeRow(parent, labelText, opts)
+local function rowOpts(opts)
   opts = opts or {}
-  local layout = opts.layout or SETTINGS_LAYOUT
-  local row = CreateFrame("Frame", nil, parent)
-  row:SetSize(layout.label + layout.control + 40, ROW_HEIGHT)
-  row.layout = layout
-  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  row.label:SetPoint("LEFT", 6, 0)
-  row.label:SetWidth(layout.label - 8)
-  row.label:SetJustifyH("LEFT")
-  row.label:SetText(labelText)
-  BIT.UI.FitRow(row, ROW_HEIGHT)
-  row.enabledIf = opts.enabledIf
-  if opts.tooltip then
-    row:EnableMouse(true)
-    row:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 0.82, 0)
-      GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
-      GameTooltip:Show()
-    end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  end
-  function row:ApplyEnabled(widget)
-    local enabled = not self.enabledIf or self.enabledIf(settings or DEFAULTS)
-    self:SetAlpha(enabled and 1 or DISABLED_ALPHA)
-    widget:EnableMouse(enabled)
-    if widget.EnableMouseWheel then widget:EnableMouseWheel(enabled) end
-  end
-  controls[#controls + 1] = row
-  return row
+  return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, layout = opts.layout, suffix = opts.suffix,
+    display = opts.display, settings = function() return settings or DEFAULTS end,
+    register = function(row) controls[#controls + 1] = row end }
 end
 
+-- The check box, slider and drop-down are the shared rows (Core/LookRows.lua): every module's options look the same.
 local function checkbox(parent, key, labelText, opts)
-  opts = opts or {}
-  local row = makeRow(parent, labelText, opts)
-  local box = CreateFrame("CheckButton", nil, row)
-  box:SetSize(24, 24)
-  box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  BIT.UI.SkinCheck(box)
-  box:SetScript("OnClick", function(self)
-    settings[key] = self:GetChecked() and true or false
+  return BIT.Looks.Rows.Check(parent, labelText, function() return settings[key] end, function(value)
+    settings[key] = value
     changed()
-  end)
-  function row:Refresh()
-    box:SetChecked(settings[key] and true or false)
-    self:ApplyEnabled(box)
-  end
-  row.widget = box
-  return row
+  end, rowOpts(opts))
 end
 
 -- get/set work on any value (settings or the preview's own numbers).
 local function sliderRow(parent, labelText, min, max, step, get, set, opts)
-  opts = opts or {}
-  local row = makeRow(parent, labelText, opts)
-  local slider = CreateFrame("Slider", nil, row)
-  slider:SetOrientation("HORIZONTAL")
-  slider:SetSize(row.layout.control - 48, 18)
-  slider:SetPoint("LEFT", row, "LEFT", row.layout.label + 2, 0)
-  slider:SetMinMaxValues(min, max)
-  slider:SetValueStep(step)
-  pcall(function() slider:SetObeyStepOnDrag(true) end)
-  slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-  local thumb = slider:GetThumbTexture()
-  if thumb and thumb.SetSize then thumb:SetSize(18, 24) end
-  BIT.UI.SkinSlider(slider, 6)
-  local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-  local function show(v)
-    if opts.display then
-      valueText:SetText(opts.display(v))
-    else
-      valueText:SetText(percentText(v))
-    end
-  end
-  local updating = false
-  slider:SetScript("OnValueChanged", function(_, value)
-    if updating then return end
-    value = math.floor(value / step + 0.5) * step
-    show(value)
-    set(value)
-  end)
-  slider:SetScript("OnMouseWheel", function(self, delta)
-    self:SetValue((self:GetValue() or 0) + delta * step)
-  end)
-  function row:Refresh()
-    updating = true
-    local value = get()
-    slider:SetValue(value)
-    show(value)
-    updating = false
-    self:ApplyEnabled(slider)
-  end
-  row.bar, row.widget = slider, slider
+  local o = rowOpts(opts)
+  if not o.display and not o.suffix then o.display = percentText end
+  local row = BIT.Looks.Rows.Slider(parent, labelText, min, max, step, get, set, o)
+  row.bar = row.widget
   return row
 end
 
@@ -1039,64 +973,13 @@ local function labelWidth(parent, text)
 end
 
 local function closeMenu()
-  if menu then menu:Hide() end
+  if BIT.Looks then BIT.Looks.ClosePickList() end
 end
 
--- Shared dropdown list under `owner`; entries may carry an rgb swatch (the DoTInfo menu).
+-- The shared drop-down (Core/Looks.lua): scrolls, shows a swatch or a texture preview, groups entries.
 local function openMenu(owner, list, current, pick)
-  if not menu then
-    menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    menu:SetFrameStrata("FULLSCREEN_DIALOG")
-    menu:EnableMouse(true)
-    setBackdrop(menu, 0.08, 0.98)
-    menu.buttons = {}
-    -- Close on a click anywhere else (the event may not exist on every client).
-    pcall(menu.RegisterEvent, menu, "GLOBAL_MOUSE_DOWN")
-    menu:SetScript("OnEvent", function(self)
-      if not self:IsMouseOver() and not (self.owner and self.owner:IsMouseOver()) then self:Hide() end
-    end)
-  end
-  if menu:IsShown() and menu.owner == owner then return menu:Hide() end
-  menu.owner = owner
-  for i, entry in ipairs(list) do
-    local button = menu.buttons[i]
-    if not button then
-      button = CreateFrame("Button", nil, menu)
-      button:SetHeight(20)
-      BIT.UI.RoundHighlight(button)
-      button.swatch = button:CreateTexture(nil, "ARTWORK")
-      button.swatch:SetSize(12, 12)
-      button.swatch:SetPoint("LEFT", 8, 0)
-      button.text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-      button.text:SetJustifyH("LEFT")
-      menu.buttons[i] = button
-    end
-    button:ClearAllPoints()
-    button:SetPoint("TOPLEFT", menu, "TOPLEFT", 1, -4 - (i - 1) * 20)
-    button:SetPoint("RIGHT", menu, "RIGHT", -1, 0)
-    button.swatch:SetShown(entry.rgb ~= nil)
-    if entry.rgb then button.swatch:SetColorTexture(entry.rgb[1], entry.rgb[2], entry.rgb[3], 1) end
-    button.text:ClearAllPoints()
-    button.text:SetPoint("LEFT", entry.rgb and 26 or 8, 0)
-    button.text:SetText(entry.id == current and ("|cffffd100" .. entry.label .. "|r") or entry.label)
-    button:SetScript("OnClick", function()
-      menu:Hide()
-      pick(entry.id)
-    end)
-    button:Show()
-  end
-  for i = #list + 1, #menu.buttons do menu.buttons[i]:Hide() end
-  menu:SetSize(owner:GetWidth(), #list * 20 + 8)
-  menu:ClearAllPoints()
-  menu:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
-  menu:Show()
+  BIT.Looks.PickList(owner, list, current, pick)
 end
-
----------------------------------------------------------------------------------------------
--- The absorb colour (the shared style's "absorb" role): a swatch with quick colours and the
--- native picker. Every write goes through BIT.Style, so the live overlays and the preview
--- repaint from the same resolved colour.
----------------------------------------------------------------------------------------------
 
 local function resolvedStyle()
   if type(BIT.Style) == "table" and type(BIT.Style.Resolve) == "function" then
@@ -1113,26 +996,6 @@ local function absorbColor()
   return { 0.45, 0.75, 1, 1 }
 end
 
-local function absorbColorPresetId()
-  local c = absorbColor()
-  for i = 1, #ABSORB_PRESETS do
-    local p = ABSORB_PRESETS[i]
-    if math.abs(p.rgb[1] - c[1]) < 0.02 and math.abs(p.rgb[2] - c[2]) < 0.02
-      and math.abs(p.rgb[3] - c[3]) < 0.02 then
-      return p.id
-    end
-  end
-  return "custom"
-end
-
-local function absorbColorLabel()
-  local id = absorbColorPresetId()
-  for i = 1, #ABSORB_PRESETS do
-    if ABSORB_PRESETS[i].id == id then return ABSORB_PRESETS[i].label end
-  end
-  return "Custom"
-end
-
 local function commitAbsorbColor(r, g, b, a)
   if type(BIT.Style) == "table" and type(BIT.Style.Set) == "function" then
     pcall(BIT.Style.Set, "ShieldsInfo", "colors", { absorb = { r, g, b, a or 1 } })
@@ -1140,80 +1003,24 @@ local function commitAbsorbColor(r, g, b, a)
   changed()
 end
 
--- The native colour picker, with its drag callbacks suppressed while it opens. A client
--- without it keeps the preset colours above; nothing here can error out of a click.
-local function openAbsorbPicker()
-  local picker = ColorPickerFrame
-  if not picker or type(picker.SetupColorPickerAndShow) ~= "function" then return end
-  local c = absorbColor()
-  local last = { c[1], c[2], c[3], c[4] or 1 }
-  local initializing = true
-  local function commit()
-    if initializing then return end
-    local r, g, b = picker:GetColorRGB()
-    local a = last[4]
-    pcall(function() a = picker:GetColorAlpha() end)
-    if math.abs(r - last[1]) < 0.000001 and math.abs(g - last[2]) < 0.000001
-      and math.abs(b - last[3]) < 0.000001 and math.abs(a - last[4]) < 0.000001 then return end
-    last = { r, g, b, a }
-    commitAbsorbColor(r, g, b, a)
-  end
-  pcall(function()
-    picker:SetupColorPickerAndShow({
-      r = c[1], g = c[2], b = c[3], opacity = last[4], hasOpacity = true,
-      swatchFunc = commit, opacityFunc = commit,
-    })
-  end)
-  initializing = false
-end
-
--- The Fill tab's colour row: label left, swatch button right, like the other rows.
+-- The Fill tab's colour row: the shared colour drop-down (the whole palette and a custom colour). The colour is still the
+-- shared appearance's "absorb" role.
 local function absorbColorRow(parent, labelText)
-  local row = makeRow(parent, labelText, {
-    tooltip = "The colour of the shield fill: the shared appearance's absorb colour. "
-      .. "The Effects tab holds the full palette.",
-  })
-  local button = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
-  button:SetSize(row.layout.control, 22)
-  button:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  BIT.UI.SkinButton(button)
-  local swatch = button:CreateTexture(nil, "ARTWORK")
-  swatch:SetSize(12, 12)
-  swatch:SetPoint("LEFT", 8, 0)
-  local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  text:SetJustifyH("LEFT")
-  text:SetPoint("LEFT", 26, 0)
-  text:SetPoint("RIGHT", -20, 0)
-  local arrow = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  arrow:SetPoint("RIGHT", -8, 0)
-  arrow:SetText("v")
-  button:SetScript("OnClick", function(self)
-    local list = {}
-    for i = 1, #ABSORB_PRESETS do
-      local p = ABSORB_PRESETS[i]
-      list[#list + 1] = { id = p.id, label = p.label, rgb = p.rgb }
-    end
-    list[#list + 1] = { id = "custom", label = "Custom colour..." }
-    openMenu(self, list, absorbColorPresetId(), function(id)
-      if id == "custom" then
-        openAbsorbPicker()
-        return
-      end
-      for i = 1, #ABSORB_PRESETS do
-        local p = ABSORB_PRESETS[i]
-        if p.id == id then
-          commitAbsorbColor(p.rgb[1], p.rgb[2], p.rgb[3], absorbColor()[4])
-        end
-      end
-    end)
-  end)
-  function row:Refresh()
+  local looks = BIT.Looks
+  local function currentId()
     local c = absorbColor()
-    swatch:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
-    text:SetText(absorbColorLabel())
-    self:ApplyEnabled(button)
+    for _, entry in ipairs(looks.Palette) do
+      if math.abs(entry.rgb[1] - c[1]) < 0.02 and math.abs(entry.rgb[2] - c[2]) < 0.02 and math.abs(entry.rgb[3] - c[3]) < 0.02 then
+        return entry.id
+      end
+    end
+    return looks.Hex(c[1], c[2], c[3])
   end
-  row.widget, row.swatch = button, swatch
+  local row = looks.Rows.Choice(parent, labelText, looks.ColorList(), currentId, function(id)
+    local rgb = looks.Rgb(id)
+    if rgb then commitAbsorbColor(rgb[1], rgb[2], rgb[3], absorbColor()[4]) end
+  end, { tooltip = "The color of the shield fill: the shared appearance's absorb color.", register = function(r) controls[#controls + 1] = r end,
+    settings = function() return settings or DEFAULTS end })
   return row
 end
 
@@ -1454,7 +1261,7 @@ local function buildLivePreview(pane)
       scene.overlay:SetAllPoints(kit.bar)
       scene.overlay:SetFrameLevel((kit.bar:GetFrameLevel() or 0) + 1)
       -- The mock frame's own mask (player and target), as on the real frames.
-      BIT.UI.BarMask.Apply(scene.overlay:GetStatusBarTexture(), kit.bar, true)
+      BIT.UI.BarMask.ApplyToBar(scene.overlay, kit.bar, true)
       scene.overlay:SetMinMaxValues(0, 100)
       scene.overlay:SetValue(clampPercent(preview.absorb))
       styleOverlay(scene.overlay)
@@ -1497,43 +1304,14 @@ local function buildTabs(area)
 
   -- Fill: the art, its translucency and the absorb colour.
   local fill = addTab("Fill", area)
-  local fillBox = CreateFrame("Frame", nil, fill.inner)
-  fillBox:SetSize(400, 78)
-  fillBox.label = fillBox:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  fillBox.label:SetPoint("TOPLEFT", 0, 0)
-  fillBox.label:SetText("Fill style")
-  local fillButtons = {}
-  for i, entry in ipairs(FILL_TEXTURES) do
-    local b = pushButton(fillBox, entry.label, 128, function()
-      settings.fillTexture = entry.id
-      styleChanged()
-    end)
-    b:SetPoint("TOPLEFT", ((i - 1) % 3) * 136, -18 - math.floor((i - 1) / 3) * 26)
-    local sw = b:CreateTexture(nil, "ARTWORK")
-    sw:SetSize(12, 12)
-    sw:SetPoint("LEFT", 6, 0)
-    pcall(function()
-      sw:SetTexture(entry.path, entry.tiled and "REPEAT" or nil, entry.tiled and "REPEAT" or nil)
-      if entry.tiled then sw:SetHorizTile(true) sw:SetVertTile(true) end
-    end)
-    b:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(entry.label, 1, 0.82, 0)
-      GameTooltip:AddLine(entry.hint, 1, 1, 1, true)
-      GameTooltip:Show()
-    end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    fillButtons[entry.id] = b
-  end
-  function fillBox:Refresh()
-    local id = settings.fillTexture
-    if type(id) ~= "string" then id = "flat" end
-    for key, b in pairs(fillButtons) do
-      b:SetAlpha(key == id and 1 or 0.55)
-    end
-  end
-  M._fillButtons = fillButtons
-  fill:add(fillBox, 78, "fillTexture")
+  local fillRow = BIT.Looks.Rows.Choice(fill.inner, "Fill style", FILL_TEXTURES, function() return settings.fillTexture end, function(id)
+    settings.fillTexture = id
+    styleChanged()
+  end, { tooltip = "The fill art of the shield overlay: patterns, glass and bevel shadings, Blizzard's bar textures, the shield art "
+      .. "and every LibSharedMedia texture; the absorb color tints them.",
+    settings = function() return settings or DEFAULTS end, register = function(r) controls[#controls + 1] = r end })
+  M._fillButtons = {}
+  fill:add(fillRow, ROW_HEIGHT, "fillTexture")
 
   -- The shield translucency: clamped to the range the overlay painter accepts.
   local alpha = sliderRow(fill.inner, "Fill opacity", ALPHA_MIN, ALPHA_MAX, 0.05,
@@ -1599,27 +1377,17 @@ local function buildContent(parent)
   anchor:SetSize(1, 22)
   anchor:SetPoint("TOPRIGHT", -10, -8)
   local presetLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  local previous
-  for i = #PRESETS, 1, -1 do
-    local preset = PRESETS[i]
-    local button = pushButton(parent, preset.label, 78, function() applyPreset(preset) end)
-    if previous then
-      button:SetPoint("RIGHT", previous, "LEFT", -4, 0)
-    else
-      button:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
-    end
-    button:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(preset.label .. " preset", 1, 0.82, 0)
-      GameTooltip:AddLine("Only the fill style and its opacity change; your frame switches stay.",
-        nil, nil, nil, true)
-      GameTooltip:Show()
-    end)
-    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    previous = button
-  end
-  presetLabel:SetPoint("RIGHT", previous, "LEFT", -8, 0)
-  presetLabel:SetText("Presets")
+  local presetButton = BIT.Looks.PresetButton(parent, PRESETS, applyPreset)
+  presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
+  presetButton:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Look presets", 1, 0.82, 0)
+    GameTooltip:AddLine("Only the fill style and its opacity change; your frame switches stay.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  presetButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
+  presetLabel:SetText("Shields")
 
   local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
   pane:SetPoint("TOPLEFT", 10, -44)

@@ -570,7 +570,7 @@ local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 470
 local PREVIEW_TOP = 40 -- the presets' row above the two columns
 local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 186, control = 170 }
+local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
 local PREVIEW_LAYOUT = { label = 180, control = 40 }
 local DISABLED_ALPHA = 0.35
 
@@ -654,57 +654,20 @@ local function get(key) return function() return settings[key] end end
 -- Controls
 ---------------------------------------------------------------------------------------------
 
-local function makeRow(parent, labelText, opts)
+local function rowOpts(opts)
   opts = opts or {}
-  local layout = opts.layout or SETTINGS_LAYOUT
-  local row = CreateFrame("Frame", nil, parent)
-  row:SetSize(layout.label + layout.control + 50, ROW_HEIGHT)
-  row.layout = layout
-  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  row.label:SetPoint("LEFT", 6, 0)
-  row.label:SetWidth(layout.label - 8)
-  row.label:SetJustifyH("LEFT")
-  row.label:SetWordWrap(false)
-  row.label:SetText(labelText)
-  row.enabledIf = opts.enabledIf
-  if opts.tooltip then
-    row:EnableMouse(true)
-    row:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 0.82, 0)
-      GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
-      GameTooltip:Show()
-    end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  end
-  function row:ApplyEnabled(widget)
-    local enabled = not self.enabledIf or self.enabledIf(settings)
-    self:SetAlpha(enabled and 1 or DISABLED_ALPHA)
-    widget:EnableMouse(enabled)
-    if widget.EnableMouseWheel then widget:EnableMouseWheel(enabled) end
-  end
-  table.insert(controls, row)
-  return row
+  return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, layout = opts.layout, suffix = opts.suffix,
+    display = opts.display, format = opts.format, settings = function() return settings end, register = function(row) table.insert(controls, row) end }
+end
+
+-- The check box, slider and the bare row are the shared ones (Core/LookRows.lua): every module's options look the same.
+local function makeRow(parent, labelText, opts)
+  return BIT.Looks.Rows.Row(parent, labelText, rowOpts(opts))
 end
 
 -- get/set work on the settings or on the preview's own state.
 local function checkboxRow(parent, labelText, get, set, opts)
-  opts = opts or {}
-  local row = makeRow(parent, labelText, opts)
-  local box = CreateFrame("CheckButton", nil, row)
-  box:SetSize(24, 24)
-  box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  BIT.UI.SkinCheck(box)
-  box:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
-  function row:Refresh()
-    box:SetChecked(get() and true or false)
-    self:ApplyEnabled(box)
-  end
-  return row
+  return BIT.Looks.Rows.Check(parent, labelText, get, set, rowOpts(opts))
 end
 
 local function checkbox(parent, key, labelText, opts)
@@ -712,38 +675,7 @@ local function checkbox(parent, key, labelText, opts)
 end
 
 local function sliderRow(parent, labelText, min, max, step, get, set, opts)
-  opts = opts or {}
-  local row = makeRow(parent, labelText, opts)
-  local slider = CreateFrame("Slider", nil, row)
-  slider:SetOrientation("HORIZONTAL")
-  slider:SetSize(row.layout.control - 44, 18)
-  slider:SetPoint("LEFT", row, "LEFT", row.layout.label + 2, 0)
-  slider:SetMinMaxValues(min, max)
-  slider:SetValueStep(step)
-  if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-  slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-  slider:GetThumbTexture():SetSize(18, 24)
-  BIT.UI.SkinSlider(slider, 6)
-  local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-  local suffix = opts.suffix or ""
-  local updating = false
-  slider:SetScript("OnValueChanged", function(_, value)
-    if updating then return end
-    value = math.floor(value / step + 0.5) * step
-    valueText:SetText(value .. suffix)
-    set(value)
-  end)
-  slider:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * step) end)
-  function row:Refresh()
-    updating = true
-    local value = get()
-    slider:SetValue(value)
-    valueText:SetText(math.floor(value / step + 0.5) * step .. suffix)
-    updating = false
-    self:ApplyEnabled(slider)
-  end
-  return row
+  return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, get, set, rowOpts(opts))
 end
 
 local function slider(parent, key, labelText, min, max, step, opts)
@@ -817,7 +749,7 @@ local function addTab(name)
 
   local function place(row, key)
     row:SetPoint("TOPLEFT", tab.content, "TOPLEFT", 0, -tab.y)
-    tab.y = tab.y + ROW_HEIGHT
+    tab.y = tab.y + (row.standard and row:GetHeight() or ROW_HEIGHT)
     if key then table.insert(tab.keys, key) end
     return row
   end
@@ -973,19 +905,10 @@ end
 local function buildContent(top, anchor)
   tabs, activeTab = {}, nil
   local presetLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  local previous
-  for i = #PRESETS, 1, -1 do
-    local preset = PRESETS[i]
-    local button = pushButton(window, preset.label, 72, function() applyPreset(preset) end)
-    if previous then
-      button:SetPoint("RIGHT", previous, "LEFT", -4, 0)
-    else
-      button:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
-    end
-    previous = button
-  end
-  presetLabel:SetPoint("RIGHT", previous, "LEFT", -8, 0)
-  presetLabel:SetText("Presets")
+  local presetButton = BIT.Looks.PresetButton(window, PRESETS, applyPreset)
+  presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
+  presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
+  presetLabel:SetText("Range")
 
   local pane = CreateFrame("Frame", nil, window, "BackdropTemplate")
   pane:SetPoint("TOPLEFT", 10, -top)

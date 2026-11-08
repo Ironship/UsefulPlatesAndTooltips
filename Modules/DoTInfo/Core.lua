@@ -51,6 +51,7 @@ local KNOWN_TICK_INTERVALS = {
     ["Rip"] = 2,
     ["Rupture"] = 2,
     ["Black Arrow"] = 2, -- the description gives the total over 30 sec only
+    ["Wyvern Sting"] = 2, -- client data: its DoT (24336) ticks every 2 s
 }
 
 -- DoTs whose ticks aren't even: each tick is the average tick times its factor (factors average 1, so the
@@ -70,13 +71,13 @@ local SCHOOL_BY_NAME = {
 }
 
 -- Read like DoTs but aren't one on the current target: ground/area effects, channels, traps, and
--- delayed damage (Wyvern Sting only starts after the sleep).
+-- delayed damage (Wyvern Sting is handled apart, see DELAYED_DOTS).
 local IGNORED_SPELLS = {
     ["Rain of Fire"] = true, ["Hellfire"] = true, ["Blizzard"] = true, ["Flamestrike"] = true,
     ["Consecration"] = true, ["Hurricane"] = true, ["Volley"] = true,
     ["Drain Life"] = true, ["Drain Soul"] = true, ["Drain Mana"] = true, ["Health Funnel"] = true,
     ["Mind Flay"] = true, ["Arcane Missiles"] = true, ["Starshards"] = true,
-    ["Explosive Trap"] = true, ["Wyvern Sting"] = true,
+    ["Explosive Trap"] = true,
 }
 
 -- The name-keyed tables also answer to the German names, and on ADDON_LOADED to the names this client reports
@@ -92,11 +93,13 @@ ns.refreshNames = {
 
 -- Traps that put a DoT on the first enemy to walk in (ProcDots.lua): placing one only arms it.
 ns.TRAP_DOTS = { ["Immolation Trap"] = true }
+-- Cast at a mob, but the DoT starts later (ProcDots.lua finds the start by its rhythm).
+ns.DELAYED_DOTS = { ["Wyvern Sting"] = true }
 -- Any new Fire trap replaces the armed one (by name, so it works in every language).
 ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
-    ns.TRAP_DOTS, ns.FIRE_TRAPS }
+    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS }
 ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -193,6 +196,16 @@ local COLOR_PRESETS = {
 }
 local COLOR_BY_ID = {}
 for _, preset in ipairs(COLOR_PRESETS) do COLOR_BY_ID[preset.id] = preset.rgb end
+-- The shared palette (Core/Looks.lua) adds the colours these nine do not have; a saved "#rrggbb" id is read by colorOf.
+do
+    local looks = BIT.Looks
+    for _, preset in ipairs(looks and looks.Palette or {}) do
+        if not COLOR_BY_ID[preset.id] then
+            COLOR_PRESETS[#COLOR_PRESETS + 1] = preset
+            COLOR_BY_ID[preset.id] = preset.rgb
+        end
+    end
+end
 
 local MAX_TRACE_LINES = 500
 
@@ -956,6 +969,12 @@ local function onPlayerCast(spellID, castGUID)
         return
     end
 
+    -- Wyvern Sting: the DoT starts when the sleep ends (ProcDots.lua).
+    if ns.ProcDots and ns.DELAYED_DOTS[name] then
+        ns.ProcDots.ArmDelayed(key, spellID, name, total, school, duration, statedInterval or KNOWN_TICK_INTERVALS[name] or 3)
+        return
+    end
+
     -- DOT-1: SUCCEEDED names only the spell, so the cast belongs to the mob
     -- remembered at SENT time, not to whatever is targeted now (a tab
     -- mid-cast must not move the DoT). Fall back to the current target only
@@ -1299,7 +1318,10 @@ local combatFrameHits = {}
 -- Field, not local: this file is at Lua's 200-local limit.
 function ns.onHiddenAmountHit(key, unit, school)
     local dots = dotsByTarget[key]
-    if not dots then return end
+    local tracked = dots ~= nil
+    -- An armed trap needs the hit even where no DoT runs (ProcDots.lua).
+    if not dots and not (ns.ProcDots and ns.ProcDots.Wants(false, school)) then return end
+    dots = dots or {}
     local now = GetTime()
     if combatFrameAt ~= now then
         combatFrameHits = {}
@@ -1326,7 +1348,9 @@ function ns.onHiddenAmountHit(key, unit, school)
         end
     end
     if not best then
-        trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit))
+        -- An armed trap's ticks, told by their rhythm alone.
+        if ns.ProcDots and ns.ProcDots.OnHiddenHit(key, unit, school, now) then return key end
+        if tracked then trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit)) end
         return
     end
     local wasWaiting = isWaiting(best)
@@ -1456,6 +1480,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
 end
 
 local function housekeep(now)
+    if ns.ProcDots then ns.ProcDots.Housekeep(now) end
     for guid, sent in pairs(ns._retailPending) do
         if (sent.stoppedAt and now - sent.stoppedAt > CAST_STOP_GRACE)
             or now - sent.sentAt > CAST_MAX_SECONDS then ns._retailPending[guid] = nil end
@@ -1585,16 +1610,19 @@ local SKULL_ICONS = {
     { id = "check",  label = "Green checkmark", path = "Interface\\RaidFrame\\ReadyCheck-Ready" },
     { id = "boss",   label = "Boss skull",      path = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull" },
     { id = "shades", label = "Sunglasses",      path = TEXTURE_DIR .. "Sunglasses" },
+    kind = "icon", -- pictures, not fill textures: the menus show them square and untinted
 }
 
 local FILL_STYLES = {
-    { id = "none",     label = "None" },
-    { id = "flat",     label = "Flat",               path = WHITE },
-    { id = "smooth",   label = "Health bar texture", path = "Interface\\TargetingFrame\\UI-StatusBar" },
-    { id = "raid",     label = "Raid bar texture",   path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
-    { id = "stripes",  label = "Diagonal stripes",   path = TEXTURE_DIR .. "Stripes", tiled = true },
-    { id = "gradient", label = "Fade in from left",  path = WHITE, gradient = true },
+    { id = "none",     label = "None", group = "Basic" },
+    { id = "flat",     label = "Flat",               path = WHITE, group = "Basic" },
+    { id = "gradient", label = "Fade in from left",  path = WHITE, gradient = true, group = "Basic" },
+    { id = "smooth",   label = "Health bar texture", path = "Interface\\TargetingFrame\\UI-StatusBar", group = "Blizzard" },
+    { id = "raid",     label = "Raid bar texture",   path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill", group = "Blizzard" },
+    { id = "stripes",  label = "Diagonal stripes",   path = TEXTURE_DIR .. "Stripes", tiled = true, group = "Patterns" },
 }
+-- Every texture of the shared catalog (Core/Looks.lua) is a fill too; shared-media ones join when the options open.
+if BIT.Looks then BIT.Looks.Merge(FILL_STYLES) end
 
 local OUTLINE_STYLES = {
     { id = "dashed", label = "Dashed" },
@@ -1670,11 +1698,15 @@ local function findById(list, id)
     for _, entry in ipairs(list) do
         if entry.id == id then return entry end
     end
+    -- A shared-media texture is not in the list until something merged it: the catalog knows it live.
+    if list == FILL_STYLES and BIT.Looks and type(id) == "string" and id:sub(1, 4) == "lsm:" then
+        return BIT.Looks.Texture(id)
+    end
     return list[1]
 end
 
 local function colorOf(id, opacityPercent)
-    local rgb = COLOR_BY_ID[id] or COLOR_BY_ID.white
+    local rgb = COLOR_BY_ID[id] or (BIT.Looks and BIT.Looks.Rgb(id)) or COLOR_BY_ID.white
     return rgb[1], rgb[2], rgb[3], (opacityPercent or 100) / 100
 end
 
@@ -2018,6 +2050,8 @@ local function applyAppearance()
         if fill.gradient and CreateColor then
             fillTex:SetVertexColor(1, 1, 1, 1)
             fillTex:SetGradient("HORIZONTAL", CreateColor(r, g, b, 0), CreateColor(r, g, b, a))
+        elseif fill.raw then
+            fillTex:SetVertexColor(1, 1, 1, a) -- a texture with colours of its own
         else
             fillTex:SetVertexColor(r, g, b, a)
         end
@@ -2578,7 +2612,11 @@ function ns.stylePoisonSegment(timer, health, config)
         style.tiled and "REPEAT" or nil, style.tiled and "REPEAT" or nil)
     texture:SetHorizTile(style.tiled or false)
     texture:SetVertTile(style.tiled or false)
-    texture:SetVertexColor(r, g, b, a)
+    if style.raw and not perDot then
+        texture:SetVertexColor(1, 1, 1, a) -- a texture with colours of its own: only the opacity applies
+    else
+        texture:SetVertexColor(r, g, b, a)
+    end
     if style.gradient and not perDot and not config.onPlate and CreateColor then
         texture:SetVertexColor(1, 1, 1, 1)
         texture:SetGradient("HORIZONTAL", CreateColor(r, g, b, 0), CreateColor(r, g, b, a))

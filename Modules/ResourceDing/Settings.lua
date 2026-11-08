@@ -5,8 +5,8 @@ local Addon = BIT.Module("ResourceDing")
 
 local PANE_WIDTH = 290
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 250, control = 200 }
-local PREVIEW_LAYOUT = { label = 96, control = 140 }
+local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
+local PREVIEW_LAYOUT = BIT.Looks.PREVIEW_LAYOUT
 local DISABLED_ALPHA = 0.35
 local DIAMOND = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_3"
 local MAX_POINTS = 5
@@ -45,145 +45,28 @@ local function soundEntries()
   return entries
 end
 
--- A choice of sound for the setting setting (a key of Addon.SOUNDS); picking one plays it.
-local function createDropdown(parent, name, setting)
-  setting = setting or "sound"
-  local function selectSound(key)
-    Addon.db[setting] = key
-    Addon.PlaySoundKey(key)
-  end
-  local modern = select(2, pcall(CreateFrame, "DropdownButton", name, parent,
-    "WowStyle1DropdownTemplate"))
-  if type(modern) == "table" and modern.SetupMenu then
-    modern:SetWidth(230)
-    modern:SetupMenu(function(_, rootDescription)
-      for _, entry in ipairs(soundEntries()) do
-        rootDescription:CreateRadio(entry.name,
-          function() return Addon.db[setting] == entry.key end,
-          function() selectSound(entry.key) end)
-      end
-    end)
-    return modern, function()
-      local sound = Addon.SOUNDS[Addon.db[setting]] or Addon.SOUNDS.auction
-      if modern.SetText then modern:SetText(sound.name) end
-      if modern.GenerateMenu then modern:GenerateMenu() end
-    end
-  end
-
-  local legacy = CreateFrame("Frame", name .. "Legacy", parent, "UIDropDownMenuTemplate")
-  UIDropDownMenu_SetWidth(legacy, 220)
-  UIDropDownMenu_Initialize(legacy, function(_, level)
-    for _, entry in ipairs(soundEntries()) do
-      local info = UIDropDownMenu_CreateInfo()
-      info.text = entry.name
-      info.value = entry.key
-      info.checked = Addon.db[setting] == entry.key
-      info.func = function()
-        selectSound(entry.key)
-        UIDropDownMenu_SetText(legacy, Addon.SOUNDS[entry.key].name)
-      end
-      UIDropDownMenu_AddButton(info, level or 1)
-    end
-  end)
-  return legacy, function()
-    local sound = Addon.SOUNDS[Addon.db[setting]] or Addon.SOUNDS.auction
-    UIDropDownMenu_SetText(legacy, sound.name)
-  end
+local function rowOpts(opts)
+  opts = opts or {}
+  return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, layout = opts.layout, suffix = opts.suffix,
+    display = opts.display, format = opts.format, settings = function() return Addon.db end,
+    register = function(row) table.insert(controls, row) end }
 end
 
+-- The check box, slider, button and the bare row are the shared ones (Core/LookRows.lua): every module's options look the same.
 local function makeRow(parent, labelText, opts)
-  opts = opts or {}
-  local layout = opts.layout or SETTINGS_LAYOUT
-  local row = CreateFrame("Frame", nil, parent)
-  row:SetSize(layout.label + layout.control + 50, ROW_HEIGHT)
-  row.layout = layout
-  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  row.label:SetPoint("LEFT", 6, 0)
-  row.label:SetWidth(layout.label - 8)
-  row.label:SetJustifyH("LEFT")
-  row.label:SetText(labelText)
-  BIT.UI.FitRow(row, ROW_HEIGHT)
-  row.enabledIf = opts.enabledIf
-  if opts.tooltip then
-    row:EnableMouse(true)
-    row:SetScript("OnEnter", function(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(labelText, 1, 0.82, 0)
-      GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
-      GameTooltip:Show()
-    end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  end
-  function row:ApplyEnabled(widget)
-    local enabled = not self.enabledIf or self.enabledIf(Addon.db)
-    self:SetAlpha(enabled and 1 or DISABLED_ALPHA)
-    widget:EnableMouse(enabled)
-    if widget.EnableMouseWheel then widget:EnableMouseWheel(enabled) end
-  end
-  table.insert(controls, row)
-  return row
+  return BIT.Looks.Rows.Row(parent, labelText, rowOpts(opts))
 end
 
 local function checkboxRow(parent, labelText, get, set, opts)
-  local row = makeRow(parent, labelText, opts)
-  local box = CreateFrame("CheckButton", nil, row)
-  box:SetSize(24, 24)
-  box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-  box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-  box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-  box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-  BIT.UI.SkinCheck(box)
-  box:SetScript("OnClick", function(self)
-    set(self:GetChecked() and true or false)
-  end)
-  function row:Refresh()
-    box:SetChecked(get() and true or false)
-    self:ApplyEnabled(box)
-  end
-  row.widget = box
-  box.Refresh = function() row:Refresh() end
-  return row, box
+  local row = BIT.Looks.Rows.Check(parent, labelText, get, set, rowOpts(opts))
+  row.widget.Refresh = function() row:Refresh() end
+  return row, row.widget
 end
 
 local function sliderRow(parent, labelText, min, max, step, get, set, opts)
-  opts = opts or {}
-  local row = makeRow(parent, labelText, opts)
-  local slider = CreateFrame("Slider", nil, row)
-  slider:SetOrientation("HORIZONTAL")
-  slider:SetSize(row.layout.control - 44, 18)
-  slider:SetPoint("LEFT", row, "LEFT", row.layout.label + 2, 0)
-  slider:SetMinMaxValues(min, max)
-  slider:SetValueStep(step)
-  if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-  slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-  BIT.UI.SkinSlider(slider, 6)
-  local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-  local suffix = opts.suffix or ""
-  local updating = false
-  slider:SetScript("OnValueChanged", function(_, value)
-    if updating then return end
-    value = math.floor(value / step + 0.5) * step
-    valueText:SetText(value .. suffix)
-    set(value)
-  end)
-  slider:SetScript("OnMouseWheel", function(self, delta)
-    local current = self:GetValue()
-    if type(current) ~= "number" then current = get() end
-    self:SetValue(current + delta * step)
-  end)
-  function row:Refresh()
-    updating = true
-    local value = get()
-    slider:SetValue(value)
-    valueText:SetText(math.floor(value / step + 0.5) * step .. suffix)
-    updating = false
-    self:ApplyEnabled(slider)
-  end
-  row.widget = slider
-  slider.Refresh = function() row:Refresh() end
-  return row, slider
+  local row = BIT.Looks.Rows.Slider(parent, labelText, min, max, step, get, set, rowOpts(opts))
+  row.widget.Refresh = function() row:Refresh() end
+  return row, row.widget
 end
 
 local function checkbox(parent, key, labelText, opts)
@@ -207,25 +90,19 @@ local function pushButton(parent, text, width, onClick)
 end
 
 local function actionRow(parent, labelText, buttonText, onClick, opts)
-  opts = opts or {}
-  local row = makeRow(parent, labelText, opts)
-  local button = pushButton(row, buttonText, 90, onClick)
-  button:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  function row:Refresh() self:ApplyEnabled(button) end
-  row.widget = button
-  return row, button
+  local row = BIT.Looks.Rows.Button(parent, labelText, buttonText, onClick, rowOpts(opts))
+  return row, row.widget
 end
 
+-- A choice of sound for a setting (a key of Addon.SOUNDS); picking one plays it. The same drop-down as every other choice.
 local function soundRow(parent, labelText, setting, frameName, opts)
-  local row = makeRow(parent, labelText, opts)
-  local dropdown, updateText = createDropdown(row, frameName, setting)
-  dropdown:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  function row:Refresh()
-    updateText()
-    self:ApplyEnabled(dropdown)
-  end
-  row.widget = dropdown
-  return row, dropdown
+  local list = {}
+  for _, key in ipairs(Addon.SOUND_ORDER) do list[#list + 1] = { id = key, label = Addon.SOUNDS[key].name } end
+  local row = BIT.Looks.Rows.Choice(parent, labelText, list, function() return Addon.db[setting] end, function(key)
+    Addon.db[setting] = key
+    Addon.PlaySoundKey(key)
+  end, rowOpts(opts))
+  return row, row.widget
 end
 
 local function noteRow(parent, text, height)
@@ -449,7 +326,7 @@ local function buildLivePreview(pane)
     function(value) applySetting("dotSize", value) end,
     { layout = PREVIEW_LAYOUT, tooltip = "Size of the combo points and soul shards." })
   size:SetPoint("TOPLEFT", points, "BOTTOMLEFT", 0, 0)
-  local offset = sliderRow(pane, "Offset", -80, 30, 1,
+  local offset = sliderRow(pane, "Vertical offset", -80, 30, 1,
     function() return Addon.db[previewOffsetKey()] end,
     function(value) applySetting(previewOffsetKey(), value) end,
     { layout = PREVIEW_LAYOUT, tooltip = "Offset for the resource in the selected tab." })
@@ -569,7 +446,7 @@ local function buildTabs()
     { tooltip = "Your class resource as circles below the target's health bar. Warlocks use these when shard diamonds are off." })
   dots:slider("dotSize", "Dot / diamond size", 8, 24, 1,
     { tooltip = "How big the circles and the shard diamonds are." })
-  dots:slider("dotOffset", "Dot offset (- = above)", -80, 30, 1,
+  dots:slider("dotOffset", "Dot vertical offset (- = above)", -80, 30, 1,
     { tooltip = "How far the dots sit from the health bar. The same seat as the hunter rail: top of the row, -offset under the bar." })
   plateClashRow = dots:note("Nameplate lanes")
   if plateClashRow and plateClashRow.text and BIT.Plate and type(BIT.Plate.ClashText) == "function" then
@@ -582,7 +459,7 @@ local function buildTabs()
     { tooltip = "One cue for a new whole Soul Shard: player power on Retail, bag items on Classic. This also announces the last shard when the bar fills." })
   shards:checkbox("shardDiamonds", "Purple diamonds under the target",
     { tooltip = "Each Soul Shard as a purple diamond below the target's health bar." })
-  shards:slider("shardOffset", "Shard offset (- = above)", -80, 30, 1,
+  shards:slider("shardOffset", "Shard vertical offset (- = above)", -80, 30, 1,
     { tooltip = "How far the diamonds sit from the health bar; they move independently of the dots." })
   shards:gap()
 

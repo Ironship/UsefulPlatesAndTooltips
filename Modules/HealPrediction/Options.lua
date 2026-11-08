@@ -33,87 +33,48 @@ end
 -- Row builders (the same shapes the other modules' tabs use)
 ---------------------------------------------------------------------------------------------
 
+local tabKeys -- the settings keys the tab builds, for its "Reset this tab"
+local function note(key)
+    if tabKeys and key then tabKeys[#tabKeys + 1] = key end
+end
+
+-- The rows are the shared ones (Core/LookRows.lua), the same widgets, geometry and wording in every module.
 local function place(row, y, height)
     table.insert(controls, row)
-    return BIT.UI.PlaceRow(row, y, height or ROW_HEIGHT)
+    return BIT.UI.PlaceRow(row, y, row.standard and row:GetHeight() or height or ROW_HEIGHT)
 end
 
 local function checkRow(parent, labelText, key, tooltip)
-    return BIT.UI.Check(parent, labelText, function() return db()[key] end, function(value)
+    note(key)
+    return BIT.Looks.Rows.Check(parent, labelText, function() return db()[key] end, function(value)
         db()[key] = value
         changed()
-    end, tooltip)
+    end, { tooltip = tooltip, settings = db })
 end
 
 local function sliderRow(parent, labelText, key, min, max, step, format, tooltip)
-    return BIT.UI.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value)
+    note(key)
+    local opts = { tooltip = tooltip, settings = db }
+    if type(format) == "function" then opts.display = format elseif key:find("Opacity$") or key == "heightPercent" then opts.suffix = "%" end
+    return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value)
         db()[key] = value
         changed()
-    end, format, tooltip)
+    end, opts)
 end
 
 local function choiceRow(parent, labelText, key, list, tooltip)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(ROW_HEIGHT)
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 0, 0)
-    row.label:SetText(labelText)
-    local button = BIT.UI.Button(row, "", 180, nil)
-    button:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    local function current()
-        local value = db()[key]
-        for _, entry in ipairs(list) do
-            if entry.id == value then return entry end
-        end
-        return list[1] or { label = "?" }
-    end
-    button:SetScript("OnClick", function()
-        local entry = current()
-        local nextIndex = 1
-        for i, candidate in ipairs(list) do
-            if candidate.id == entry.id then nextIndex = i % #list + 1 end
-        end
-        db()[key] = list[nextIndex].id
+    note(key)
+    return BIT.Looks.Rows.Choice(parent, labelText, list, function() return db()[key] end, function(id)
+        db()[key] = id
         changed()
-    end)
-    if tooltip then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(labelText, 1, 0.82, 0)
-            GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    row.Refresh = function(self)
-        button:SetText(current().label)
-        self.label:SetText(labelText)
-    end
-    row:Refresh()
-    return row
+    end, { tooltip = tooltip, settings = db })
 end
 
 local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(ROW_HEIGHT)
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 0, 0)
-    row.label:SetText(labelText)
-    local button = BIT.UI.Button(row, buttonText, 180, function()
+    return BIT.Looks.Rows.Button(parent, labelText, buttonText, function()
         onClick()
         refreshControls()
-    end)
-    button:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    if tooltip then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(buttonText, 1, 0.82, 0)
-            GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    return row
+    end, { tooltip = tooltip, settings = db })
 end
 
 -- A section header, with room above it once there is something above it.
@@ -159,17 +120,18 @@ local function buildSettings(parent)
         function(value) return math.floor(value + 0.5) .. " s" end,
         "How many seconds of each heal over time are drawn ahead."), y, 40)
     y = section(parent, y, "THE SEGMENT")
-    y = place(choiceRow(parent, "Color", "fillColor", {
-        { id = "green", label = "Green" }, { id = "cyan", label = "Cyan" }, { id = "gold", label = "Gold" },
-        { id = "white", label = "White" }, { id = "purple", label = "Purple" }, { id = "black", label = "Black" },
-    }, "The incoming-heal segment's own color; absorbs keep ShieldsInfo's look."), y)
-    y = place(sliderRow(parent, "Opacity", "fillOpacity", 0, 100, 5, nil, nil), y, 40)
-    local COLORS = {
-        { id = "green", label = "Green" }, { id = "cyan", label = "Cyan" }, { id = "gold", label = "Gold" },
-        { id = "white", label = "White" }, { id = "purple", label = "Purple" }, { id = "black", label = "Black" },
-    }
-    y = place(choiceRow(parent, "Other healers' color", "otherColor", COLORS, nil), y)
-    y = place(choiceRow(parent, "Heal over time color", "hotColor", COLORS, nil), y)
+    y = place(choiceRow(parent, "Fill style", "fillTexture", BIT.Looks.Textures(),
+        "The fill of the incoming-heal segment: patterns, glass and bevel shadings, Blizzard's bar textures and every "
+        .. "LibSharedMedia texture; the color tints them."), y)
+    y = place(choiceRow(parent, "Fill color", "fillColor", BIT.Looks.ColorList(),
+        "The incoming-heal segment's own color, or Custom color... for any you like; absorbs keep ShieldsInfo's look."), y)
+    y = place(sliderRow(parent, "Fill opacity", "fillOpacity", 0, 100, 5, nil, nil), y, 40)
+    y = place(choiceRow(parent, "Other healers' fill style", "otherTexture", BIT.Looks.Textures(), nil), y)
+    y = place(choiceRow(parent, "Other healers' fill color", "otherColor", BIT.Looks.ColorList(), nil), y)
+    y = place(sliderRow(parent, "Other healers' fill opacity", "otherOpacity", 0, 100, 5, nil, nil), y)
+    y = place(choiceRow(parent, "Heal over time fill style", "hotTexture", BIT.Looks.Textures(), nil), y)
+    y = place(choiceRow(parent, "Heal over time fill color", "hotColor", BIT.Looks.ColorList(), nil), y)
+    y = place(sliderRow(parent, "Heal over time fill opacity", "hotOpacity", 0, 100, 5, nil, nil), y)
     y = place(sliderRow(parent, "Height", "heightPercent", 15, 100, 5, nil,
         "How tall the segment is against the health bar; the top edge is the anchor."), y, 40)
     y = place(checkRow(parent, "Show a number", "showText",
@@ -223,20 +185,21 @@ local function buildPreview(pane)
     end
 
     -- The two sliders are the sample's own numbers, never settings.
-    local healthSlider = BIT.UI.Slider(pane, "Health", 1, 100, 1,
+    local tryIt = BIT.Looks.TryItHeader(pane, scene)
+    local healthSlider = BIT.Looks.PreviewSlider(pane, "Health", 1, 100,
         function() return state.health end,
         function(value)
             state.health = math.max(1, math.min(100, math.floor(value + 0.5)))
             redraw()
-        end, function(value) return math.floor(value + 0.5) .. "%" end)
-    healthSlider:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -14)
-    local healSlider = BIT.UI.Slider(pane, "Incoming heal", 0, 100, 1,
+        end)
+    healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -4, -4)
+    local healSlider = BIT.Looks.PreviewSlider(pane, "Incoming heal", 0, 100,
         function() return state.heal end,
         function(value)
             state.heal = math.max(0, math.min(100, math.floor(value + 0.5)))
             redraw()
         end)
-    healSlider:SetPoint("TOPLEFT", healthSlider, "BOTTOMLEFT", 0, -6)
+    healSlider:SetPoint("TOPLEFT", healthSlider, "BOTTOMLEFT", 0, 0)
 
     local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     hint:SetPoint("TOPLEFT", healSlider, "BOTTOMLEFT", 6, -12)
@@ -293,8 +256,17 @@ if BIT.RegisterTab then
             divider:SetPoint("TOPRIGHT", -8, -34)
             local column = BIT.UI.ScrollColumn(area)
             column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -42)
-            column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 8)
+            column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
+            tabKeys = {}
             column:Fit((buildSettings(column.content) or 0) + 12)
+            local keys = tabKeys
+            tabKeys = nil
+            -- "Reset this tab": the same button, in the same place, as every other module.
+            local reset = BIT.Looks.ResetButton(area, function()
+                for _, key in ipairs(keys) do db()[key] = ns._defaults()[key] end
+                changed()
+            end)
+            reset:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -10, 10)
             refreshControls()
             if ns._updateAll then ns._updateAll() end
         end,

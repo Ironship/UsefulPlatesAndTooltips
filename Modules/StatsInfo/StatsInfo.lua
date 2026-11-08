@@ -2518,23 +2518,24 @@ BIT.RegisterTab("StatsInfo", {
     -- TRY IT: the appearance the preview is drawn in -- the same three fields the shared
     -- appearance editor writes, so either one moves the preview. Each row is registered in
     -- tryItSliders so renderPreview re-seats its thumb on the stored value after any write.
-    local tryIt = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tryIt:SetText("TRY IT: font, scale, opacity")
-    tryIt:SetTextColor(0.85, 0.7, 0.3)
-    local fontSlider = UI.Slider(pane, "Font size (px)", 6, 24, 1,
-      styleGet("fontSize", 12), styleSet("fontSize"), nil,
-      "The size the preview's text is drawn in. The same field the shared appearance editor changes.")
-    local scaleSlider = UI.Slider(pane, "Scale", 0.5, 2, 0.05,
-      styleGet("scale", 1), styleSet("scale"), function(v) return string.format("%.2fx", v) end,
-      "Scales the preview's card, rows, icons and bag button. The same field the shared appearance editor changes.")
-    local opacitySlider = UI.Slider(pane, "Opacity", 0, 1, 0.05,
-      styleGet("opacity", 1), styleSet("opacity"), "%d%%",
-      "How see-through the preview's lines and bag button are. The same field the shared appearance editor changes.")
+    local tryIt = BIT.Looks.TryItHeader(pane, pane, 0, -10)
+    local tryLayout = BIT.Looks.PREVIEW_LAYOUT
+    local fontSlider = BIT.Looks.Rows.Slider(pane, "Font size", 6, 24, 1,
+      styleGet("fontSize", 12), styleSet("fontSize"),
+      { layout = tryLayout, suffix = " px",
+        tooltip = "The size the preview's text is drawn in. The same field the shared appearance editor changes." })
+    local scaleSlider = BIT.Looks.Rows.Slider(pane, "Scale", 0.5, 2, 0.05,
+      styleGet("scale", 1), styleSet("scale"),
+      { layout = tryLayout, display = function(v) return string.format("%.2fx", v) end,
+        tooltip = "Scales the preview's card, rows, icons and bag button. The same field the shared appearance editor changes." })
+    local opacitySlider = BIT.Looks.Rows.Slider(pane, "Opacity", 0, 1, 0.05,
+      styleGet("opacity", 1), styleSet("opacity"),
+      { layout = tryLayout, display = function(v) return math.floor(v * 100 + 0.5) .. "%" end,
+        tooltip = "How see-through the preview's lines and bag button are. The same field the shared appearance editor changes." })
     tryItSliders = { fontSlider, scaleSlider, opacitySlider }
-    tryIt:SetPoint("TOPLEFT", pane, "BOTTOMLEFT", 0, -10)
     fontSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -4, -4)
-    scaleSlider:SetPoint("TOPLEFT", fontSlider, "BOTTOMLEFT", 0, -2)
-    opacitySlider:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", 0, -2)
+    scaleSlider:SetPoint("TOPLEFT", fontSlider, "BOTTOMLEFT", 0, 0)
+    opacitySlider:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", 0, 0)
 
     -- Right: the settings in four short sections instead of one wall of text. Each block
     -- is anchored to the one above it, so a wrapped block never runs into the next.
@@ -2637,9 +2638,9 @@ BIT.RegisterTab("StatsInfo", {
       renderPreview()
     end
     local function box(key, label, tooltip)
-      local check = UI.Check(display.content, label,
+      local check = BIT.Looks.Rows.Check(display.content, label,
         function() return (settings or DEFAULTS)[key] end,
-        function(v) toggle(key, v) end, tooltip)
+        function(v) toggle(key, v) end, { tooltip = tooltip })
       display:place(check)
       checkRows[#checkRows + 1] = check
       return check
@@ -2663,14 +2664,12 @@ BIT.RegisterTab("StatsInfo", {
         .. "the choice that sells for the most when nothing is an upgrade.")
     box("worldMarkers", "Arrows on loot, rolls and merchants",
       "The same bag verdict on loot slots, need/greed rolls and merchant buttons.")
-    updateBagIconState = function()
-      local on = (settings or DEFAULTS).bagMarkers
-      bagSpecIcons:SetAlpha(on and 1 or 0.35)
-      bagSpecIcons:EnableMouse(on)
-    end
+    -- The row dims and disables its check box itself while the bag arrows are off.
+    bagSpecIcons.enabledIf = function() return (settings or DEFAULTS).bagMarkers end
+    updateBagIconState = function() bagSpecIcons:Refresh() end
     display:body("Hover a box for what it does. The preview at the left follows these boxes at once.")
     -- Reset: the seven settings above, back to their defaults. The appearance is not touched.
-    local reset = UI.Button(display.content, "Reset to defaults", 150, function()
+    local reset = BIT.Looks.ResetButton(display.content, function()
       for k, v in pairs(DEFAULTS) do settings[k] = v end
       if settings.bagMarkers then M.EnableBagMarkers() else M.DisableBagMarkers() end
       if settings.questMarkers then M.EnableQuestMarkers() else M.DisableQuestMarkers() end
@@ -2718,13 +2717,13 @@ BIT.RegisterTab("StatsInfo", {
       .. "off hand and ranged slot apart.", true)
     ratings:body("Not counted: what a hunter's pet gets from your stats, weapon skill, and Spirit for the "
       .. "specs the simulator does not weigh it for.", true)
-    local detailBox = UI.Check(ratings.content, "Always show the full tooltip",
+    local detailBox = BIT.Looks.Rows.Check(ratings.content, "Always show the full tooltip",
       function() return (settings or DEFAULTS).detail == "full" end,
       function(v)
         settings.detail = v and "full" or "compact"
         renderPreview()
       end,
-      "Off: one line, the best spec and its arrow. Hold Shift for the full breakdown.")
+      { tooltip = "Off: one line, the best spec and its arrow. Hold Shift for the full breakdown." })
     ratings:place(detailBox)
     checkRows[#checkRows + 1] = detailBox
     ratings:body("Hold Shift for the full breakdown.")

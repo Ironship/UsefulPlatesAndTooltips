@@ -105,135 +105,57 @@ end
 -- Row builders: the core's own widgets, placed in a column
 ---------------------------------------------------------------------------------------------
 
+local tabKeys -- the settings keys of the sub-tab being built, for its "Reset this tab"
+local function note(key)
+    if tabKeys and key then tabKeys[#tabKeys + 1] = key end
+end
+
+-- The rows are the shared ones (Core/LookRows.lua), the same widgets, geometry and wording in every module.
 local function place(row, y, height)
     table.insert(controls, row)
-    return BIT.UI.PlaceRow(row, y, height or ROW_HEIGHT)
+    return BIT.UI.PlaceRow(row, y, row.standard and row:GetHeight() or height or ROW_HEIGHT)
 end
 
 local function checkRow(parent, labelText, key, tooltip)
-    return BIT.UI.Check(parent, labelText, function() return db()[key] end, function(value)
+    note(key)
+    return BIT.Looks.Rows.Check(parent, labelText, function() return db()[key] end, function(value)
         db()[key] = value
         changed()
-    end, tooltip)
+    end, { tooltip = tooltip, settings = db })
 end
 
 local function sliderRow(parent, labelText, key, min, max, step, format, tooltip)
-    return BIT.UI.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value)
+    note(key)
+    local opts = { tooltip = tooltip, settings = db }
+    if type(format) == "function" then opts.display = format elseif key:find("Opacity$") then opts.suffix = "%" end
+    return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value)
         db()[key] = value
         changed()
-    end, format, tooltip)
+    end, opts)
 end
 
--- A cycle button: clicking walks the list, the current entry names the button.
+-- A drop-down for colours (with a custom colour), textures, icons and plain lists alike.
 local function choiceRow(parent, labelText, key, list, tooltip)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(ROW_HEIGHT)
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 0, 0)
-    row.label:SetText(labelText)
-    local button = BIT.UI.Button(row, "", 180, nil)
-    button:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    local function current()
-        local value = db()[key]
-        for _, entry in ipairs(list) do
-            if entry.id == value then return entry end
-        end
-        return list[1] or { label = "?" }
-    end
-    button:SetScript("OnClick", function()
-        local entry = current()
-        local nextIndex = 1
-        for i, candidate in ipairs(list) do
-            if candidate.id == entry.id then nextIndex = i % #list + 1 end
-        end
-        db()[key] = list[nextIndex].id
+    note(key)
+    return BIT.Looks.Rows.Choice(parent, labelText, list, function() return db()[key] end, function(id)
+        db()[key] = id
         changed()
-    end)
-    if tooltip then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(labelText, 1, 0.82, 0)
-            GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    row.Refresh = function(self)
-        button:SetText(current().label)
-        self.label:SetText(labelText)
-    end
-    row:Refresh()
-    return row
+    end, { tooltip = tooltip, settings = db })
 end
 
 local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(ROW_HEIGHT)
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 0, 0)
-    row.label:SetText(labelText)
-    local button = BIT.UI.Button(row, buttonText, 180, function()
+    return BIT.Looks.Rows.Button(parent, labelText, buttonText, function()
         onClick()
         changed()
-    end)
-    button:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    if tooltip then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(buttonText, 1, 0.82, 0)
-            GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    row.Refresh = function(self)
-        button:SetText(buttonText)
-        self.label:SetText(labelText)
-    end
-    return row
+    end, { tooltip = tooltip, settings = db })
 end
 
--- A cycle row over a table of choices; get/set work on any value (Auto is the absence of a value).
+-- A drop-down over a table of choices; get/set work on any value (Auto is the absence of a value).
 local function forceRow(parent, labelText, choices, get, set, tooltip)
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(ROW_HEIGHT)
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 0, 0)
-    row.label:SetText(labelText)
-    local button = BIT.UI.Button(row, choices[1].label, 180, nil)
-    button:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    local function current()
-        local value = get()
-        for _, choice in ipairs(choices) do
-            if choice.id == value then return choice end
-        end
-        return choices[1]
-    end
-    button:SetScript("OnClick", function()
-        local choice = current()
-        local nextIndex = 1
-        for i, candidate in ipairs(choices) do
-            if candidate.id == choice.id then nextIndex = i % #choices + 1 end
-        end
-        local nextChoice = choices[nextIndex]
-        set(nextChoice.id ~= "auto" and nextChoice.id or nil)
+    return BIT.Looks.Rows.Choice(parent, labelText, choices, function() return get() or "auto" end, function(id)
+        set(id ~= "auto" and id or nil)
         changed()
-    end)
-    if tooltip then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(labelText, 1, 0.82, 0)
-            GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    row.Refresh = function(self)
-        button:SetText(current().label)
-        self.label:SetText(labelText)
-    end
-    row:Refresh()
-    return row
+    end, { tooltip = tooltip, settings = db })
 end
 
 -- One curated talent of the player's class: Auto (the client's tree answers) / Off / Max rank.
@@ -244,6 +166,7 @@ local TALENT_CHOICES = {
     { id = "max",  label = "Max rank" },
 }
 local function talentForceRow(parent, entry, tooltip)
+    note("talentForce")
     return forceRow(parent, entry.en, TALENT_CHOICES,
         function()
             local force = db().talentForce
@@ -261,6 +184,7 @@ local AURA_CHOICES = {
     { id = "off",  label = "Off" },
 }
 local function auraForceRow(parent, entry, tooltip)
+    note("auraForce")
     return forceRow(parent, string.format("%s (%s)", entry.en, entry.unit), AURA_CHOICES,
         function()
             local force = db().auraForce
@@ -286,13 +210,11 @@ local function noteRow(parent, y, text)
 end
 
 local function colorList(school)
-    local list = ns._colorList and ns._colorList() or {}
-    if school then
-        local fills = { { id = "school", label = "Spell school" } }
-        for _, entry in ipairs(list) do fills[#fills + 1] = entry end
-        return fills
-    end
-    return list
+    return BIT.Looks.ColorList(school and { { id = "school", label = "Spell school" } } or nil)
+end
+
+local function textureList()
+    return BIT.Looks.Textures()
 end
 
 ---------------------------------------------------------------------------------------------
@@ -319,11 +241,16 @@ local function buildMarkerTab(parent)
     y = section(parent, y, "THE MARKER")
     y = place(checkRow(parent, "Show the marker", "showMarker",
         "The predicted damage, drawn across enabled health bars while a cast is in flight."), y)
-    y = section(parent, y, "SOLID CASTS / BANDED CHANNELS")
+    y = section(parent, y, "CASTS AND CHANNELS")
     y = place(choiceRow(parent, "Fill color", "fillColor", colorList(true),
         "Only your own cast is ever drawn on the bar."), y)
     y = place(sliderRow(parent, "Fill opacity", "fillOpacity", 0, 100, 5, nil,
         "How strongly the fill covers the health bar."), y, 40)
+    y = place(choiceRow(parent, "Cast fill style", "castTexture", textureList(),
+        "The fill of a cast in flight. Patterns, glass and bevel shadings, Blizzard's bar textures and every texture "
+        .. "LibSharedMedia knows (ElvUI, Details, ...) are in the list; the fill color tints them."), y)
+    y = place(choiceRow(parent, "Channel fill style", "channelTexture", textureList(),
+        "The fill of a channel (the damage that remains): a pattern shows it is a channel, not a single hit."), y)
     y = place(choiceRow(parent, "Outline", "outlineStyle", {
         { id = "solid", label = "Solid" },
         { id = "none", label = "None" },
@@ -340,28 +267,35 @@ local function buildMarkerTab(parent)
         { id = "cross", label = "Red X" },
         { id = "impact", label = "Impact" },
     }, "Which icon the lethal cue uses."), y)
+    y = section(parent, y, "FINISHER PREVIEW")
+    y = place(choiceRow(parent, "Preview fill style", "finisherTexture", textureList(),
+        "The fill of the finisher preview (Prediction tab), so it never reads as a real cast."), y)
+    y = place(choiceRow(parent, "Preview fill color", "finisherColor", colorList(true),
+        "Spell school, one of the colors, or a custom color from the picker. A fill style from the Colorful group "
+        .. "(the default, Flame) has colors of its own and ignores this color; only its opacity applies."), y)
+    y = place(sliderRow(parent, "Preview fill opacity", "finisherOpacity", 0, 100, 5, nil, nil), y, 40)
     y = noteRow(parent, y, "The marker covers health backwards from the current HP edge. "
         .. "At 60/100 HP, 20 damage covers 60 down to 40. Overkill is clipped inside the bar.")
     return y
 end
 
 local function buildLabelTab(parent)
-    local y = section(parent, 0, "THE LABEL")
-    y = place(checkRow(parent, "Show a label", "showLabel",
+    local y = section(parent, 0, "THE TEXT")
+    y = place(checkRow(parent, "Show text", "showLabel",
         "The spell name and the number, at the spot picked below."), y)
-    y = place(choiceRow(parent, "Label shows", "labelMode", {
+    y = place(choiceRow(parent, "Text shows", "labelMode", {
         { id = "amount", label = "Damage" },
         { id = "range", label = "Damage range" },
         { id = "percent", label = "Percent of the target's health" },
     }, "Damage is the single estimate picked on the Prediction tab; the range shows both ends; "
         .. "the percent needs a readable target health (out of combat in Forever)."), y)
-    y = place(choiceRow(parent, "Label position", "labelPosition", {
+    y = place(choiceRow(parent, "Text position", "labelPosition", {
         { id = "left", label = "Left of the bar" },
         { id = "center", label = "Centered on the bar" },
         { id = "right", label = "Inside the bar, right end" },
     }, nil), y)
-    y = place(sliderRow(parent, "Label size", "labelSize", 8, 20, 1, nil, nil), y, 40)
-    y = place(choiceRow(parent, "Label color", "labelColor", colorList(), nil), y)
+    y = place(sliderRow(parent, "Text size", "labelSize", 8, 20, 1, nil, nil), y, 40)
+    y = place(choiceRow(parent, "Text color", "labelColor", colorList(), nil), y)
     return y
 end
 
@@ -387,8 +321,8 @@ local function buildNameplateTab(parent)
         { id = "above", label = "Above the bar" },
         { id = "right", label = "Right of the bar" },
     }, nil), y)
-    y = place(sliderRow(parent, "Icon offset X", "plateIconOffsetX", -40, 40, 1, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon offset Y", "plateIconOffsetY", -40, 40, 1, nil, nil), y, 40)
+    y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, nil), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -40, 40, 1, nil, nil), y, 40)
     return y
 end
 
@@ -401,6 +335,11 @@ local function buildPredictionTab(parent)
     }, "The expected damage the description and your spell power give."), y)
     y = place(checkRow(parent, "Only cast spells", "castOnly",
         "Show casts and channels. Instant spells are hidden unless this option is switched off."), y)
+    y = place(checkRow(parent, "Finisher preview", "finisherPreview",
+        "Rogues and druids: while your target has combo points, show on its health bar and plate what your strongest "
+        .. "damage finisher on the action bars (Eviscerate, Ferocious Bite, a rune's Between the Eyes) would deal at "
+        .. "that count. On Forever the description's numbers leave out attack power, so the real hit is at least this "
+        .. "much. Damage-over-time finishers (Rupture, Rip) and combo point builders are not shown. Needs SpellDamageInfo."), y)
     y = place(checkRow(parent, "Learn from hits", "learn",
         "Every non-crit hit that matches the cast bends the estimate toward what you actually deal. "
         .. "On Retail the description already holds your spell power, so only physical hits are learned there: "
@@ -454,7 +393,9 @@ end
 local function buildTabs(parent, area)
     areas = {}
     tabButtons = {}
+    local tabKeysByName, currentTab = {}, nil
     local function selectTab(name)
+        currentTab = name
         for candidate, frame in pairs(areas) do
             frame:SetShown(candidate == name)
         end
@@ -464,14 +405,14 @@ local function buildTabs(parent, area)
     end
     local x = 6
     local builders = {
-        Marker = buildMarkerTab, Label = buildLabelTab,
+        Marker = buildMarkerTab, Text = buildLabelTab,
         Nameplates = buildNameplateTab, Prediction = buildPredictionTab,
     }
-    for _, name in ipairs({ "Marker", "Label", "Nameplates", "Prediction" }) do
+    for _, name in ipairs({ "Marker", "Text", "Nameplates", "Prediction" }) do
         -- Each sub-tab scrolls inside the column: the Prediction tab alone is taller than it.
         local frame = BIT.UI.ScrollColumn(area)
         frame:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
-        frame:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 8)
+        frame:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
         frame:Hide()
         areas[name] = frame
         local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
@@ -484,8 +425,20 @@ local function buildTabs(parent, area)
         x = x + button:GetWidth() + BIT.UI.TAB_GAP
         button:SetScript("OnClick", function() selectTab(name) end)
         tabButtons[name] = button
+        tabKeys = {}
         frame:Fit((builders[name](frame.content) or 0) + 12)
+        tabKeysByName[name] = tabKeys
+        tabKeys = nil
     end
+    -- "Reset this tab": the same button, in the same place, as every other module; it resets the sub-tab that is open.
+    local reset = BIT.Looks.ResetButton(area, function()
+        for _, key in ipairs(tabKeysByName[currentTab] or {}) do
+            -- the per-talent and per-aura choices are tables of overrides: back to none (a fresh table, never the default's)
+            if key == "talentForce" or key == "auraForce" then db()[key] = {} else db()[key] = ns._defaults()[key] end
+        end
+        changed()
+    end)
+    reset:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -10, 10)
     selectTab("Marker")
     parent.castpredTabs = tabButtons
     parent.castpredAreas = areas
@@ -528,18 +481,15 @@ local function buildPreview(pane)
     pane.combatNote:Hide()
 
     -- TRY IT: the preview's own numbers, never settings.
-    local tryIt = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    tryIt:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 4, -12)
-    tryIt:SetText("TRY IT")
-    tryIt:SetTextColor(1, 0.82, 0)
+    local tryIt = BIT.Looks.TryItHeader(pane, scene)
 
-    local healthSlider = BIT.UI.Slider(pane, "Target health", 1, 100, 1,
+    local healthSlider = BIT.Looks.PreviewSlider(pane, "Target health", 1, 100,
         function() return preview.health end,
         function(value)
             preview.health = math.max(1, math.min(100, math.floor(value + 0.5)))
             updatePreview()
-        end, function(value) return math.floor(value + 0.5) .. "%" end)
-    healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -2)
+        end)
+    healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -4, -4)
     pane.healthSlider = healthSlider
 
     local spellRow = CreateFrame("Frame", nil, pane)

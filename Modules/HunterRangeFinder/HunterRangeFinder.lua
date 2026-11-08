@@ -970,7 +970,7 @@ local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 500
 local PREVIEW_WIDTH = 290
 local COL_HEIGHT = 440 -- both columns fit the window's viewport; only the Appearance tab scrolls
 local ROW_HEIGHT = 26
-local SETTINGS_LAYOUT = { label = 250, control = 200 }
+local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
 local PREVIEW_LAYOUT = { label = 86, control = 146 }
 local DISABLED_ALPHA = 0.35
 
@@ -1099,103 +1099,31 @@ local function pushButton(parent, text, width, onClick)
     return BIT.UI.SkinButton(button)
 end
 
-local function makeRow(parent, labelText, opts)
+local function rowOpts(opts)
     opts = opts or {}
-    local layout = opts.layout or SETTINGS_LAYOUT
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(layout.label + layout.control + 50, ROW_HEIGHT)
-    row.layout = layout
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    row.label:SetPoint("LEFT", 6, 0)
-    row.label:SetWidth(layout.label - 8)
-    row.label:SetJustifyH("LEFT")
-    row.label:SetText(labelText)
-    BIT.UI.FitRow(row, ROW_HEIGHT)
-    row.enabledIf = opts.enabledIf
-    if opts.tooltip then
-        row:EnableMouse(true)
-        row:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(labelText, 1, 0.82, 0)
-            GameTooltip:AddLine(opts.tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    function row:ApplyEnabled(widget)
-        local enabled = not self.enabledIf or self.enabledIf(db())
-        self:SetAlpha(enabled and 1 or DISABLED_ALPHA)
-        widget:EnableMouse(enabled)
-        if widget.EnableMouseWheel then widget:EnableMouseWheel(enabled) end
-    end
-    rows[#rows + 1] = row
-    return row
+    return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, layout = opts.layout, suffix = opts.suffix,
+        display = opts.display, format = opts.format, settings = db, register = function(row) rows[#rows + 1] = row end }
+end
+
+-- The check box, slider and the bare row are the shared ones (Core/LookRows.lua): every module's options look the same.
+local function makeRow(parent, labelText, opts)
+    return BIT.Looks.Rows.Row(parent, labelText, rowOpts(opts))
 end
 
 local function checkbox(parent, key, labelText, opts)
-    opts = opts or {}
-    local row = makeRow(parent, labelText, opts)
-    local box = CreateFrame("CheckButton", nil, row)
-    box:SetSize(24, 24)
-    box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-    box:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
-    box:SetPushedTexture("Interface\\Buttons\\UI-CheckBox-Down")
-    box:SetHighlightTexture("Interface\\Buttons\\UI-CheckBox-Highlight", "ADD")
-    box:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
-    BIT.UI.SkinCheck(box)
-    box:SetScript("OnClick", function(self)
-        db()[key] = self:GetChecked() and true or false
-        changed()
-    end)
-    function row:Refresh()
+    return BIT.Looks.Rows.Check(parent, labelText, function()
         local v = db()[key]
         if key == "longRange" then v = v or detectedLongRange end
-        box:SetChecked(v and true or false)
-        self:ApplyEnabled(box)
-    end
-    row.widget = box
-    return row
+        return v
+    end, function(value)
+        db()[key] = value
+        changed()
+    end, rowOpts(opts))
 end
 
 -- get/set work on any value: a saved setting or the preview's own band index.
 local function sliderRow(parent, labelText, min, max, step, get, set, opts)
-    opts = opts or {}
-    local row = makeRow(parent, labelText, opts)
-    local slider = CreateFrame("Slider", nil, row)
-    slider:SetOrientation("HORIZONTAL")
-    slider:SetSize(row.layout.control - 44, 18)
-    slider:SetPoint("LEFT", row, "LEFT", row.layout.label + 2, 0)
-    slider:SetMinMaxValues(min, max)
-    slider:SetValueStep(step)
-    if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-    slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-    slider:GetThumbTexture():SetSize(18, 24)
-    BIT.UI.SkinSlider(slider, 6)
-    local valueText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    valueText:SetPoint("LEFT", slider, "RIGHT", 8, 0)
-    local suffix = opts.suffix or ""
-    local function label(v)
-        if opts.format then return opts.format(v) end
-        return tostring(v) .. suffix
-    end
-    local updating = false
-    slider:SetScript("OnValueChanged", function(_, value)
-        if updating then return end
-        value = math.floor(value / step + 0.5) * step
-        valueText:SetText(label(value))
-        set(value)
-    end)
-    slider:SetScript("OnMouseWheel", function(self, delta) self:SetValue(self:GetValue() + delta * step) end)
-    function row:Refresh()
-        updating = true
-        local value = get()
-        slider:SetValue(value)
-        valueText:SetText(label(math.floor(value / step + 0.5) * step))
-        updating = false
-        self:ApplyEnabled(slider)
-    end
-    row.slider = slider
-    return row
+    return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, get, set, rowOpts(opts))
 end
 
 local function slider(parent, key, labelText, min, max, step, opts)
@@ -1346,7 +1274,7 @@ local function buildTabs(parent, isHunter)
         { enabledIf = hunterOnly,
             tooltip = "The rail rides above the target's nameplate, like the ResourceDing dots. "
                 .. "Unchecked keeps the draggable screen position." })
-    parent.plateOffset = display:slider("plateOffset", "Offset from the health bar (- = above)", -80, 30, 1,
+    parent.plateOffset = display:slider("plateOffset", "Vertical offset (- = above)", -80, 30, 1,
         { enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
             tooltip = "How far the rail sits from the plate's health bar. The same seat as the combo dots: top of the row, -offset under the bar." })
     plateClashLine = display:note("Nameplate lanes")
@@ -1474,21 +1402,11 @@ local function build(parent)
     anchor:SetSize(1, 22)
     anchor:SetPoint("TOPRIGHT", -10, -8)
     local presetLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    local previous
-    parent.hunterPresets = {}
-    for i = #PRESETS, 1, -1 do
-        local preset = PRESETS[i]
-        local button = pushButton(parent, preset.label, 72, function() applyPreset(preset) end)
-        if previous then
-            button:SetPoint("RIGHT", previous, "LEFT", -4, 0)
-        else
-            button:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
-        end
-        previous = button
-        parent.hunterPresets[i] = button
-    end
-    presetLabel:SetPoint("RIGHT", previous, "LEFT", -8, 0)
-    presetLabel:SetText("Rail style")
+    local presetButton = BIT.Looks.PresetButton(parent, PRESETS, applyPreset)
+    presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
+    parent.hunterPresets = { presetButton }
+    presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
+    presetLabel:SetText("Rail")
 
     local note = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", 12, -6)
