@@ -40,7 +40,7 @@ Locales.en = {
     "/sdi reduction [on|off] - show by how much a debuff lowers the enemy's damage (red)",
     "/sdi size 50-200 - size of the button numbers in percent (100 = default)",
     "/sdi position bottom|center|top - where the number sits on the button",
-    "/sdi lang auto|en|de - addon interface language",
+    "/sdi lang auto|en|de|ru - addon interface language",
     "/sdi weapon [on|off] - potential damage of weapon abilities and attack power buffs (blue)",
     "/sdi misses [clear] - spells on your bars that give no number",
     "/sdi dump [all] - write your spellbook's descriptions (all: every class's) to the saved variables, for testing",
@@ -100,9 +100,10 @@ Locales.en = {
   LANG_AUTO = "Auto (game)",
   LANG_EN = "English",
   LANG_DE = "Deutsch",
+  LANG_RU = "Русский",
   -- options window
   OPT_LANGUAGE = "Language",
-  OPT_LANGUAGE_TIP = "Addon interface language: Auto follows the game language, or choose English or German.",
+  OPT_LANGUAGE_TIP = "Addon interface language: Auto follows the game text language, or choose English, German or Russian.",
   OPT_PREVIEW = "Live preview",
   OPT_OFF_SAMPLE = "SpellDamageInfo sample (not your buttons)",
   OPT_PREVIEW_HINT = "Sample spells with 50 spell power and a 2.6 sec weapon hitting for 120, drawn by the same code as the numbers on your action bars.",
@@ -183,7 +184,7 @@ Locales.de = {
     "/sdi reduction [on|off] - zeigen, um wie viel ein Schw\195\164chungszauber den Schaden des Gegners senkt (rot)",
     "/sdi size 50-200 - Gr\195\182\195\159e der Zahlen auf den Tasten in Prozent (100 = Standard)",
     "/sdi position bottom|center|top - wo die Zahl auf der Taste steht",
-    "/sdi lang auto|en|de - Sprache der Addon-Oberfl\195\164che",
+    "/sdi lang auto|en|de|ru - Sprache der Addon-Oberfl\195\164che",
     "/sdi weapon [on|off] - m\195\182glicher Schaden von Waffenf\195\164higkeiten und Angriffskraft-Buffs (blau)",
     "/sdi misses [clear] - Zauber auf Euren Leisten, die keine Zahl ergeben",
     "/sdi dump [all] - die Beschreibungen Eures Zauberbuchs (all: aller Klassen) zum Testen in die gespeicherten Variablen schreiben",
@@ -243,9 +244,10 @@ Locales.de = {
   LANG_AUTO = "Auto (Spiel)",
   LANG_EN = "English",
   LANG_DE = "Deutsch",
+  LANG_RU = "Русский",
   -- options window
   OPT_LANGUAGE = "Sprache",
-  OPT_LANGUAGE_TIP = "Sprache der Addon-Oberfl\195\164che: Auto folgt der Spielsprache, oder w\195\164hlt English oder Deutsch.",
+  OPT_LANGUAGE_TIP = "Sprache der Addon-Oberfl\195\164che: Auto folgt der Textsprache des Spiels, oder w\195\164hlt English, Deutsch oder Russisch.",
   OPT_PREVIEW = "Vorschau",
   OPT_OFF_SAMPLE = "SpellDamageInfo-Beispiel (nicht Eure Tasten)",
   OPT_PREVIEW_HINT = "Beispielzauber mit 50 Zaubermacht und einer 2,6-Sek.-Waffe mit 120 Schaden pro Treffer, gezeichnet vom selben Code wie die Zahlen auf Euren Aktionsleisten.",
@@ -308,7 +310,7 @@ ns.InterfaceLang = function() return interfaceLang end
 -- missing from it falls back to the English wordings and stays without numbers rather than guess.
 -- A new language joins here together with its wordings in a pack, Parser_xxXX.lua (see the top
 -- of Parser.lua), and its "Use:" label in Core.lua's USE_PREFIXES.
-local PARSER_LANGS = { deDE = "de", enUS = "en", enGB = "en" }
+local PARSER_LANGS = { deDE = "de", ruRU = "ru", enUS = "en", enGB = "en" }
 ns.PARSER_LANGS = PARSER_LANGS
 local descriptionLang = nil
 ns.DescriptionLang = function() return descriptionLang end
@@ -348,12 +350,9 @@ end
 -- Set the interface language and refresh ns.L. "auto" -> follow GetLocale().
 function ns.SetInterfaceAndRefreshL(lang)
   interfaceLang = lang or "auto"
-  local locale = (interfaceLang == "auto") and ((type(GetLocale) == "function") and GetLocale() or "enUS") or "en"
-  if interfaceLang == "de" or interfaceLang == "auto" and locale == "deDE" then
-    for k, v in pairs(Locales.de) do L[k] = v end
-  else
-    for k, v in pairs(Locales.en) do L[k] = v end
-  end
+  local code = interfaceLang == "auto" and PARSER_LANGS[getDescriptionLocale()] or interfaceLang
+  for k, v in pairs(Locales.en) do L[k] = v end
+  for k, v in pairs(Locales[code] or Locales.en) do L[k] = v end
 end
 
 -- Init: called at ADDON_LOADED to set up the interface language from SavedVariables.

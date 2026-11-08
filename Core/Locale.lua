@@ -57,7 +57,14 @@ end
 
 local function resolve()
   local code = find(BIT.DB().language)
-  if code == nil then code = find(GetLocale()) end
+  if code == nil then
+    local get = C_CVar and C_CVar.GetCVar or GetCVar
+    if type(get) == "function" then
+      local ok, locale = pcall(get, "textLocale")
+      if ok then code = find(locale) end
+    end
+    if code == nil then code = find(GetLocale()) end
+  end
   active, activeCode = code and packs[code] or nil, code or nil
 end
 

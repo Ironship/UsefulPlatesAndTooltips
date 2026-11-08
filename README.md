@@ -49,11 +49,17 @@ the original text.
 
 ## Languages
 
-The settings window, tooltips and chat lines follow the game language. German is translated; every other language shows English. `/upt lang` shows the language in use, `/upt lang auto`, `/upt lang en` or `/upt lang deDE` changes it (after `/reload`) and `/upt lang missing` lists the texts a language still lacks. The spell damage window has its own switch, `/sdi lang`.
+The settings window, tooltips and chat lines support English, German and Russian. Automatic selection follows the supported `textLocale` CVar, then the game locale; other languages show English. `/upt lang` shows the language in use; `/upt lang auto`, `/upt lang en`, `/upt lang deDE` or `/upt lang ruRU` changes it after `/reload`. Short aliases `de` and `ru` work too. `/upt lang missing` lists missing translations. SpellDamageInfo has its own switch, `/sdi lang auto|en|de|ru` (also `ruRU`), and a Russian choice in its settings.
 
-Some Forever clients report English even with German spell text; select `/upt lang deDE` explicitly in that case. Developer diagnostics and sample spell names remain English.
+Some Forever clients report English even with German or Russian spell text. Automatic selection uses `textLocale` when available; otherwise select `/upt lang ruRU` and `/sdi lang ru` explicitly for the interface. The SDI parser detects Russian descriptions and keeps reading Forever's mixed English descriptions. Developer diagnostics remain English.
 
-Spell descriptions are read in English and German. For another language I need `/sdi dump all` from a client in that language (it is written to the saved variables on `/reload`). Russian, Korean and Chinese also need changes to the parser first, because its text handling assumes Latin letters.
+Spell descriptions are read in English, German and Russian. The Russian SDI pack is based on an actual WoW: Forever `/sdi dump all`: damage ranges, DoTs/channels, healing/HoTs, shields, health transfers, reductions, weapon attacks, finishers and seals. Its UTF-8 case folding and duration units do not depend on the host's C locale. DoTInfo reuses that reader and registers the dump's Russian spell names, including Forever's renamed spells.
+
+Descriptions with missing numbers/durations, per-tick damage ranges, or damage derived from another effect still stay unread rather than guessed. SDI dumps and misses distinguish `utility` from `unread-damage`/`unread-effect` and include the parser reason. A seal with no per-hit effect is intentionally blank; its Judgement belongs on Judgement's button. Russian consumable item wordings and Retail-specific descriptions are not comprehensively verified by this Forever spell dump.
+
+Run `lua tools\check_ru_locale.lua` for the small runnable regression check. Pass a local SavedVariables path as the optional argument to check the actual `dumpAll.spells` records and print coverage by category. The check reads only; it never executes or writes SavedVariables, and only the necessary spell samples are kept in the repository.
+
+For another language, `/sdi dump all` from a client in that language supplies the wordings (saved on `/reload`). Korean and Chinese still need their own parser packs and case handling where applicable.
 
 DoTInfo also retains partial fallback readers for Spanish, French, Korean, Brazilian Portuguese and Chinese. These do not provide full spell-parser or interface support.
 

@@ -20,7 +20,7 @@ local DEFAULTS = {
   position = "bottom",  -- where the number sits on the button: bottom, center or top
   sidePosition = "opposite", -- second line: opposite the number, or forced bottom / top
   skipUtilityBars = true,   -- no numbers on the stance bar or the pet bar
-  interfaceLang = "auto",  -- interface language: "auto", "en", "de"
+  interfaceLang = "auto",  -- interface language: "auto", "en", "de", "ru"
   weapon = true,        -- potential damage of weapon abilities and attack power spells, in blue
   talents = true,       -- add the percent your talents give a spell (Forever's descriptions leave talents out)
 }
@@ -768,7 +768,8 @@ local USE_PREFIXES = {
 -- A trailing cooldown clause is the item's cooldown, not a duration its amount ticks over:
 -- "(2 Min Cooldown)" (en), "(2 Min. Abklingzeit)" (de). ParseItemHeal would read the wording
 -- as over-time for it. Stripped in every language whose wordings the parser reads.
-local COOLDOWN_WORDS = { "Cooldown", "cooldown", "Abklingzeit", "abklingzeit" }
+local COOLDOWN_WORDS = { "Cooldown", "cooldown", "Abklingzeit", "abklingzeit",
+  "Восстановление", "восстановление" }
 
 local function stripCooldownClause(t)
   for _, word in ipairs(COOLDOWN_WORDS) do
@@ -1494,7 +1495,7 @@ local function noteMiss(spellID)
     if ok and not isSecret(b) then build = b end
   end
   db.misses[#db.misses + 1] = { id = spellID, name = spellName(spellID), text = entry.text,
-    lang = ns.DescriptionLang(), build = build }
+    lang = ns.DescriptionLang(), build = build, unread = entry.unread, reason = entry.reason }
 end
 
 -- /sdi dump: every spell in the player's spellbook, with the description as this client shows
@@ -1546,6 +1547,7 @@ local function readsAs(entry)
   if entry.isSeal then parts[#parts + 1] = "seal" end
   if entry.isJudgement then parts[#parts + 1] = "judgement-spell" end
   if entry.proc then parts[#parts + 1] = "proc=" .. tostring(entry.proc) end
+  if entry.unread then parts[#parts + 1] = entry.unread .. ":" .. tostring(entry.reason) end
   return #parts > 0 and table.concat(parts, ",") or "nothing"
 end
 
@@ -2147,7 +2149,7 @@ local function validSetting(key, value)
   if key == "skipUtilityBars" then return type(value) == "boolean" end
   if key == "size" then return type(value) == "number" and value >= SIZE_MIN and value <= SIZE_MAX end
   if key == "estimate" or key == "tooltip" or key == "reduction" or key == "weapon" then return type(value) == "boolean" end
-  if key == "interfaceLang" then return value == "auto" or value == "en" or value == "de" end
+  if key == "interfaceLang" then return value == "auto" or value == "en" or value == "de" or value == "ru" end
   return false
 end
 
@@ -2187,6 +2189,7 @@ end
 local function langLabel(lang)
   if lang == "en" then return L.LANG_EN end
   if lang == "de" then return L.LANG_DE end
+  if lang == "ru" then return L.LANG_RU end
   return L.LANG_AUTO
 end
 
@@ -2247,7 +2250,8 @@ local function slash(msg)
     ns.DescribeMouseFrame(say)
     return
   elseif cmd == "lang" then
-    if not (arg == "auto" or arg == "en" or arg == "de") then say(L.BAD_ARG) return end
+    if arg == "ruru" then arg = "ru" end
+    if not (arg == "auto" or arg == "en" or arg == "de" or arg == "ru") then say(L.BAD_ARG) return end
     db.interfaceLang = arg
     ns.SetInterfaceAndRefreshL(arg)
   elseif cmd ~= "status" then
@@ -2296,7 +2300,7 @@ local function loadSettings()
   if not POSITIONS[db.position] then db.position = DEFAULTS.position end
   if not SIDE_POSITIONS[db.sidePosition] then db.sidePosition = DEFAULTS.sidePosition end
   if type(db.skipUtilityBars) ~= "boolean" then db.skipUtilityBars = DEFAULTS.skipUtilityBars end
-  if db.interfaceLang ~= "auto" and db.interfaceLang ~= "en" and db.interfaceLang ~= "de" then
+  if db.interfaceLang ~= "auto" and db.interfaceLang ~= "en" and db.interfaceLang ~= "de" and db.interfaceLang ~= "ru" then
     db.interfaceLang = DEFAULTS.interfaceLang
   end
   if type(db.size) ~= "number" or db.size ~= db.size then

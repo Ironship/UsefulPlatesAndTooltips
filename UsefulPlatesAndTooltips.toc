@@ -2,6 +2,7 @@
 ## Title: DoesItDiePlus
 ## Notes: Useful nameplate and tooltip info for WoW: Forever: cast/channel damage, DoT marks, incoming heals, shields, hunter range, combo points, stat comparisons and action bar numbers. Every part can be switched off. /upt
 ## Notes-deDE: Nützliche Infos zu Namensplaketten und Tooltips für WoW: Forever: Zauber- und Kanalschaden, DoT-Markierungen, eingehende Heilung, Schilde, Jägerreichweite, Combopunkte, Wertevergleiche und Zahlen auf den Aktionsleisten. Jeder Teil lässt sich abschalten. /upt
+## Notes-ruRU: Информация для WoW: Forever: урон заклинаний, периодический урон, лечение, щиты, дальность, серии приемов, сравнение характеристик и числа на панелях действий. /upt
 ## Author: Ironship
 ## Version: 0.9.113-alpha.1
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
@@ -18,6 +19,15 @@ Locales\deDE\Range.lua
 Locales\deDE\ShieldsInfo.lua
 Locales\deDE\HealPrediction.lua
 Locales\deDE\HunterRangeFinder.lua
+Locales\ruRU\Core.lua
+Locales\ruRU\CastPrediction.lua
+Locales\ruRU\DoTInfo.lua
+Locales\ruRU\StatsInfo.lua
+Locales\ruRU\ResourceDing.lua
+Locales\ruRU\Range.lua
+Locales\ruRU\ShieldsInfo.lua
+Locales\ruRU\HealPrediction.lua
+Locales\ruRU\HunterRangeFinder.lua
 Core\TalentModsData.lua
 Core\TalentMods.lua
 Core\PlateLayout.lua
@@ -33,12 +43,14 @@ Core\Preview.lua
 
 # SpellDamageInfo, from the addon of that name
 Modules\SpellDamageInfo\Locale.lua
+Modules\SpellDamageInfo\Locale_ruRU.lua
 Modules\SpellDamageInfo\SpellIDs.lua
 Modules\SpellDamageInfo\SpellCoefficients.lua
 Modules\SpellDamageInfo\SpellCoefficientsLinked.lua
 Modules\SpellDamageInfo\Parser.lua
 Modules\SpellDamageInfo\Parser_enUS.lua
 Modules\SpellDamageInfo\Parser_deDE.lua
+Modules\SpellDamageInfo\Parser_ruRU.lua
 Modules\SpellDamageInfo\Estimate.lua
 Modules\SpellDamageInfo\Core.lua
 Modules\SpellDamageInfo\Options.lua
@@ -53,6 +65,7 @@ Modules\CastPrediction\API.lua
 # DoTInfo: based on a standalone DoT addon by Joe Greive (MIT), via Ironship's German fork (see LICENSE)
 Modules\DoTInfo\Locale.lua
 Modules\DoTInfo\Locale_deDE.lua
+Modules\DoTInfo\Locale_ruRU.lua
 Modules\DoTInfo\Locale_esES.lua
 Modules\DoTInfo\Locale_frFR.lua
 Modules\DoTInfo\Locale_koKR.lua

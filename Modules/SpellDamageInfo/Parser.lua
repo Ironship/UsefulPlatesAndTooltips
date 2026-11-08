@@ -38,8 +38,7 @@
 --   3. list the file in both TOCs after Parser_deDE.lua; add the client locale to PARSER_LANGS
 --      (SpellDamageInfo/Locale.lua) and, if it is missing there, its "Use:" label to USE_PREFIXES
 --      (SpellDamageInfo/Core.lua)
--- A language not written in a-z (Russian, Korean, Chinese) also needs engine changes first: unit
--- words are read as [a-z]+ and lower-casing is ASCII only.
+-- UTF-8 unit words are read without splitting their bytes; each pack supplies its own case folding.
 --
 -- A pack is a table. The helpers it needs are in Parser.util (NUM, num, D, amountOf, hasAny,
 -- unitSeconds, stripFillers). Fields, with t the lower-cased, number-normalised text:
@@ -91,6 +90,7 @@ local function asciiLower(c) return string.char(c:byte() + 32) end
 
 -- A number as it looks after normalisation (thousand separators removed, "." as decimal point).
 local NUM = "[0-9]+%.?[0-9]*"
+local WORD = "[a-z\128-\255]+"
 
 -- The registered packs, in registration order; BASE is what an unknown language code falls back to.
 local BASE = "en"
@@ -234,7 +234,7 @@ local function stripFillers(s, fillers)
   return s
 end
 
-Parser.util = { NUM = NUM, num = num, D = D, amountOf = amountOf, hasAny = hasAny,
+Parser.util = { NUM = NUM, WORD = WORD, num = num, D = D, amountOf = amountOf, hasAny = hasAny,
   unitSeconds = unitSeconds, stripFillers = stripFillers }
 
 -- Take "lasts N sec" / "Hält N Sek. lang an" out of the text: it is the duration of the whole
@@ -288,7 +288,7 @@ end
 -- Remove the durations of a clause ("over 12 sec", "12 Sek. lang", "after 1 min") and list them.
 local function takeDurations(c)
   local list = {}
-  c = gsub(c, "(" .. NUM .. ") ?([a-z]+)", function(n, unit)
+  c = gsub(c, "(" .. NUM .. ") ?(" .. WORD .. ")", function(n, unit)
     local u = unitSeconds(unit)
     if not u then return nil end
     list[#list + 1] = tonumber(n) * u
@@ -328,7 +328,7 @@ local function findAmounts(c, pack, healMode, sentence)
       stop = re
     end
     pos = stop + 1
-    if not match(prevChar, "[a-z0-9%-]") and valueMin and valueMax then
+    if not match(prevChar, "[a-z0-9\128-\255%-]") and valueMin and valueMax then
       local before = sub(c, 1, s - 1)
       local after = sub(c, stop + 1)
       if healMode then
@@ -371,6 +371,12 @@ end
 -- ("Converts 52 Health into 52 Mana for you."). TextLanguage(text, lang) gives the base language
 -- ("en") for a text with base words and not one word of lang's own, and lang otherwise.
 function Parser.TextLanguage(text, lang)
+  if type(text) == "string" then
+    for _, code in ipairs(order) do
+      local p = packs[code]
+      if p.detectAlways and p.detect(text) then return code end
+    end
+  end
   local pack = packs[lang]
   if not pack or lang == BASE or type(text) ~= "string" then return lang end
   local t = " " .. gsub(gsub(text, "[\r\n]+", " "), "[A-Z]", asciiLower) .. " "
@@ -383,7 +389,7 @@ end
 local function resolveText(text, lang)
   local textLang = Parser.TextLanguage(text, lang)
   local pack = packs[lang]
-  if textLang ~= lang and pack and pack.toEnglish then text = pack.toEnglish(text) end
+  if textLang == BASE and textLang ~= lang and pack and pack.toEnglish then text = pack.toEnglish(text) end
   return text, textLang
 end
 
@@ -671,7 +677,7 @@ local function reductionInClause(c, pack, sentenceVerb)
   local rest = sub(c, e + 1)
   local percent = find(rest, "^ ?%%") ~= nil
   if not percent then
-    local word = match(rest, "^ ?([a-z]+)")
+    local word = match(rest, "^ ?(" .. WORD .. ")")
     -- "by 3 sec" is a duration; "by 10 yards" a distance
     if unitSeconds(word) or DISTANCE[word] then return nil end
   end
@@ -981,8 +987,9 @@ end
 -- shown is what one trigger does.
 function Parser.Read(text, lang, noWeapon)
   text, lang = resolveText(text, lang)
+  local parsed, parseReason = Parser.Parse(text, lang)
   local e = {
-    parsed = Parser.Parse(text, lang) or false,
+    parsed = parsed or false,
     reduction = Parser.ParseReduction(text, lang) or false,
     weapon = Parser.ParseWeapon(text, lang) or false,
     special = Parser.ParseSpecial(text, lang) or false,
@@ -1011,6 +1018,11 @@ function Parser.Read(text, lang, noWeapon)
     e.show = "parsed"
   elseif e.finisher then
     e.show = "finisher"
+  end
+  if not e.show and not e.reduction and not e.isSeal and packs[lang] and packs[lang].unreadKind then
+    local t = prepare(text, lang)
+    e.unread = packs[lang].unreadKind(t)
+    e.reason = parseReason
   end
   return e
 end

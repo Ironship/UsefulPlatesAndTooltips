@@ -312,6 +312,7 @@ local function buildSettings(area)
     { id = "auto", label = L.LANG_AUTO },
     { id = "en", label = L.LANG_EN },
     { id = "de", label = L.LANG_DE },
+    { id = "ru", label = L.LANG_RU },
   }, { tooltip = L.OPT_LANGUAGE_TIP }))
   return rows
 end

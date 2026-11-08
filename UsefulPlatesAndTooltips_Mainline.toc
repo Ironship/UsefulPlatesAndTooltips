@@ -2,6 +2,7 @@
 ## Title: DoesItDiePlus (Retail)
 ## Notes: Retail test build: cast/channel damage, DoT estimates, incoming heals, rogue aura icons/timers, resource sounds/markers, absorb overlays and spell damage numbers. /upt
 ## Notes-deDE: Retail-Testversion: Zauber- und Kanalschaden, DoT-Schätzungen, eingehende Heilung, Aurasymbole und Timer für Schurken, Ressourcentöne und -markierungen, Absorptionsanzeigen und Zauberschadenszahlen. /upt
+## Notes-ruRU: Тестовая версия Retail: урон заклинаний, периодический урон, лечение, эффекты разбойника, ресурсы, щиты и числа урона. /upt
 ## Author: Ironship
 ## Version: 0.9.122-alpha.1-retail
 ## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames
@@ -15,6 +16,12 @@ Locales\deDE\DoTInfo.lua
 Locales\deDE\ResourceDing.lua
 Locales\deDE\ShieldsInfo.lua
 Locales\deDE\HealPrediction.lua
+Locales\ruRU\Core.lua
+Locales\ruRU\CastPrediction.lua
+Locales\ruRU\DoTInfo.lua
+Locales\ruRU\ResourceDing.lua
+Locales\ruRU\ShieldsInfo.lua
+Locales\ruRU\HealPrediction.lua
 Core\PlateLayout.lua
 Core\Orbs.lua
 Core\Appearance.lua
@@ -28,11 +35,13 @@ Core\Preview.lua
 
 # SpellDamageInfo: its original MIT notice is included in Modules/SpellDamageInfo.
 Modules\SpellDamageInfo\Locale.lua
+Modules\SpellDamageInfo\Locale_ruRU.lua
 Modules\SpellDamageInfo\SpellIDs.lua
 Modules\SpellDamageInfo\SpellCoefficients.lua
 Modules\SpellDamageInfo\Parser.lua
 Modules\SpellDamageInfo\Parser_enUS.lua
 Modules\SpellDamageInfo\Parser_deDE.lua
+Modules\SpellDamageInfo\Parser_ruRU.lua
 Modules\SpellDamageInfo\Estimate.lua
 Modules\SpellDamageInfo\Core.lua
 Modules\SpellDamageInfo\Options.lua
@@ -47,6 +56,7 @@ Modules\CastPrediction\API.lua
 # DoTInfo: original MIT notices are included in LICENSE.
 Modules\DoTInfo\Locale.lua
 Modules\DoTInfo\Locale_deDE.lua
+Modules\DoTInfo\Locale_ruRU.lua
 Modules\DoTInfo\Locale_esES.lua
 Modules\DoTInfo\Locale_frFR.lua
 Modules\DoTInfo\Locale_koKR.lua
