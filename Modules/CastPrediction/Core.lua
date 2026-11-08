@@ -45,8 +45,20 @@ local MAX_LOG = 500
 -- School names (SpellDamageInfo's parser) to the bit the combat log/UNIT_COMBAT reports.
 local SCHOOL_MASKS = {
     physical = 1, holy = 2, fire = 4, nature = 8, frost = 16, shadow = 32, arcane = 64,
-    frostfire = 4 + 16, -- both components are reported; either was this cast's
+    -- A combined school reports as one of its parts or as the whole; a hit on any of them was this cast's.
+    frostfire = 4 + 16, spellfire = 64 + 4, spellfrost = 64 + 16, shadowfrost = 32 + 16, shadowflame = 32 + 4,
+    chimeral = 64 + 4 + 16, chaos = 127,
 }
+ns.SCHOOL_MASKS = SCHOOL_MASKS
+
+-- Is every school of the reported mask one of the expected cast's?
+local function schoolMatches(expects, mask)
+    local covered = 0
+    for _, bit in ipairs({ 1, 2, 4, 8, 16, 32, 64 }) do
+        if math.floor(mask / bit) % 2 == 1 and math.floor(expects / bit) % 2 == 1 then covered = covered + bit end
+    end
+    return covered > 0 and covered == mask
+end
 
 -- User options (edited in the module's settings tab, saved in UsefulPlatesAndTooltipsDB).
 local DEFAULTS = {
@@ -147,6 +159,7 @@ local function trace(msg)
     if #settings.log > MAX_LOG then table.remove(settings.log, 1) end
     if settings.debug then print("|cff888888" .. msg .. "|r") end
 end
+ns.trace = trace
 
 local function isSecret(v)
     if type(issecretvalue) ~= "function" then return false end
@@ -653,6 +666,17 @@ local function castUnit()
     return castInProgress and findUnitByKey(castInProgress.key)
 end
 
+-- Only actual pending casts are public, not the finisher/settings preview or a landed hit.
+function ns.apiCast()
+    if not BIT.IsRunning("CastPrediction") or not castInProgress or castInProgress.landedAt then return nil end
+    return castInProgress, castUnit()
+end
+
+function ns.apiAimedAt(unit)
+    if isSecret(unit) or type(unit) ~= "string" or not BIT.IsRunning("CastPrediction") then return false end
+    return castInProgress ~= nil and not castInProgress.landedAt and unitMatchesKey(unit, castInProgress.key)
+end
+
 -- The unit the shown prediction (a cast, or the finisher preview) is aimed at.
 local function displayUnit()
     local shown = shownCast()
@@ -814,11 +838,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
 
     local mask = number(school)
     local expects = castInProgress.view and castInProgress.view.school and SCHOOL_MASKS[castInProgress.view.school]
-    if mask and expects then
-        -- Frostfire reports as either of its two schools; a plain school matches its own bit only.
-        local match = (expects == 20) and (mask == 4 or mask == 16) or (expects == mask)
-        if not match then return end
-    end
+    if mask and expects and not schoolMatches(expects, mask) then return end
 
     local isCrit = not isSecret(flag) and flag == "CRITICAL"
     local prediction = castInProgress.prediction
@@ -1195,6 +1215,10 @@ end
 local function updateLayering(now)
     if now - layerCheckedAt < 1 then return end
     layerCheckedAt = now
+    if not previewHost and not previewState and BIT.Plate and BIT.Plate.UnitFrame then
+        local host, bar = BIT.Plate.UnitFrame("target")
+        if bar ~= healthBar or (host or bar) ~= targetHost then attach() end
+    end
     -- attach() cannot reparent in combat; the marker then hangs on UIParent and would not follow the bar (its alpha,
     -- its scale, hiding with it). Once out of combat it moves onto the bar.
     if healthBar and not previewHost and not (type(InCombatLockdown) == "function" and InCombatLockdown()) then
@@ -1963,6 +1987,13 @@ local function safeRefresh()
             reportedErrors[err] = true
             trace("ERROR in display update: " .. tostring(err))
             print("Display error (logged): " .. tostring(err))
+        end
+    end
+    if ns.afterRefresh then
+        local apiOk, apiErr = pcall(ns.afterRefresh)
+        if not apiOk and not reportedErrors[apiErr] then
+            reportedErrors[apiErr] = true
+            trace("ERROR in API update: " .. tostring(apiErr))
         end
     end
 end

@@ -8,7 +8,8 @@
 --   dot    = { total = n, duration = s }  damage over time (total over the whole duration)
 --   heal   = { min = n, max = n }         instant healing
 --   hot    = { total = n, duration = s }  healing over time
---   school = "shadow" | "fire" | "nature" | "frost" | "arcane" | "holy" | "frostfire" | "physical" | "volcanic" | nil
+--   school = "shadow" | "fire" | "nature" | "frost" | "arcane" | "holy" | "frostfire" | "physical" | "volcanic"
+--            | "spellfire" | "spellfrost" | "shadowfrost" | "shadowflame" | "chaos" | "chimeral" | nil
 --   transfer = true       "Transfers X health from the target to the caster" (Drain Life): one
 --                         amount at both ends, damage in dot/direct and the same healing in
 --                         hot/heal
@@ -42,10 +43,14 @@ local UMLAUT_LOWER = { ["\195\132"] = "\195\164", ["\195\150"] = "\195\182", ["\
 local SCHOOL_EN = {
   shadow = "shadow", fire = "fire", nature = "nature", frost = "frost", arcane = "arcane",
   holy = "holy", frostfire = "frostfire", physical = "physical", bleed = "physical", volcanic = "volcanic",
+  spellfire = "spellfire", spellfrost = "spellfrost", shadowfrost = "shadowfrost", shadowflame = "shadowflame",
+  chaos = "chaos", chimeral = "chimeral",
 }
 local SCHOOL_DE = {
   schatten = "shadow", feuer = "fire", natur = "nature", frost = "frost", arkan = "arcane",
   heilig = "holy", frostfeuer = "frostfire", vulkan = "volcanic", blutungs = "physical", [""] = "physical",
+  zauberfeuer = "spellfire", zauberfrost = "spellfrost", schattenfrost = "shadowfrost",
+  schattenflammen = "shadowflame", chaos = "chaos", ["schim\195\164ren"] = "chimeral",
 }
 
 -- Words that may sit between an amount and its damage word.
@@ -293,8 +298,9 @@ end
 local function classifyAfter(after, lang, sentence)
   if lang == "de" then
     local s = stripFillers(after, FILLERS_DE)
-    -- the word ends there: "3 Schadensfähigkeiten" is a count of abilities
-    local prefix = match(s, "^([a-z]*)schaden$") or match(s, "^([a-z]*)schaden[^a-z]")
+    -- the word ends there: "3 Schadensfähigkeiten" is a count of abilities; "Schimärenschaden"
+    -- has an umlaut in its school
+    local prefix = match(s, "^([a-z\195\164\182\188]*)schaden$") or match(s, "^([a-z\195\164\182\188]*)schaden[^a-z]")
     if prefix and SCHOOL_DE[prefix] then return "damage", SCHOOL_DE[prefix] end
     if sub(s, 1, 10) == "gesundheit" then
       if find(sentence, "\195\188bertr\195\164gt") then return "drain", nil end
@@ -416,7 +422,15 @@ local function prepare(text, lang)
   t = gsub(t, "[A-Z]", asciiLower)
   t = gsub(t, "\195[\132\150\156]", UMLAUT_LOWER)
   if lang ~= "de" and lang ~= "en" then lang = detectLanguage(t) end
-  return normaliseNumbers(t, lang), lang
+  t = normaliseNumbers(t, lang)
+  -- "der zwischen 42 und 63 Schimärenschaden zufügt": the range the usual "42 bis 63" way, only where the
+  -- spell deals it (not "wenn Ihr zwischen 5 und 8 Schaden erleidet")
+  if lang == "de" then
+    for _, verb in ipairs({ "verursacht", "zuf\195\188gt" }) do
+      t = gsub(t, "zwischen (" .. NUM .. ") und (" .. NUM .. ") (%S*schaden) " .. verb, "%1 bis %2 %3 " .. verb)
+    end
+  end
+  return t, lang
 end
 
 function Parser.Parse(text, lang)
@@ -1324,9 +1338,14 @@ local function specialEN(t)
 end
 
 local function specialDE(t)
-  -- Aderlass: the same cost/gain pair as English Life Tap.
-  local hc, mg = match(t, "wandelt (" .. NUM .. ") gesundheit in (" .. NUM .. ") mana um")
+  -- Aderlass: the same cost/gain pair as English Life Tap ("... in 48 Mana für Euch um").
+  local hc, mg = match(t, "wandelt (" .. NUM .. ") gesundheit in (" .. NUM .. ") mana")
   if hc then return { healthCost = num(hc), manaGain = num(mg) } end
+  -- Dunkles Opfer: "Kannibalisiert 400 Eurer Gesundheit im Verlauf von 15 Sek., um 428 Mana zu erhalten."
+  local seconds
+  hc, seconds, mg = match(t, "kannibalisiert (" .. NUM .. ") eurer gesundheit im verlauf von (" .. NUM
+    .. ") sek%.?,? um (" .. NUM .. ") mana")
+  if hc then return { healthCost = num(hc), manaGain = num(mg), healthCostDuration = num(seconds) } end
   local lo, hi, school, hlo, hhi = match(t, "verursacht (" .. NUM .. ") bis (" .. NUM .. ") ([a-z]*)schaden bei feinden oder heilt ("
     .. NUM .. ") bis (" .. NUM .. ") bei verb" .. UE .. "ndeten")
   if lo then return { direct = D(lo, hi), heal = D(hlo, hhi), school = SCHOOL_DE[school] } end
@@ -1374,10 +1393,11 @@ local function specialDE(t)
   -- Forever's Consecration: "Gegner, die das Gebiet betreten, erleiden im Verlauf von 8 Sek. 56
   -- Heiligschaden"
   -- Heiligschaden. Die ersten 4 Gegner, die das Gebiet betreten, erleiden im Verlauf von 8 Sek.
-  -- zusätzlich 24 Schaden": the first 4 take both, as in English
+  -- zusätzlich 24 Schaden": the first 4 take both, as in English. Forever's German says "den Bereich
+  -- betreten" where Wowhead's says "das Gebiet betreten".
   local first, extra
   dur, n, school, first, extra = match(t, "erleiden im verlauf von (" .. NUM .. ") sek%.? (" .. NUM .. ") ([a-z]*)schaden%. +die "
-    .. "ersten (" .. NUM .. ") gegner, die das gebiet betreten, erleiden im verlauf von " .. NUM .. " sek%.? zus" .. AE
+    .. "ersten (" .. NUM .. ") gegner, die d[a-z]+ [a-z]+ betreten, erleiden im verlauf von " .. NUM .. " sek%.? zus" .. AE
     .. "tzlich (" .. NUM .. ") schaden")
   if n then
     return { dot = { total = num(n) + num(extra), duration = num(dur) }, school = SCHOOL_DE[school], first = num(first) }
@@ -1400,9 +1420,10 @@ local function specialDE(t)
   n = match(t, "jedem nahkampfangriff eine chance verleiht, den paladin um (" .. NUM .. ") punkt%(e%) zu heilen")
   if n then return { heal = D(n) } end
   -- Forever's: "Absorbiert 162 Feuerschaden", "absorbiert 431 Schaden", "einen Schild, der 155
-  -- Schaden absorbiert"
-  n = match(t, "absorbiert dabei (" .. NUM .. ") punkt") or match(t, "absorbiert (" .. NUM .. ") punkt")
-    or match(t, "absorbiert (" .. NUM .. ") [a-z]*schaden") or match(t, "der (" .. NUM .. ") schaden absorbiert")
+  -- Schaden absorbiert", "absorbiert dabei 749 Schaden", "der 1 Min. lang 431 Schaden absorbiert"
+  local absorbs = gsub(t, "absorbiert dabei ", "absorbiert ")
+  n = match(absorbs, "absorbiert (" .. NUM .. ") punkt") or match(absorbs, "absorbiert (" .. NUM .. ") [a-z]*schaden")
+    or match(absorbs, "der (" .. NUM .. ") schaden absorbiert") or match(absorbs, "lang (" .. NUM .. ") schaden absorbiert")
   if n then return { absorb = num(n) } end
   return nil
 end

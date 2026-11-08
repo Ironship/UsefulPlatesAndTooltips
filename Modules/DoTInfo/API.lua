@@ -8,21 +8,23 @@
 -- two either; it feeds both into a StatusBar, as the nameplate marker does.
 --
 -- Loaded last: Core.lua calls ns.afterRefresh after every refresh to notice changes.
+-- Also exposed through UsefulPlatesAndTooltips_API.Get("DoT"); the older global stays compatible.
 
 local ADDON_NAME, BIT = ...
 local ns = BIT.Module("DoTInfo")
 
-local API_VERSION = 1
+local API_VERSION = 2 -- Adds CanTrack and the shared callback bus.
 local EVENT = "DOTS_CHANGED"
+local bus = BIT.API
+local Root = UsefulPlatesAndTooltips_API
 -- Unit tokens watched for changes while anyone is registered: what UNIT_COMBAT covers, so what tracking can update.
 local WATCHED = { "target", "focus" }
 for i = 1, 40 do WATCHED[#WATCHED + 1] = "nameplate" .. i end
 
 local api = {}
-local callbacks = {} -- owner -> function
 local lastSeen = {} -- unit token -> "mob key|identity version|total|count" when last reported
 local identityVersions = {} -- Forever's reusable fallback keys need their lifecycle too.
-local reportedErrors = {}
+bus.DeclareEvent(EVENT, "DoTInfo", ns.trace)
 
 function ns.apiIdentityChanged(unit)
     if type(unit) ~= "string" or (type(issecretvalue) == "function" and issecretvalue(unit)) then return end
@@ -31,9 +33,16 @@ function ns.apiIdentityChanged(unit)
 end
 
 local function trackedKey(unit)
-    if type(unit) ~= "string" or not ns.db then return nil end
+    if (type(issecretvalue) == "function" and issecretvalue(unit))
+        or type(unit) ~= "string" or not ns.db or not BIT.IsRunning("DoTInfo") then return nil end
     local ok, key = pcall(ns.Internals.unitKey, unit)
     if ok and type(key) == "string" then return key end
+end
+
+function api.CanTrack(unit)
+    if not trackedKey(unit) then return false end
+    local ok, exists = pcall(UnitExists, unit)
+    return ok and not (type(issecretvalue) == "function" and issecretvalue(exists)) and exists == true
 end
 
 -- Total remaining damage of the player's DoTs on the mob behind `unit` (rounded), and how many DoTs that is.
@@ -67,28 +76,20 @@ end
 -- now shows another mob; event is "DOTS_CHANGED". One function per owner (any value, e.g. your addon's name or
 -- frame): registering again replaces it.
 function api.RegisterCallback(owner, func)
-    assert(owner ~= nil, "UsefulPlatesAndTooltips_DoTAPI.RegisterCallback: owner is required")
-    assert(type(func) == "function", "UsefulPlatesAndTooltips_DoTAPI.RegisterCallback: func must be a function")
-    callbacks[owner] = func
+    Root.RegisterCallback(owner, EVENT, func)
 end
 
 function api.UnregisterCallback(owner)
-    if owner ~= nil then callbacks[owner] = nil end
+    Root.UnregisterCallback(owner, EVENT)
 end
 
 local function fire(unit)
-    for owner, func in pairs(callbacks) do
-        local ok, err = pcall(func, EVENT, unit)
-        if not ok and not reportedErrors[err] then
-            reportedErrors[err] = true
-            ns.trace("API callback error (" .. tostring(owner) .. "): " .. tostring(err))
-        end
-    end
+    bus.Fire(EVENT, unit)
 end
 
 -- After every refresh (0.1s, and on casts and ticks): report each watched unit whose numbers or identity changed.
 function ns.afterRefresh()
-    if next(callbacks) == nil then
+    if not bus.HasListeners(EVENT) then
         if next(lastSeen) then wipe(lastSeen) end
         return
     end
@@ -109,3 +110,4 @@ end
 
 api.API_VERSION = API_VERSION
 UsefulPlatesAndTooltips_DoTAPI = api
+bus.Register("DoT", api, { module = "DoTInfo" })

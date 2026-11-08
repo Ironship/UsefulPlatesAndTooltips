@@ -15,6 +15,7 @@ Core\Orbs.lua
 Core\Appearance.lua
 Core\Gamepad.lua
 Core\Settings.lua
+Core\API.lua
 Core\Looks.lua
 Core\LookRows.lua
 Core\Frames.lua
@@ -35,6 +36,7 @@ Modules\CastPrediction\Auras.lua
 Modules\CastPrediction\Talents.lua
 Modules\CastPrediction\Core.lua
 Modules\CastPrediction\Options.lua
+Modules\CastPrediction\API.lua
 
 # DoTInfo: based on a standalone DoT addon by Joe Greive (MIT), via Ironship's German fork (see LICENSE)
 Modules\DoTInfo\Locale.lua

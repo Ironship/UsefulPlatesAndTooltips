@@ -74,7 +74,8 @@ Talents.LIST = {
     -- Crusade: all damage +1% / +2% (client curve of build 70755; a further 1% / 2% against Demons and Undead is not applied).
     { key = "PALADIN_CRUSADE", class = "PALADIN", en = "Crusade", ids = { 1311083 }, perRank = 0.01, maxRank = 2,
         schools = { physical = true, holy = true, fire = true, nature = true, frost = true, frostfire = true,
-            shadow = true, arcane = true } },
+            shadow = true, arcane = true, spellfire = true, spellfrost = true, shadowfrost = true, shadowflame = true,
+            chimeral = true, chaos = true } },
     { key = "PALADIN_SACRED_ARBITER", class = "PALADIN", en = "Sacred Arbiter", ids = { 1311087 }, perRank = 0.20,
         maxRank = 1, spells = { ["Holy Strike"] = true } },
     -- Ranks that only matter together with an aura (Auras.lua reads them through `talent`); never applied here.

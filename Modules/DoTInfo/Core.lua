@@ -343,32 +343,35 @@ end
 -- recognised by "Finishing move", not "combo point".)
 local function parseDot(desc, comboPoints)
     if type(desc) ~= "string" or isSecret(desc) then return nil end
-    if desc:find("Finishing move") then return parseFinisher(desc, comboPoints or 5) end
+    -- Strip English thousands separators only for the English patterns; locales keep their original text.
+    local text, count = desc, 1
+    while count > 0 do text, count = text:gsub("(%d),(%d%d%d)%f[%D]", "%1%2") end
+    if text:find("Finishing move") then return parseFinisher(text, comboPoints or 5) end
     -- Weapon enchants (rogue poisons) describe a proc DoT but aren't cast on the target. Match the enchant
     -- wording only: Lacerate's tooltip also mentions "weapon damage".
-    if desc:find("[Cc]oats a weapon") then return nil end
+    if text:find("[Cc]oats a weapon") then return nil end
     -- Heals over time: Forever's Renew reads "Heals the target of 830 damage over 15 sec".
-    if desc:find("^Heals") then return nil end
+    if text:find("^Heals") then return nil end
 
     local total, school, duration
-    for amount, words, secs in desc:gmatch("(%d+)%s*([%a ]-)%s*damage over (%d+%.?%d*) sec") do
+    for amount, words, secs in text:gmatch("(%d+)%s*([%a ]-)%s*damage over (%d+%.?%d*) sec") do
         total, school, duration = tonumber(amount), schoolFromWords(words), tonumber(secs)
     end
     if total and duration > 0 then return total, school, duration end
 
     -- Black Arrow: "causing 150 Shadow damage and draining 150 mana over 30 sec" (the damage and the mana drain share the time).
-    local drained, drainWords, drainSecs = desc:match("(%d+)%s*([%a ]-)%s*damage and draining %d+ mana over (%d+%.?%d*) sec")
+    local drained, drainWords, drainSecs = text:match("(%d+)%s*([%a ]-)%s*damage and draining %d+ mana over (%d+%.?%d*) sec")
     if drained and tonumber(drainSecs) > 0 then
         return tonumber(drained), schoolFromWords(drainWords), tonumber(drainSecs)
     end
 
-    local amount, words, every = desc:match("(%d+)%s*([%a ]-)%s*damage every (%d+%.?%d*) sec")
+    local amount, words, every = text:match("(%d+)%s*([%a ]-)%s*damage every (%d+%.?%d*) sec")
     if not amount then
-        amount, every = desc:match("(%d+) health.-every (%d+%.?%d*) sec")
+        amount, every = text:match("(%d+) health.-every (%d+%.?%d*) sec")
         words = ""
     end
     -- Saber Slash states the time after the interval: "to bleed for 100 damage every 2 sec for 12 sec".
-    local lasts = desc:match("[Ll]asts (%d+%.?%d*) sec") or desc:match("damage every %d+%.?%d* sec for (%d+%.?%d*) sec")
+    local lasts = text:match("[Ll]asts (%d+%.?%d*) sec") or text:match("damage every %d+%.?%d* sec for (%d+%.?%d*) sec")
     if amount and every and lasts then
         every, lasts = tonumber(every), tonumber(lasts)
         if every > 0 and lasts > 0 then
@@ -1656,7 +1659,7 @@ local DOT_COLOR_MODES = {
     { id = "rainbow", label = "Rainbow" },
 }
 
--- "By spell school" colors, keyed by school mask (Frostfire = Fire + Frost).
+-- "By spell school" colors, keyed by school mask (Frostfire = Fire + Frost; Forever's other combined schools likewise).
 local SCHOOL_COLORS = {
     [1] = { 1, 0.3, 0.3 },      -- Physical (bleeds)
     [2] = { 1, 0.9, 0.45 },     -- Holy
@@ -1665,6 +1668,11 @@ local SCHOOL_COLORS = {
     [16] = { 0.45, 0.8, 1 },    -- Frost
     [20] = { 0.75, 0.6, 1 },    -- Frostfire
     [36] = { 0.85, 0.4, 0.7 },  -- Shadowflame
+    [48] = { 0.55, 0.55, 1 },   -- Shadowfrost
+    [68] = { 1, 0.5, 0.6 },     -- Spellfire
+    [80] = { 0.6, 0.85, 1 },    -- Spellfrost
+    [84] = { 0.85, 0.65, 0.75 }, -- Chimeral
+    [127] = { 0.85, 0.85, 0.85 }, -- Chaos
     [32] = { 0.7, 0.35, 1 },    -- Shadow
     [64] = { 1, 0.55, 1 },      -- Arcane
 }

@@ -16,15 +16,26 @@ ns.Estimate = Estimate
 local SCHOOL_INDEX = { holy = 2, fire = 3, nature = 4, frost = 5, shadow = 6, arcane = 7 }
 Estimate.SCHOOL_INDEX = SCHOOL_INDEX
 
+-- The schools a combined school is made of; it takes the highest of their bonuses.
+-- Chimeral is checked against Arcane, Fire and Frost (Balefire Bolt's description).
+local COMPOUND = {
+  frostfire = { 3, 5 }, spellfire = { 7, 3 }, spellfrost = { 7, 5 }, shadowfrost = { 6, 5 },
+  shadowflame = { 6, 3 }, chimeral = { 7, 3, 5 }, chaos = { 2, 3, 4, 5, 6, 7 },
+}
+
 -- The spell-power bonus that applies to a school, from a table of GetSpellBonusDamage values
--- by index. Frostfire takes the higher of Frost and Fire. Physical damage (attack power) and
--- unknown schools get none.
+-- by index. A combined school (Frostfire, Spellfire, ...) takes the highest of its parts.
+-- Physical damage (attack power) and unknown schools get none.
 function Estimate.DamageBonus(school, bonusByIndex)
   if not school or not bonusByIndex then return nil end
-  if school == "frostfire" then
-    local fire, frost = bonusByIndex[3], bonusByIndex[5]
-    if fire and frost then return (fire > frost) and fire or frost end
-    return fire or frost
+  local parts = COMPOUND[school]
+  if parts then
+    local best
+    for _, index in ipairs(parts) do
+      local v = bonusByIndex[index]
+      if v and (not best or v > best) then best = v end
+    end
+    return best
   end
   local index = SCHOOL_INDEX[school]
   return index and bonusByIndex[index] or nil

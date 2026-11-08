@@ -61,11 +61,22 @@ local function idSet(list)
   return set
 end
 
+-- A combined school takes what any of its parts takes.
+local COMPOUND = {
+  frostfire = { "fire", "frost" }, spellfire = { "arcane", "fire" }, spellfrost = { "arcane", "frost" },
+  shadowfrost = { "shadow", "frost" }, shadowflame = { "shadow", "fire" }, chimeral = { "arcane", "fire", "frost" },
+  chaos = { "physical", "holy", "fire", "nature", "frost", "shadow", "arcane" },
+}
+
 -- A mask holds the school: every power of two in `mask` is a school, `school` is a name ("frostfire" is two).
 local function maskHas(mask, school)
   local function has(bitValue) return bitValue and math.floor(mask / bitValue) % 2 == 1 end
-  if school == "frostfire" then return has(SCHOOL_BIT.fire) or has(SCHOOL_BIT.frost) end
-  return has(SCHOOL_BIT[school])
+  local parts = COMPOUND[school]
+  if not parts then return has(SCHOOL_BIT[school]) end
+  for _, part in ipairs(parts) do
+    if has(SCHOOL_BIT[part]) then return true end
+  end
+  return false
 end
 
 local answers = {}

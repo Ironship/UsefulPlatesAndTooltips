@@ -42,7 +42,7 @@ local PHYSICAL = 1
 -- an English school word missing from SCHOOL_MASKS.
 local GERMAN_SCHOOLS = {
     heilig = 2, feuer = 4, natur = 8, frost = 16, schatten = 32, arkan = 64,
-    frostfeuer = 4 + 16,
+    frostfeuer = 4 + 16, schattenflammen = 4 + 32,
 }
 
 -- Words that may sit between the amount and "...schaden": "40 Punkt(e) Schattenschaden", "20 zusätzlichen

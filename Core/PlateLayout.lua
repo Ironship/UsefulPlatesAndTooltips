@@ -80,6 +80,11 @@ local function unitFrameBase(unit)
   if type(bar) ~= "table" then bar = type(frame) == "table" and frame.HealthBar end
   if type(bar) ~= "table" then bar = type(frame) == "table" and frame.healthbar end
   if type(bar) ~= "table" then bar = _G[part .. "FrameHealthBar"] end
+  -- BetterBlizzFrames hides the original bar when its larger target/focus mirror is active.
+  if unit ~= "player" and type(BBF) == "table" and type(frame) == "table" then
+    local mirror = read(BBF.HealthBar, frame)
+    if type(mirror) == "table" then bar = mirror end
+  end
   local portraitHost = type(frame) == "table" and frame.TargetFrameContainer
   local portrait = type(portraitHost) == "table" and portraitHost.Portrait
   if type(portrait) ~= "table" then portrait = _G[part .. "FramePortrait"] end

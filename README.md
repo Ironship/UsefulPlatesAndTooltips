@@ -41,6 +41,11 @@ I wanted to have fun on a mage or a Destruction warlock too.
 - Confirmed support for EllesmereUI, Platynator, Threat Plates, ElvUI and others.
 - Gamepad support, tested on a gamepad (I mainly play with one).
 - Estimates for crit-based procs (Deep Wounds, Ignite).
+- A [public API](API.md) for other addons to read DoT and pending-cast damage estimates.
+- Automatic target/focus health-bar selection for BetterBlizzFrames (not yet verified in game).
+
+English DoT descriptions correctly read thousands separators, such as `1,168` damage; localized parsing keeps
+the original text.
 
 ## Licence
 

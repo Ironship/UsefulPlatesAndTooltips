@@ -30,6 +30,17 @@ ns.Auras = Auras
 local MAGIC = { fire = true, frost = true, frostfire = true, arcane = true, shadow = true, nature = true, holy = true }
 local ANY = { physical = true, fire = true, frost = true, frostfire = true, arcane = true, shadow = true,
     nature = true, holy = true }
+local PLAIN_SCHOOLS = { "physical", "holy", "fire", "nature", "frost", "shadow", "arcane" } -- the mask bits 1, 2, 4 ... 64
+
+-- A combined school counts as each of its parts (a Frost aura applies to Spellfrost), by Core.lua's masks.
+local function schoolApplies(schools, school)
+    if schools[school] then return true end
+    local mask = ns.SCHOOL_MASKS and ns.SCHOOL_MASKS[school]
+    for index, name in ipairs(PLAIN_SCHOOLS) do
+        if mask and schools[name] and math.floor(mask / 2 ^ (index - 1)) % 2 == 1 then return true end
+    end
+    return false
+end
 
 -- ids: the aura's own spell ids. names: matched when the client reports no id (English first; the names
 -- of the ids are added in the client's own language). percent: a flat multiplier (0.30 = +30%).
@@ -289,7 +300,7 @@ function Auras.MultiplierFor(name, school, class)
                 applies = type(name) == "string" and entry.spells[name] or false
             end
             if not applies and entry.schools and type(school) == "string" then
-                applies = entry.schools[school] or false
+                applies = schoolApplies(entry.schools, school)
             end
             if applies and entry.notSpells and type(name) == "string" and entry.notSpells[name] then applies = false end
             if applies and entry.verify then applies = false end
