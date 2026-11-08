@@ -335,6 +335,7 @@ local function hideWidgets(w)
     if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
     w.marker:Hide()
     w.iconWindow:Hide()
+    w.iconArmed = nil
 end
 
 -- Draws one plate's widgets. maxHealth and health may be secret (real plates) or plain (the options preview):
@@ -384,8 +385,18 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
     if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
     -- UI-3: the kill icon is part of the marker set: with showMarkers off it
     -- must hide too, not linger alone on the plate.
-    w.iconWindow:SetShown(db.showMarkers and db.nameplateMode == "markerIcon"
-        and (not unit or not ns.shielded(unit)))
+    -- A window going hidden -> shown renders one frame with the icon bar's stale/unlaid-out fill (full width),
+    -- flashing the icon on every new DoT. Show it transparent first; the next draw (one refresh later) reveals it.
+    if not (db.showMarkers and db.nameplateMode == "markerIcon" and (not unit or not ns.shielded(unit))) then
+        w.iconWindow:Hide()
+        w.iconArmed = nil
+    elseif w.iconArmed then
+        w.iconWindow:SetAlpha(1)
+    else
+        w.iconWindow:SetAlpha(0)
+        w.iconWindow:Show()
+        w.iconArmed = true
+    end
     return true
 end
 

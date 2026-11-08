@@ -253,49 +253,34 @@ for id in pairs(protectionSpells) do
     end
 end
 
-local protectionUnavailableReported = false
-local function protectionUnknown()
-    if not protectionUnavailableReported then
-        protectionUnavailableReported = true
-        trace("Shield or immunity state unavailable; hiding the DoT kill icon")
-    end
-    return true
-end
-
+-- Only a positively detected absorb or known protection aura hides the kill icon. Secret/unreadable
+-- state (common on Forever in combat) counts as unshielded: hiding on "unknown" hid it on plain mobs.
 function ns.shielded(unit)
-    local absorbUnknown = false
     if type(UnitGetTotalAbsorbs) == "function" then
         local ok, amount = pcall(UnitGetTotalAbsorbs, unit)
-        if not ok or isSecret(amount) or type(amount) ~= "number" then
-            absorbUnknown = true
-        elseif amount > 0 then
-            return true
-        end
+        if ok and not isSecret(amount) and type(amount) == "number" and amount > 0 then return true end
     end
     local getAura = C_UnitAuras and (C_UnitAuras.GetBuffDataByIndex or C_UnitAuras.GetAuraDataByIndex)
-    if type(getAura) ~= "function" and type(UnitBuff) ~= "function" then return protectionUnknown() end
+    if type(getAura) ~= "function" and type(UnitBuff) ~= "function" then return false end
     for i = 1, 40 do
         local ok, aura, name, id
         if type(getAura) == "function" then
             ok, aura = pcall(getAura, unit, i, "HELPFUL")
-            if not ok or isSecret(aura) then return protectionUnknown() end
-            if aura == nil then return absorbUnknown and protectionUnknown() or false end
-            if type(aura) ~= "table" then return protectionUnknown() end
-            ok, name, id = pcall(function() return aura.name, aura.spellId end)
-            if not ok then return protectionUnknown() end
+            if not ok or aura == nil then return false end
+            if not isSecret(aura) and type(aura) == "table" then
+                ok, name, id = pcall(function() return aura.name, aura.spellId end)
+            end
         else
             local icon, count, debuffType, duration, expires, source, stealable, consolidate
             ok, name, icon, count, debuffType, duration, expires, source, stealable, consolidate, id =
                 pcall(UnitBuff, unit, i)
-            if not ok or isSecret(name) then return protectionUnknown() end
-            if name == nil then return absorbUnknown and protectionUnknown() or false end
+            if not ok or name == nil then return false end
         end
-        local readableID = not isSecret(id) and type(id) == "number"
-        local readableName = not isSecret(name) and type(name) == "string"
-        if (readableID and protectionSpells[id]) or (readableName and protectionNames[name]) then return true end
-        if not readableID and not readableName then return protectionUnknown() end
+        -- Unreadable entries are skipped so a readable shield further down still counts.
+        if ok and not isSecret(id) and type(id) == "number" and protectionSpells[id] then return true end
+        if ok and not isSecret(name) and type(name) == "string" and protectionNames[name] then return true end
     end
-    return protectionUnknown()
+    return false
 end
 end
 
