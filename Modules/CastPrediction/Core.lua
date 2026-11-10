@@ -627,6 +627,9 @@ end
 -- target. Nameplates are asked only when none of those has the name, and then just one may: other
 -- mobs that merely share the name (a wolf pack) must not make an ordinary target cast unknown.
 local function findRecipient(name)
+    -- Blizzard's own Mouseover Cast: the mob under the mouse takes the cast, same-named target or not.
+    local hovered = BIT.Plate and BIT.Plate.MouseoverCastUnit and BIT.Plate.MouseoverCastUnit(name)
+    if hovered then return hovered end
     if isSecret(name) or type(name) ~= "string" or name == "" then return selectedEnemy() end
     local found
     local function consider(unit)

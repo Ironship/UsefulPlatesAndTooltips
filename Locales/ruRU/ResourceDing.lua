@@ -59,6 +59,9 @@ BIT.RegisterLocale("ruRU", {
   ["The whole module: the finisher sound and the marks under the target."] =
     "Весь модуль: звук завершающего приёма и отметки под целью.",
   ["Only play while in combat"] = "Воспроизводить только в бою",
+  ["Sound when the bar fills"] = "Звук при заполнении шкалы",
+  ["The cue at full combo points. Unchecked keeps the dots and diamonds and only mutes this sound."] =
+    "Сигнал при полной серии приемов. Без галочки точки и ромбы остаются, отключается только этот звук.",
   ["A full bar out of combat stays quiet; it dings the moment combat starts."] =
     "Полная полоса вне боя не издаёт звуков; сигнал прозвучит при начале боя.",
   ["Hear it"] = "Прослушать",

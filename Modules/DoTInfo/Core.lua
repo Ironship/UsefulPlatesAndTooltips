@@ -692,7 +692,12 @@ local function onCastSent(spellID, castGUID, targetName)
         -- target at all. Such a cast may land on the current target at SUCCEEDED. A readable
         -- name that is not exactly one known enemy stays unknown and must not move there (DOT-1).
         dynamicTargeting = targetName == nil or (not isSecret(targetName) and targetName == "")
-        if not dynamicTargeting and not isSecret(targetName) and type(targetName) == "string" then
+        -- Blizzard's own Mouseover Cast puts the spell on the mob under the mouse, same-named target or not.
+        local hovered = BIT.Plate and BIT.Plate.MouseoverCastUnit and BIT.Plate.MouseoverCastUnit(targetName)
+        recipient = hovered and unitKey(hovered) or nil
+        if recipient then
+            trace("SENT id " .. tostring(spellID) .. ": native Mouseover Cast, the mob under the mouse takes it")
+        elseif not dynamicTargeting and not isSecret(targetName) and type(targetName) == "string" then
             recipient = ns._namedEnemyKey(targetName)
         else
             recipient = ns._selectedEnemyKey()
@@ -784,6 +789,12 @@ local function removeAvoidedDot(cast, action, school)
     else
         dots[cast.name] = nil
         trace("AVOID " .. action .. " right after " .. cast.name .. "; dropped")
+    end
+    -- A cat's or rogue's white swing missing in that instant looks the same as the finisher missing. A finisher
+    -- that misses keeps its combo points, one that lands spends them, so a finisher whose points were read at
+    -- send is judged again once they have settled (ns._resolveFinisherCheck). From Does It Die v0.9.4 (MIT).
+    if cast.comboRead then
+        ns._finisherCheck = { cast = cast, dot = dot, replaced = dots[cast.name], action = action, at = GetTime() + 0.5 }
     end
     return true
 end
@@ -1062,7 +1073,8 @@ local function onPlayerCast(spellID, castGUID)
         dot.verifyAt = now + ns._auraCheck.delay + (dot.travel or 0)
     end
     dotsByTarget[key][name] = dot
-    lastDotCast = { key = key, name = name, dot = dot, previous = previous, at = now }
+    lastDotCast = { key = key, name = name, dot = dot, previous = previous, at = now,
+        comboRead = not ns.Retail and isFinisher and comboSource == "read" and comboPoints or nil }
     local learned = not ns.Retail and tickKey and db.ticks[tickKey]
     -- The starting estimate is shaky without a learned tick size (description numbers leave out spell power
     -- and attack power) or, for finishers, without knowing the combo points.
@@ -1663,9 +1675,37 @@ function ns._verifyAuras(now)
     end
 end
 
+-- The combo points after a dropped finisher: spent means it landed (the avoid was a white swing), so it is put
+-- back; still there, unreadable, or the target changed (the points belong to the target) leaves it dropped.
+function ns._resolveFinisherCheck(now)
+    local check = ns._finisherCheck
+    if not check or now < check.at then return end
+    ns._finisherCheck = nil
+    local cast = check.cast
+    if unitKey("target") ~= cast.key then
+        trace("COMBO after " .. cast.name .. "'s " .. check.action .. ": target changed, stays dropped")
+        return
+    end
+    local points, readings = readComboPoints()
+    if not points or points >= cast.comboRead then
+        trace(string.format("COMBO after %s's %s: %s (had %d), it missed", cast.name, check.action, readings,
+            cast.comboRead))
+        return
+    end
+    local dots = dotsByTarget[cast.key]
+    if (dots and dots[cast.name]) ~= check.replaced or now >= check.dot.expiresAt then return end
+    dotsByTarget[cast.key] = dots or {}
+    dotsByTarget[cast.key][cast.name] = check.dot
+    trace(string.format("COMBO after %s's %s: %s (had %d), spent: it landed, restored", cast.name, check.action,
+        readings, cast.comboRead))
+end
+
 local function housekeep(now)
     if ns.ProcDots then ns.ProcDots.Housekeep(now) end
-    if not ns.Retail then ns._verifyAuras(now) end
+    if not ns.Retail then
+        ns._resolveFinisherCheck(now)
+        ns._verifyAuras(now)
+    end
     for guid, sent in pairs(ns._retailPending) do
         if (sent.stoppedAt and now - sent.stoppedAt > CAST_STOP_GRACE)
             or now - sent.sentAt > CAST_MAX_SECONDS then ns._retailPending[guid] = nil end

@@ -132,6 +132,9 @@ function applySetting(key, value, quiet)
   elseif key == "combatOnly" then
     db.combatOnly = value
     Addon.ResetPowerState()
+  elseif key == "fullSound" then
+    db.fullSound = value
+    Addon.ResetPowerState()
   elseif key == "sound" or key == "manaSound" then
     db[key] = value
     if not quiet then Addon.PlaySoundKey(value) end
@@ -478,8 +481,12 @@ local function buildTabs()
   local sound = addTab("Sound")
   sound:checkbox("enabled", "Sounds, dots and diamonds",
     { tooltip = "The whole module: the finisher sound and the marks under the target." })
+  sound:checkbox("fullSound", "Sound when the bar fills",
+    { tooltip = "The cue at full combo points. Unchecked keeps the dots and diamonds and only mutes this sound.",
+      enabledIf = function(db) return db.enabled end })
   sound:checkbox("combatOnly", "Only play while in combat",
-    { tooltip = "A full bar out of combat stays quiet; it dings the moment combat starts." })
+    { tooltip = "A full bar out of combat stays quiet; it dings the moment combat starts.",
+      enabledIf = function(db) return db.enabled end })
   sound:sound("sound", "Sound", "UsefulPlatesAndTooltips_ResourceDingSoundDropdown")
   sound:action("Hear it", "Test sound", Addon.PlaySelectedSound)
 

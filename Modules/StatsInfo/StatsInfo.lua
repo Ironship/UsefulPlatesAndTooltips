@@ -2741,7 +2741,9 @@ BIT.RegisterTab("StatsInfo", {
       end
       renderPreview()
     end
+    local displayKeys = {} -- what "Reset this tab" puts back: this tab's boxes, nothing from another tab
     local function box(key, label, tooltip)
+      displayKeys[#displayKeys + 1] = key
       local check = BIT.Looks.Rows.Check(display.content, label,
         function() return (settings or DEFAULTS)[key] end,
         function(v) toggle(key, v) end, { tooltip = tooltip })
@@ -2773,9 +2775,9 @@ BIT.RegisterTab("StatsInfo", {
     bagSpecIcons.enabledIf = function() return (settings or DEFAULTS).bagMarkers end
     updateBagIconState = function() bagSpecIcons:Refresh() end
     display:body(BIT.L("Hover a box for what it does. The preview at the left follows these boxes at once."))
-    -- Reset: the seven settings above, back to their defaults. The appearance is not touched.
+    -- Reset: the settings above, back to their defaults. The appearance and the other tabs are not touched.
     local reset = BIT.Looks.ResetButton(display.content, function()
-      for k, v in pairs(DEFAULTS) do settings[k] = v end
+      for _, k in ipairs(displayKeys) do settings[k] = DEFAULTS[k] end
       if settings.bagMarkers then M.EnableBagMarkers() else M.DisableBagMarkers() end
       if settings.questMarkers then M.EnableQuestMarkers() else M.DisableQuestMarkers() end
       if settings.worldMarkers ~= false and M.EnableWorldMarkers then M.EnableWorldMarkers()
