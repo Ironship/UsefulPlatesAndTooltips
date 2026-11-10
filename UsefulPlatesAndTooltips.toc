@@ -107,3 +107,6 @@ Modules\HealPrediction\Options.lua
 
 # Hunter-specific range ladder, beside the existing class range marker
 Modules\HunterRangeFinder\HunterRangeFinder.lua
+
+# The diagnostic commands as buttons; last, so its tab is the last one
+Core\Debug.lua
