@@ -66,31 +66,18 @@ if BIT.Style and BIT.Style.RegisterDefaults then
     })
 end
 
--- Narrow one-direction migration: saved appearance Hunter.shape == "segments"
--- (the user screenshot state) becomes "dots" once, preserving every other
--- geometry/color/setting and the anchor. Records hunterR1ShapeMigrated = 1 in
--- the own module store; a later explicit "segments" choice is respected (no
--- recurring force). Pure: only SavedVariables tables, no frames/units/sound,
--- never crashes on unknown/malformed appearance, never creates unrelated
--- module settings, never rewrites .lua files (runs inside the addon on load).
+-- One-time migration: a saved appearance shape "segments" from before the round dots becomes
+-- "dots", every other value kept. The first load records hunterR1ShapeMigrated = 1 in the
+-- module's own store whether or not there was anything to change: recording it only on a
+-- change left the check armed, so the first "segments" a player chose later (the Classic
+-- preset) was turned back into dots at the next reload. Only SavedVariables tables are touched.
 local function migrateHunterShape()
-    if type(UsefulPlatesAndTooltipsDB) ~= "table" then return end
-    local mods = UsefulPlatesAndTooltipsDB.modules
-    if type(mods) ~= "table" then return end
+    local own = BIT.Settings("HunterRangeFinder") -- a fresh install has nothing to change and is recorded too
+    if own.hunterR1ShapeMigrated == R1_SHAPE_MIGRATION_VERSION then return end
     local a = UsefulPlatesAndTooltipsDB.appearance
-    if type(a) ~= "table" then return end
-    local mmods = a.modules
-    if type(mmods) ~= "table" then return end
-    local h = mmods["HunterRangeFinder"]
-    if type(h) ~= "table" then return end
-    if h.shape ~= "segments" then return end
-    local own = mods["HunterRangeFinder"]
-    if type(own) == "table" and own.hunterR1ShapeMigrated == R1_SHAPE_MIGRATION_VERSION then return end
-    h.shape = "dots"
-    if type(own) ~= "table" then
-        own = {}
-        mods["HunterRangeFinder"] = own
-    end
+    local mmods = type(a) == "table" and a.modules
+    local h = type(mmods) == "table" and mmods["HunterRangeFinder"]
+    if type(h) == "table" and h.shape == "segments" then h.shape = "dots" end
     own.hunterR1ShapeMigrated = R1_SHAPE_MIGRATION_VERSION
 end
 

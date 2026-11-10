@@ -41,8 +41,8 @@
 -- Native integration (primaries: forever-mainline-container.lua/XML, pinned Gethe
 -- wow-ui-source 966519cf0ad2c10301ea011a88c14b25697c9687; the Camelot override only
 -- touches the portrait and the combined-footer jump hints): the refresh reads the
--- buttons the client itself enumerates (ContainerFrameUtil_EnumerateContainerFrames ->
--- EnumerateValidItems, individual and combined frames alike) and the hyperlink the
+-- buttons of the client's own bag frames (their Items up to their size, individual and
+-- combined frames alike; read from the frames, see nativeFrames) and the hyperlink the
 -- client itself reads at UpdateItems (C_Container.GetContainerItemInfo; the classic
 -- global as a guarded fallback). It is driven by secure post-hooks only
 -- (hooksecurefunc on the mixin's UpdateItems, on ContainerFrame_UpdateAll, and on
@@ -1033,52 +1033,74 @@ end
 
 -- The buttons of the visible native bag frames, combined bags included (the combined
 -- frame's buttons carry their own bag ids, exactly as the individual frames' do).
--- Legacy (no ContainerFrameUtil enumerator): the named ContainerFrameNItemM path, only
--- for buttons whose bag the button itself can name -- eligibility is never guessed.
-local function eachVisibleButton(cb)
-  if type(ContainerFrameUtil_EnumerateContainerFrames) == "function" then
-    for _, frame in ContainerFrameUtil_EnumerateContainerFrames() do
-      ensureFrameHook(frame) -- instance methods, old and pooled frames alike
-      if not (type(frame.IsShown) == "function" and not frame:IsShown()) then
-        if type(frame.EnumerateValidItems) == "function" then
-          for _, button in frame:EnumerateValidItems() do
-            -- SLOT FIRST, BAG SECOND (native). A button without the native accessor takes
-            -- the legacy GetBagID/GetID pair (as the paths below); one whose bag neither
-            -- names is skipped, never guessed.
-            if type(button.GetSlotAndBagID) ~= "function" then
-              local bag = type(button.GetBagID) == "function" and button:GetBagID() or nil
-              if bag ~= nil then cb(button, bag, button:GetID()) end
-            else
-              local slot, bag = button:GetSlotAndBagID()
-              cb(button, bag, slot)
-            end
-          end
-        end
+--
+-- The game's bag frames, read from its own tables. NEVER through
+-- ContainerFrameUtil_EnumerateContainerFrames: that function builds its list on first use and
+-- keeps it in a private variable, so when addon code is the first caller the list is tainted
+-- and every later Blizzard pass over the bags runs tainted. Opening the bank is such a pass:
+-- it then stored a tainted bank type, and right-clicking a bag item was blocked until a
+-- reload (issue #54).
+local function nativeFrames()
+  local list = {}
+  local combined = ContainerFrameCombinedBags
+  if type(combined) == "table" then list[1] = combined end
+  local holder = ContainerFrameContainer
+  local known = type(holder) == "table" and holder.ContainerFrames
+  if type(known) == "table" then
+    for i = 1, 256 do
+      local frame = known[i]
+      if frame == nil then break end
+      if type(frame) == "table" and frame ~= combined then list[#list + 1] = frame end
+    end
+  else
+    for i = 1, 256 do
+      local frame = _G["ContainerFrame" .. i]
+      if not frame then break end
+      if frame ~= combined then list[#list + 1] = frame end
+    end
+  end
+  return list
+end
+
+-- The item buttons of one shown bag frame. frame.Items up to frame.size is what the game's
+-- EnumerateValidItems walks; it is read directly because that method fills in a missing size
+-- on the frame, which addon code must not do. Older frames keep their own paths.
+local function eachButtonOf(frame, cb)
+  local items, size = frame.Items, frame.size
+  if type(items) == "table" and type(size) == "number" and not isSecret(size) then
+    for i = 1, size do
+      local button = items[i]
+      if type(button) == "table" then cb(button) end
+    end
+  elseif type(items) == "table" or type(frame.EnumerateValidItems) == "function" then
+    return -- a frame the game has not filled or sized yet shows no items
+  else
+    local name = type(frame.GetName) == "function" and frame:GetName()
+    if type(name) == "string" then
+      for j = 1, 256 do
+        local button = _G[name .. "Item" .. j]
+        if not button then break end
+        cb(button)
       end
     end
-    return
   end
-  for i = 1, 256 do
-    local frame = _G["ContainerFrame" .. i]
-    if not frame then break end
-    ensureFrameHook(frame)
+end
+
+local function eachVisibleButton(cb)
+  for _, frame in ipairs(nativeFrames()) do
+    ensureFrameHook(frame) -- instance methods, old and pooled frames alike
     if not (type(frame.IsShown) == "function" and not frame:IsShown()) then
-      if type(frame.EnumerateValidItems) == "function" then
-        for _, button in frame:EnumerateValidItems() do
+      eachButtonOf(frame, function(button)
+        -- SLOT FIRST, BAG SECOND (native). A button without the native accessor takes the
+        -- legacy GetBagID/GetID pair; one whose bag neither names is skipped, never guessed.
+        if type(button.GetSlotAndBagID) == "function" then
+          local slot, bag = button:GetSlotAndBagID()
+          cb(button, bag, slot)
+        else
           local bag = type(button.GetBagID) == "function" and button:GetBagID() or nil
           if bag ~= nil then cb(button, bag, button:GetID()) end
         end
-      else
-        local name = type(frame.GetName) == "function" and frame:GetName()
-        if type(name) == "string" then
-          for j = 1, 256 do
-            local button = _G[name .. "Item" .. j]
-            if not button then break end
-            local bag = type(button.GetBagID) == "function" and button:GetBagID() or nil
-            if bag ~= nil then cb(button, bag, button:GetID()) end
-          end
-        end
-      end
+      end)
     end
   end
 end
@@ -1333,19 +1355,7 @@ end
 
 -- Every container frame the client knows (shown or pooled), on any client shape.
 eachContainerFrame = function(cb)
-  local any = false
-  if type(ContainerFrameUtil_EnumerateContainerFrames) == "function" then
-    for _, frame in ContainerFrameUtil_EnumerateContainerFrames() do
-      any = true
-      cb(frame)
-    end
-  end
-  if any then return end
-  for i = 1, 256 do
-    local frame = _G["ContainerFrame" .. i]
-    if not frame then break end
-    cb(frame)
-  end
+  for _, frame in ipairs(nativeFrames()) do cb(frame) end
 end
 
 local REFRESH_EVENTS = {
