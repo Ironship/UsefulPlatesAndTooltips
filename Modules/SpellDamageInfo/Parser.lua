@@ -71,7 +71,7 @@
 --     classifyAfter(after, sentence), healAmountOK(before, after), ignoredClause(c)
 --     linkClauses(clauses)                       optional
 --     perPointTable(t), healthPercent(t), instantPercent(t), extraPercent(t)
---     itemText(t) (optional), itemHeal(t), reductionStat(c), weapon(t), attackPower(sentence)
+--     itemText(t) (optional), itemHeal(t), itemDrink(t), manaPercent(t) (both optional), reductionStat(c), weapon(t), attackPower(sentence)
 --     judgement(part), sealDuration(t), special(t), finisherDot(seg, damageText), procChance(t)
 
 local _, BIT = ...
@@ -543,7 +543,7 @@ function Parser.ParseHealthPercent(text, lang)
   t, lang = prepare(text, lang)
   local pack = packs[lang]
   -- Healthstone states a fraction of maximum HP, never a flat healing amount.
-  local percent, duration, interval = pack.healthPercent(t)
+  local percent, duration, interval, manaPercent, fills = pack.healthPercent(t)
   local directPercent
   if not percent then
     local ending
@@ -570,13 +570,46 @@ function Parser.ParseHealthPercent(text, lang)
       interval = tonumber(interval)
       if interval <= 0 or not duration or duration <= 0 or duration / interval ~= floor(duration / interval) then return nil end
       percent = percent * duration / interval
+      -- a food's ticks past the whole bar fill it; a spell's stay unread, as before
+      if fills and percent > 100 then percent = 100 end
     end
     if percent and percent > 0 and percent <= 100 and (not duration or duration > 0) then
-      return { healPercent = percent, duration = duration, directPercent = directPercent }
+      -- food that is also a drink names a share of maximum mana beside the health
+      manaPercent = tonumber(manaPercent)
+      if manaPercent and interval then manaPercent = math.min(100, manaPercent * duration / interval) end
+      if manaPercent and (manaPercent <= 0 or manaPercent > 100) then manaPercent = nil end
+      return { healPercent = percent, duration = duration, directPercent = directPercent, manaPercent = manaPercent }
     end
     return nil, "invalid-percent"
   end
   return nil
+end
+
+-- A drink that states a share of maximum mana: { manaPercent = n, duration = seconds } for
+-- the total over a stated time ("Restores 60% mana over 30 sec.", "Restores 4% of your mana
+-- per second for 30 sec."), without a duration for an instant amount. An instant wording
+-- beside any duration word may tick, so it stays unread.
+function Parser.ParseManaPercent(text, lang)
+  if type(text) ~= "string" or text == "" then return nil end
+  text, lang = resolveText(text, lang)
+  local t
+  t, lang = prepare(text, lang)
+  local pack = packs[lang]
+  if not pack.manaPercent then return nil end
+  local percent, duration, interval = pack.manaPercent(t)
+  percent, duration, interval = tonumber(percent), tonumber(duration), tonumber(interval)
+  if not percent then return nil end
+  if interval then
+    if interval <= 0 or not duration or duration <= 0 or duration / interval ~= floor(duration / interval) then return nil end
+    percent = math.min(100, percent * duration / interval) -- ticks past the whole bar fill it
+  end
+  if percent <= 0 or percent > 100 or (duration and duration <= 0) then return nil, "invalid-percent" end
+  if not duration then
+    for _, code in ipairs(order) do
+      if hasAny(t, packs[code].durationMarkers) then return nil, "over-time" end
+    end
+  end
+  return { manaPercent = percent, duration = duration }
 end
 
 -- A consumable's healing or mana out of its use text ("Use: Restores 70 to 90
@@ -584,6 +617,7 @@ end
 -- { heal = { min, max } } for an instant amount ("Restores"/"Stellt" health as
 -- well as "Heals"/"Heilt" health or damage outside over time),
 -- { healPercent = n } for instant healing expressed as a percentage of maximum HP,
+-- { manaPercent = n, duration = d } for a share of maximum mana (alone, or beside healPercent),
 -- { hot = { total, duration } } for a stated total over time: a bandage
 -- ("Heals 66 damage over 6 sec." / "Heilt 7 Sek. lang 66 Punkt(e) Schaden.",
 -- also "Heilt 66 Schaden über 6 Sek.") or food
@@ -592,13 +626,19 @@ end
 -- potion's (70-90 -> 80),
 -- { mana = { min, max } } for an instant mana amount ("Restores 140 to 175
 -- mana." / "Stellt 140 bis 175 Mana wieder her."),
--- or nil (plus a short reason). Only stated amounts; a mana amount over time
--- may tick, so it stays unread ("over-time") and is never guessed.
+-- { manaOverTime = { total, duration } } for a drink's stated total ("Restores 151 mana
+-- over 18 sec." / "Stellt im Verlauf von 18 Sek. 151 Punkt(e) Mana wieder her."), beside
+-- a hot when the item restores both,
+-- or nil (plus a short reason). Only stated amounts; any other mana wording with a
+-- duration may tick, so it stays unread ("over-time") and is never guessed.
 -- Damage wordings are never read here: Parse above keeps reading those
 -- exactly as before.
 function Parser.ParseItemHeal(text, lang)
   if type(text) ~= "string" or text == "" then return nil, "empty" end
   local percent, reason = Parser.ParseHealthPercent(text, lang)
+  if percent then return percent end
+  if reason then return nil, reason end
+  percent, reason = Parser.ParseManaPercent(text, lang)
   if percent then return percent end
   if reason then return nil, reason end
   text, lang = resolveText(text, lang)
@@ -613,6 +653,28 @@ function Parser.ParseItemHeal(text, lang)
   local lo, hi, mlo, mhi, dur, minutes = pack.itemHeal(t)
   dur = tonumber(dur)
   if dur and minutes then dur = dur * 60 end
+  -- A drink: a stated mana total over a stated time, both out of ONE pattern ("Restores 151
+  -- mana over 18 sec."), with the health total of a wording that names both at once
+  -- ("Restores 2148 health and 4410 mana over 30 sec.").
+  local drink, drinkHealth
+  if pack.itemDrink then
+    local m, d, h = pack.itemDrink(t)
+    m, d, h = tonumber(m), tonumber(d), tonumber(h)
+    if m and m > 0 and d and d > 0 then
+      drink = { total = m, duration = d }
+      drinkHealth = h and h > 0 and { total = h, duration = d } or nil
+    end
+  end
+  if drink then
+    if drinkHealth then return { hot = drinkHealth, manaOverTime = drink } end
+    if dur and lo then
+      lo, hi = tonumber(lo), tonumber(hi or lo)
+      if lo and hi then return { hot = { total = (lo + hi) / 2, duration = dur }, manaOverTime = drink } end
+    end
+    -- an instant health amount beside it could be a tick: unread, as before
+    if lo then return nil, "over-time" end
+    return { manaOverTime = drink }
+  end
   if dur then
     -- Over time: a stated health total is the healing it says - a bandage's
     -- ("Heals 66 damage over 6 sec." / "Heilt 66 Schaden über 6 Sek.") or

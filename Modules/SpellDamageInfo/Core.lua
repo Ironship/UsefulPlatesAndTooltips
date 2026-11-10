@@ -595,6 +595,29 @@ local function percentHealView(parsed)
   return { healPercent = parsed.healPercent, duration = parsed.duration, directPercent = parsed.directPercent }
 end
 
+-- A drink's share of maximum mana, added to a consumable's view: the amount where the maximum
+-- can be read (a class without mana gets none), else the stated percentage itself.
+function ns._percentMana(view, parsed)
+  local pct = parsed.manaPercent
+  if not pct then return view end
+  local ok, maximum = pcall(UnitPowerMax, "player", 0)
+  maximum = ok and number(maximum) or nil
+  if maximum and maximum < math.huge then
+    if maximum <= 0 then return view end
+    local amount = maximum * pct / 100
+    view = view or {}
+    if parsed.duration then
+      view.manaOverTime = { total = amount, duration = parsed.duration }
+    else
+      view.mana = { min = amount, max = amount, added = 0 }
+    end
+    return view
+  end
+  view = view or { duration = parsed.duration }
+  view.manaPercent = pct
+  return view
+end
+
 local function specialView(s, spellID, pet, noBonus)
   if s.healPercent then return not pet and percentHealView(s) or nil end
   if s.absorb then
@@ -892,8 +915,9 @@ function ns.ComputeItem(itemID)
     return nil
   end
   if parsed.healPercent then
-    return percentHealView(parsed)
+    return ns._percentMana(percentHealView(parsed), parsed)
   end
+  if parsed.manaPercent then return ns._percentMana(nil, parsed) end
   local view
   if parsed.heal then
     view = view or {}
@@ -906,6 +930,10 @@ function ns.ComputeItem(itemID)
   if parsed.mana then
     view = view or {}
     view.mana = { min = parsed.mana.min, max = parsed.mana.max, added = 0 }
+  end
+  if parsed.manaOverTime then
+    view = view or {}
+    view.manaOverTime = { total = parsed.manaOverTime.total, duration = parsed.manaOverTime.duration }
   end
   return view
 end
@@ -1339,6 +1367,11 @@ local function buttonText(view, reduction)
     end
     return fallback, Format.HEAL_COLOR
   end
+  -- A drink's percentage while the mana maximum is hidden: the stated share, in mana blue.
+  if view and view.manaPercent and not (view.hot or view.heal or view.healPercent) then
+    if view.duration and db.button == "direct" then return nil end
+    return tostring(view.manaPercent) .. "% mana", Format.WEAPON_COLOR
+  end
   -- Life Tap: vertical dual-label, green -HP on top, blue +mana below.
   if view and view.healthCost then
     local mainText = "-" .. Format.Short(view.healthCost) .. " HP"
@@ -1349,6 +1382,12 @@ local function buttonText(view, reduction)
     -- Health Funnel: the same cost, but it goes to the pet, so it is a red cost, not a heal
     local mainColor = view.petHeal and Format.REDUCTION_COLOR or Format.HEAL_COLOR
     return mainText, mainColor, sideText, Format.WEAPON_COLOR, "stacked"
+  end
+  -- Food that is also a drink: the health total in green above the mana total in blue.
+  if view and view.manaOverTime and view.hot and db.button ~= "direct"
+      and view.hot.total >= 0.5 and view.manaOverTime.total >= 0.5 then
+    return Format.Short(view.hot.total), Format.HEAL_COLOR,
+      Format.Short(view.manaOverTime.total), Format.WEAPON_COLOR, "stacked"
   end
   -- Two stacked labels: damage in gold, healing in green. Only simultaneous self-heals get "+".
   if view and (view.transfer or view.percentSelfHeal

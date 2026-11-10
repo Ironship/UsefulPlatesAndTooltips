@@ -162,10 +162,9 @@ end
 
 -- Self-healing based on maximum HP, over time or instant: percent, duration, interval.
 local function healthPercent(t)
-  local percent, duration, interval
+  local percent, duration, interval, manaPercent
   duration, percent = match(t, "euch im verlauf von (" .. NUM .. ") sek%.? um (" .. NUM .. ")%s*%% eurer maximalen gesundheit heilt")
   if not percent then
-    local manaPercent
     duration, percent, manaPercent = match(t, "stellt im verlauf von (" .. NUM .. ") sek%.? (" .. NUM
       .. ")%% gesundheit und (" .. NUM .. ")%% mana wieder her")
   end
@@ -176,12 +175,35 @@ local function healthPercent(t)
     end
     if not percent then
       duration, interval, percent = match(t, "werden (" .. NUM .. ") sek%.? lang alle (" .. NUM .. ") sek%.? (" .. NUM .. ")%s*%% der gesamten gesundheit und des manas regeneriert")
+      manaPercent = percent
     end
   end
   percent = match(t, "stellt sofort (" .. NUM .. ")%s*%% gesundheit wieder her")
     or match(t, "stellt sofort (" .. NUM .. ")%s*%% eurer maximalen gesundheit wieder her")
     or percent
-  return percent, duration, interval
+  return percent, duration, interval, manaPercent
+end
+
+-- A drink's share of maximum mana: percent, duration, interval (per tick when stated).
+local MANA_OF = { "mana", "eures maximalen manas", "des maximalen manas", "eures gesamten manas", "des gesamten manas", "eures manas" }
+local function manaPercent(t)
+  for _, of in ipairs(MANA_OF) do
+    local d, p = match(t, "stellt im verlauf von (" .. NUM .. ") sek%.? (" .. NUM .. ")%s*%% " .. of .. " wieder her")
+    if p then return p, d end
+    p, d = match(t, "stellt (" .. NUM .. ")%s*%% " .. of .. " \195\188ber (" .. NUM .. ") sek")
+    if p then return p, d end
+    local i
+    d, i, p = match(t, "(" .. NUM .. ") sek%.? lang alle (" .. NUM .. ") sek%.? (" .. NUM .. ")%s*%% " .. of)
+    if p then return p, d, i end
+    d, p = match(t, "(" .. NUM .. ") sek%.? lang pro sekunde (" .. NUM .. ")%s*%% " .. of)
+    if p then return p, d, 1 end
+    -- Instant: only as the whole text, never the tail of another effect.
+    for _, lead in ipairs({ "^", "^benutzen: " }) do
+      p = match(t, lead .. "stellt sofort (" .. NUM .. ")%s*%% " .. of .. " wieder her[%. ]*$")
+        or match(t, lead .. "stellt (" .. NUM .. ")%s*%% " .. of .. " wieder her[%. ]*$")
+      if p then return p end
+    end
+  end
 end
 
 -- "Heilt Euch um 20% Eurer maximalen Gesundheit": percent, and where the matched words end.
@@ -299,6 +321,22 @@ local function itemHeal(t)
     end
   end
   return lo, hi, mlo, mhi, dur, minutes
+end
+
+-- A drink: mana total, seconds, and the health total where one wording names both.
+-- "Stellt im Verlauf von 18 Sek. 151 Mana wieder her." (the points word is folded away),
+-- "... 2148 Gesundheit und 4410 Mana wieder her.", or amount first: "Stellt 151 Mana über
+-- 18 Sek. wieder her."
+local function itemDrink(t)
+  local d, h, m = match(t, "im verlauf von (" .. NUM .. ") sek%.? (" .. NUM .. ") gesundheit und (" .. NUM .. ") mana")
+  if m then return m, d, h end
+  d, m = match(t, "im verlauf von (" .. NUM .. ") sek%.? insgesamt (" .. NUM .. ") mana")
+  if not m then d, m = match(t, "im verlauf von (" .. NUM .. ") sek%.? (" .. NUM .. ") mana") end
+  if m then return m, d end
+  h, m, d = match(t, "stellt (" .. NUM .. ") gesundheit und (" .. NUM .. ") mana \195\188ber (" .. NUM .. ") sek")
+  if m then return m, d, h end
+  m, d = match(t, "stellt (" .. NUM .. ") mana \195\188ber (" .. NUM .. ") sek")
+  return m, d
 end
 
 -- A debuff's own words: the attack power and damage a clause names. German: the word "Schaden"
@@ -599,7 +637,7 @@ Parser.RegisterPack("de", {
   instantPercent = instantPercent,
   extraPercent = extraPercent,
   itemText = stripPoints,
-  itemHeal = itemHeal,
+  itemHeal = itemHeal, itemDrink = itemDrink, manaPercent = manaPercent,
   reductionStat = reductionStat,
   weapon = weaponDE,
   attackPower = attackPowerIn,

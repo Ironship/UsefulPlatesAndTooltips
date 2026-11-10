@@ -233,6 +233,36 @@ local function itemHeal(t)
   return lo, hi, mlo, mhi, seconds
 end
 
+-- A drink: mana total, seconds, and the health total where one wording names both.
+-- "Восполняет 151 ед. маны в течение 18 сек." / "Восстанавливает 151 маны за 18 сек."
+local function itemDrink(t)
+  -- "ед." between an amount and its unit is optional
+  t = gsub(t, "(" .. NUM .. ") ед%.? ", "%1 ")
+  for _, verb in ipairs({ "восстанавливает", "восполняет", "восполнение" }) do
+    for _, over in ipairs({ "в течение", "за" }) do
+      local h, m, d = match(t, verb .. " (" .. NUM .. ") здоровья и (" .. NUM .. ") маны " .. over .. " (" .. NUM .. ") сек")
+      if m then return m, d, h end
+      m, d = match(t, verb .. " (" .. NUM .. ") маны " .. over .. " (" .. NUM .. ") сек")
+      if m then return m, d end
+    end
+  end
+end
+
+-- A drink's share of maximum mana: percent, duration.
+local function manaPercent(t)
+  for _, verb in ipairs({ "восстанавливает", "восполняет", "восполнение" }) do
+    for _, of in ipairs({ "маны", "максимального запаса маны" }) do
+      local head = verb .. " (" .. NUM .. ")%s*%% " .. of
+      local p, d = match(t, head .. " за (" .. NUM .. ") сек")
+      if not p then p, d = match(t, head .. " в течение (" .. NUM .. ") сек") end
+      if p then return p, d end
+      -- Instant: only as the whole text, never the tail of another effect.
+      p = match(t, "^" .. head .. "[%. ]*$") or match(t, "^использование: " .. head .. "[%. ]*$")
+      if p then return p end
+    end
+  end
+end
+
 local function judgement(t)
   local lo, hi = match(t, "наносит противнику (" .. NUM .. ") до (" .. NUM .. ") урона от светлой магии")
   if not lo then lo, hi = match(t, "уроном от светлой магии в (" .. NUM .. ") до (" .. NUM .. ")") end
@@ -288,7 +318,7 @@ Parser.RegisterPack("ru", {
   takeLasts = takeLasts, takeInterval = takeInterval, classifyAfter = classifyAfter,
   healAmountOK = healAmountOK, ignoredClause = ignoredClause, perPointTable = perPointTable,
   healthPercent = healthPercent, instantPercent = function() end, extraPercent = function() end,
-  itemHeal = itemHeal, reductionStat = reductionStat, weapon = weapon, attackPower = attackPower,
+  itemHeal = itemHeal, itemDrink = itemDrink, manaPercent = manaPercent, reductionStat = reductionStat, weapon = weapon, attackPower = attackPower,
   judgement = judgement, sealDuration = function(t) return match(t, "(" .. NUM .. ") сек") end,
   special = special, finisherDot = finisherDot, procChance = procChance,
   unreadKind = unreadKind,
