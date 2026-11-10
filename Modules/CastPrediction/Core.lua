@@ -776,11 +776,40 @@ local function onCastStart(castGUID, spellID, channel)
     return true
 end
 
+-- UNIT_SPELLCAST_SUCCEEDED also fires for a cast that is then resisted, missed, dodged or met an immunity: no hit
+-- follows, and the marker used to hang on the mob for the whole projectile grace. UNIT_COMBAT reports the avoid
+-- on the mob (it names no spell), in the frame of the cast's success or a hair before it, so an avoid there that
+-- can be the cast's ends the marker at once. A dodge, parry or deflect is never a spell's, and an avoid reported
+-- in another school is someone else's. Taking another's avoid for ours only ends a marker a moment early.
+local AVOIDS = { MISS = true, RESIST = true, IMMUNE = true, REFLECT = true, EVADE = true,
+    DODGE = true, PARRY = true, DEFLECT = true }
+local AVOID_LOOKBACK = 0.25
+local HIDDEN_HIT_WINDOW = 0.25 -- a hit with a hidden amount counts as the cast landing only this soon after its success
+local lastAvoid -- { key, action, school, at }: the latest avoid on any mob, for a success that comes just after
+
+local function avoidEndsCast(cast, avoid)
+    if cast.channel or avoid.key ~= cast.key then return false end
+    local expects = cast.view and cast.view.school and SCHOOL_MASKS[cast.view.school]
+    local action = avoid.action
+    if (action == "DODGE" or action == "PARRY" or action == "DEFLECT") and expects and expects ~= SCHOOL_MASKS.physical then
+        return false
+    end
+    local mask = number(avoid.school)
+    if mask and mask ~= 0 and expects and not schoolMatches(expects, mask) then return false end
+    return true
+end
+
 -- UNIT_SPELLCAST_SUCCEEDED (player): the cast went through; the marker stays while the hit flies.
 -- An instant cast (no START) shows briefly too, when the option allows it.
 local function onCastSucceeded(castGUID, spellID)
+    local avoided = lastAvoid and GetTime() - lastAvoid.at <= AVOID_LOOKBACK and lastAvoid or nil
+    lastAvoid = nil
     if castInProgress and sameCast(castInProgress, castGUID, spellID) then
         if castInProgress.channel then return true end -- channels succeed at their start
+        if avoided and avoidEndsCast(castInProgress, avoided) then
+            dropCast(avoided.action .. " (just before the cast event)")
+            return true
+        end
         castInProgress.succeededAt = GetTime()
         return true
     end
@@ -792,6 +821,7 @@ local function onCastSucceeded(castGUID, spellID)
     if not key then return end
     local prediction = predictionFor(view, spellID)
     if not prediction then return end
+    if avoided and avoidEndsCast({ key = key, view = view }, avoided) then return end
     castInProgress = {
         key = key,
         spellID = spellID,
@@ -822,13 +852,42 @@ end
 -- sits in the predicted band is this cast landing; it calibrates the estimate. Crits match the
 -- band too (their ratio is inside the tolerated one) but never teach it.
 local function onUnitCombat(unit, action, flag, amount, school)
+    if isSecret(action) then return end
+    if AVOIDS[action] then
+        local key = unitKey(unit)
+        if not key then return end
+        local avoid = { key = key, action = action, school = school, at = GetTime() }
+        local cast = castInProgress
+        if cast and cast.succeededAt and not cast.landedAt and avoidEndsCast(cast, avoid) then
+            dropCast(action)
+            return "avoided"
+        end
+        -- The cast's success may be the next event: keep the avoid for it (onCastSucceeded).
+        if cast and not cast.succeededAt and avoidEndsCast(cast, avoid) then lastAvoid = avoid end
+        if not cast then lastAvoid = avoid end -- an instant cast has no marker until it succeeds
+        return
+    end
     if not castInProgress or castInProgress.channel or not castInProgress.succeededAt
         or castInProgress.landedAt then return end
-    if isSecret(action) then return end
     local key = unitKey(unit)
     if not key or key ~= castInProgress.key then return end
     local absorbed = action == "ABSORB"
     if action ~= "WOUND" and not absorbed then return end
+    if isSecret(amount) then
+        -- Forever hides the amount but not the school, so no hit ever matched there and a spell that lands with
+        -- the cast event (Immolate) kept its marker for the whole projectile grace. A hit of the cast's school on
+        -- its mob right on the cast's success is taken as the cast landing. Only right on it: later in the grace
+        -- a tick of a DoT of the same school cannot be told from the projectile, and ending the marker on the
+        -- wrong hit misleads more than a marker that waits. Nothing is learned from a hidden hit.
+        if GetTime() - castInProgress.succeededAt > HIDDEN_HIT_WINDOW then return end
+        local hiddenMask = number(school)
+        local hiddenExpects = castInProgress.view and castInProgress.view.school and SCHOOL_MASKS[castInProgress.view.school]
+        if not (hiddenMask and hiddenExpects and schoolMatches(hiddenExpects, hiddenMask)) then return end
+        castInProgress.landedAt = GetTime()
+        trace(string.format("HIT (amount hidden) school %d on %s taken as %s landing", hiddenMask, tostring(unit),
+            tostring(castInProgress.name)))
+        return true
+    end
     amount = number(amount)
     if not amount then return end
     local nowHit = GetTime()
@@ -2228,9 +2287,10 @@ frame:SetScript("OnEvent", function(self, event, ...)
         if onCastSucceeded(castGUID, spellID) then safeRefresh() end
 
     elseif event == "UNIT_COMBAT" then
-        if onUnitCombat(...) then
+        local outcome = onUnitCombat(...)
+        if outcome then
             safeRefresh()
-            playFlash()
+            if outcome ~= "avoided" then playFlash() end -- an avoided cast just loses its marker
         end
     end
 end)
