@@ -1628,6 +1628,63 @@ function ns.Dump(all)
   return out
 end
 
+-- /sdi dump items: every item with a use effect in the bags and on the action bars, with its
+-- use spell's description, its own "Use:" line and what the addon reads from them, into the
+-- saved variables (db.dumpItems). The item wordings (food, drinks, potions, bandages) differ
+-- from spell wordings and from one client language to the next; this is how they get reported.
+function ns.DumpItems()
+  local lang = ns.DescriptionLang()
+  local out = { lang = lang, items = {}, missing = 0 }
+  local seen = {}
+  local function add(itemID)
+    if isSecret(itemID) or type(itemID) ~= "number" or seen[itemID] then return end
+    seen[itemID] = true
+    local spellID = itemUseSpell(itemID)
+    local spellText = spellID and getDescription(spellID) or nil
+    local useText = itemUseText(itemID)
+    if not spellID and not useText then return end -- nothing to use, or not loaded at all yet
+    if not spellText and not useText then
+      requestLoad(spellID)
+      requestItemLoad(itemID)
+      out.missing = out.missing + 1
+      return
+    end
+    local parsed, reason = Parser.ParseItemHeal(spellText or useText, lang)
+    if not parsed and spellText and useText then parsed, reason = Parser.ParseItemHeal(useText, lang) end
+    local reads
+    if parsed then
+      local keys = {}
+      for k in pairs(parsed) do keys[#keys + 1] = tostring(k) end
+      table.sort(keys)
+      reads = table.concat(keys, ",")
+    else
+      reads = "unread:" .. tostring(reason)
+    end
+    local name
+    if C_Item and type(C_Item.GetItemNameByID) == "function" then
+      local ok, n = pcall(C_Item.GetItemNameByID, itemID)
+      if ok and not isSecret(n) and type(n) == "string" then name = n end
+    end
+    out.items[#out.items + 1] = { id = itemID, name = name, spell = spellID, spellText = spellText,
+      useText = useText, reads = reads }
+  end
+  local numSlots = (C_Container and C_Container.GetContainerNumSlots) or GetContainerNumSlots
+  local slotItem = (C_Container and C_Container.GetContainerItemID) or GetContainerItemID
+  if type(numSlots) == "function" and type(slotItem) == "function" then
+    for bag = 0, 4 do
+      local ok, n = pcall(numSlots, bag)
+      n = ok and not isSecret(n) and type(n) == "number" and n or 0
+      for slot = 1, n do
+        local ok2, id = pcall(slotItem, bag, slot)
+        if ok2 then add(id) end
+      end
+    end
+  end
+  for slot = 1, 180 do add(ns.ItemOnSlot(slot)) end
+  db.dumpItems = out
+  return out
+end
+
 -- /sdi dump all: a pass every 2 seconds while spells keep arriving, at most 30; stops after three
 -- passes that bring nothing new (spells the client does not have never arrive). Each pass writes
 -- db.dumpAll, so a /reload in between keeps what was read so far. done(list) is called once.
@@ -2020,6 +2077,28 @@ ns.AddTooltipLines = addTooltipLines
 -- states, with the chance, so the item says what applying it buys. Only coating items reach
 -- this path; every other item tooltip is left untouched. The rows go through the same
 -- bookkeeping as spell rows, keyed by the item link.
+-- Food or a drink that states a share of the maximum ("Restores 60% mana over 30 sec."): the
+-- amounts that share comes to for this character, as tooltip rows. Nil for every other item,
+-- and while the client hides the maximum.
+function ns._percentItemLines(text)
+  local parsed = Parser.ParseItemHeal(text, ns.DescriptionLang())
+  if not parsed or not (parsed.healPercent or parsed.manaPercent) then return nil end
+  local view = ns._percentMana(parsed.healPercent and percentHealView(parsed) or nil, parsed)
+  if not view then return nil end
+  local lines = {}
+  local health = (view.hot and view.hot.total or 0) + (view.heal and (view.heal.min + view.heal.max) / 2 or 0)
+  local mana = (view.manaOverTime and view.manaOverTime.total or 0) + (view.mana and (view.mana.min + view.mana.max) / 2 or 0)
+  if health >= 0.5 then
+    local c = Format.HEAL_COLOR
+    lines[#lines + 1] = { Format.Thousands(math.floor(health + 0.5), L) .. " " .. (type(HEALTH) == "string" and HEALTH or "Health"), c[1], c[2], c[3] }
+  end
+  if mana >= 0.5 then
+    local c = Format.WEAPON_COLOR
+    lines[#lines + 1] = { Format.Thousands(math.floor(mana + 0.5), L) .. " " .. (type(MANA) == "string" and MANA or "Mana"), c[1], c[2], c[3] }
+  end
+  return #lines > 0 and lines or nil
+end
+
 local function addItemPoisonLines(tooltip)
   if not db.tooltip or type(tooltip) ~= "table" or type(tooltip.GetItem) ~= "function" then return end
   local ok, _, link = pcall(tooltip.GetItem, tooltip)
@@ -2030,6 +2109,13 @@ local function addItemPoisonLines(tooltip)
   local text = spellID and getDescription(spellID) or nil
   if not text then text = itemUseText(itemID) end
   local view = text and poisonView(text) or nil
+  if not view and text then
+    local lines = ns._percentItemLines(text)
+    if lines then
+      applyOwnedRows(tooltip, link, lines, false)
+      return
+    end
+  end
   if not view then
     -- Nothing readable (yet): blank rows left by another item on the same tooltip, and
     -- leave this item's own rows alone (its data may still arrive).
@@ -2246,6 +2332,11 @@ local function slash(msg)
   if cmd == "dump" and arg == "all" then
     say(L.DUMP_WORKING)
     ns.DumpAll(function(list) say(string.format(L.DUMP_ALL_DONE, #list.spells, list.missing)) end)
+    return
+  end
+  if cmd == "dump" and arg == "items" then
+    local list = ns.DumpItems()
+    say(string.format(L.DUMP_ITEMS_DONE, #list.items, list.missing))
     return
   end
   if cmd == "dump" then
