@@ -64,6 +64,8 @@ local SAMPLES = {
     view = { hot = { total = 552, duration = 24 } } },
   { name = "OPT_SAMPLE_10", icon = "Interface\\Icons\\INV_Misc_Bandage_20", hotkey = "0",
     view = { heal = { min = 600, max = 600 } } },
+  { name = "OPT_SAMPLE_11", icon = "Interface\\Icons\\INV_Drink_07", hotkey = "-",
+    view = { manaOverTime = { total = 835, duration = 24 } } },
 }
 
 local window

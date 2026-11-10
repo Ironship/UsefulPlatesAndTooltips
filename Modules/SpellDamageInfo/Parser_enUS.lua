@@ -104,10 +104,9 @@ end
 
 -- Self-healing based on maximum HP, over time or instant: percent, duration, interval.
 local function healthPercent(t)
-  local percent, duration, interval
+  local percent, duration, interval, manaPercent, fills
   percent, duration = match(t, "heals you for (" .. NUM .. ")%s*%% of your maximum health over (" .. NUM .. ") sec")
   if not percent then
-    local manaPercent
     percent, manaPercent, duration = match(t, "restores (" .. NUM .. ")%% health and (" .. NUM
       .. ")%% mana over (" .. NUM .. ") sec")
   end
@@ -121,6 +120,11 @@ local function healthPercent(t)
     end
     if not percent then
       percent, interval, duration = match(t, "regenerates (" .. NUM .. ")%s*%% of total health and mana every (" .. NUM .. ") sec for (" .. NUM .. ") sec")
+      if not percent then
+        percent, duration = match(t, "restores (" .. NUM .. ")%s*%% of your health and mana per second for (" .. NUM .. ") sec")
+        if percent then interval, fills = 1, true end
+      end
+      manaPercent = percent
     end
   end
   percent = match(t, "instantly restores (" .. NUM .. ")%s*%% health")
@@ -128,7 +132,28 @@ local function healthPercent(t)
     or match(t, "instantly restores (" .. NUM .. ")%s*%% of total health")
     or match(t, "restores (" .. NUM .. ")%s*%% health instantly")
     or percent
-  return percent, duration, interval
+  return percent, duration, interval, manaPercent, fills
+end
+
+-- A drink's share of maximum mana: percent, duration, interval (per tick when stated).
+local MANA_OF = { "mana", "of your maximum mana", "of maximum mana", "of your total mana", "of total mana", "of your mana" }
+local function manaPercent(t)
+  for _, of in ipairs(MANA_OF) do
+    local head = "restores (" .. NUM .. ")%s*%% " .. of
+    local p, d = match(t, head .. " over (" .. NUM .. ") sec")
+    if p then return p, d end
+    p, d = match(t, head .. " per second for (" .. NUM .. ") sec")
+    if p then return p, d, 1 end
+    local i
+    p, i, d = match(t, head .. " every (" .. NUM .. ") sec for (" .. NUM .. ") sec")
+    if not p then p, i, d = match(t, "regenerates (" .. NUM .. ")%s*%% " .. of .. " every (" .. NUM .. ") sec for (" .. NUM .. ") sec") end
+    if p then return p, d, i end
+    -- Instant: only as the sentence's own statement, never the tail of another effect
+    -- ("Heals the target for 100 and restores 5% mana.").
+    p = match(t, "instantly restores (" .. NUM .. ")%s*%% " .. of .. "[%. ]*$")
+      or match(t, "^" .. head .. "[%. ]*$") or match(t, "^use: " .. head .. "[%. ]*$")
+    if p then return p end
+  end
 end
 
 -- "Heals you for 20% of your maximum health": percent, and where the matched words end.
@@ -184,6 +209,15 @@ local function itemHeal(t)
     end
   end
   return lo, hi, mlo, mhi, dur, minutes
+end
+
+-- A drink: mana total, seconds, and the health total where one wording names both.
+-- "Restores 151 mana over 18 sec." / "Restores 2148 health and 4410 mana over 30 sec."
+local function itemDrink(t)
+  local h, m, d = match(t, "restores (" .. NUM .. ") health and (" .. NUM .. ") mana over (" .. NUM .. ") sec")
+  if m then return m, d, h end
+  m, d = match(t, "restores (" .. NUM .. ") mana over (" .. NUM .. ") sec")
+  return m, d
 end
 
 local REDUCE_VERBS = { "reduc", "lower", "decreas" }
@@ -409,7 +443,7 @@ Parser.RegisterPack("en", {
   healthPercent = healthPercent,
   instantPercent = instantPercent,
   extraPercent = extraPercent,
-  itemHeal = itemHeal,
+  itemHeal = itemHeal, itemDrink = itemDrink, manaPercent = manaPercent,
   reductionStat = reductionStat,
   weapon = weaponEN,
   attackPower = attackPowerIn,

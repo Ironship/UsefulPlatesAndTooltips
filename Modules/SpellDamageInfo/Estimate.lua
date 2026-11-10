@@ -165,9 +165,12 @@ function Estimate.ButtonValue(view, mode)
   -- Damage and healing win over mana; a consumable view may still carry
   -- both amounts at once, and a spell may pair a health cost with a mana
   -- gain (Life Tap, read beside ButtonValue rather than through it).
-  if view.mana then
-    local m = view.mana
-    if m.min and m.max then return (m.min + m.max) / 2, "mana" end
+  -- A drink's stated total over time counts like food's healing total.
+  if view.mana or view.manaOverTime then
+    local m, v = view.mana, nil
+    if m and m.min and m.max then v = (m.min + m.max) / 2 end
+    if view.manaOverTime then v = (v or 0) + view.manaOverTime.total end
+    if v then return v, "mana" end
   end
   return nil
 end
