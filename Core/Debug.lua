@@ -12,7 +12,7 @@ local SECTIONS = {
   { title = "Spell numbers (SpellDamageInfo)", rows = {
     { "/sdi status", "Print the current settings." },
     { "/sdi buttons", "Print what the number on each action button was made from." },
-    { "/sdi where", "Print the frame under the mouse and whether it gets numbers." },
+    { "/sdi where", "Read the frame under the mouse 4 seconds after the click." },
     { "/sdi misses", "List the spells on your bars that give no number." },
     { "/sdi misses clear", "Empty that list." },
     { "/sdi dump", "Save your spellbook's descriptions and how they were read." },
@@ -36,7 +36,7 @@ local SECTIONS = {
   } },
   { title = "Stats and bag arrows (StatsInfo)", rows = {
     { "/upt probe", "Record what StatsInfo can read about your character." },
-    { "/upt bagprobe", "Print whether the bag arrows are wired up (type it with a shift-clicked item for one item)." },
+    { "/upt bagprobe", "Print whether the bag arrows are wired up." },
   } },
   { title = "Points and sounds (ResourceDing)", rows = {
     { "/rding probe", "Print what the full-bar decision rests on right now." },
@@ -111,7 +111,8 @@ local function build(content)
         button:SetPoint("TOPLEFT", 8, y)
         local text = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         text:SetPoint("LEFT", button, "RIGHT", 10, 0)
-        text:SetPoint("RIGHT", content, "RIGHT", -8, 0)
+        -- a width, not a second anchor: LEFT and RIGHT on two frames would disagree on the height
+        text:SetWidth(math.max(60, (content:GetWidth() or 600) - BUTTON_WIDTH - 26))
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         text:SetText(BIT.L(row[2]))
