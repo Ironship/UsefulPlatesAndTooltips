@@ -527,6 +527,9 @@ local function buildTabs()
     marker:choice("fillColor", "Fill color", lists.colors, { enabledIf = singleColor,
         tooltip = "Used when DoT colors is set to one color." })
     marker:slider("fillOpacity", "Fill opacity", 0, 100, 5, { suffix = "%" })
+    marker:choice("fillDirection", "Fill direction", lists.plateFillDirections, { tooltip = "Which end of the "
+        .. "target health bar the marker starts from. Follow health bar turns it around on a mirrored bar that "
+        .. "drains the other way; choose Right to left if your unit frame addon is not recognized." })
     marker:checkbox("segmentDividers", "Dividers between DoTs", { enabledIf = perDot })
     marker:gap()
     marker:choice("outlineStyle", "Outline", lists.outlines)

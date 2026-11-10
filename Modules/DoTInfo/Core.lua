@@ -124,6 +124,7 @@ local DEFAULTS = {
     fillTexture = "stripes",
     fillColor = "red",
     fillOpacity = 100,
+    fillDirection = "auto", -- auto follows the health bar (mirrored unit frames fill right to left)
     dotColors = "each",
     segmentDividers = true,
     outlineStyle = "dashed",
@@ -765,7 +766,12 @@ local function removeAvoidedDot(cast, action, school)
                 tostring(school), cast.name))
             return false
         end
-        if not cast.previous then
+        -- A resist, reflect or immune is never a melee swing. One that names no school at all, right on the cast,
+        -- has nothing pointing at anyone else: it is the cast's own, and falls through to the drop below.
+        local noSchool = isSecret(school) or type(school) ~= "number" or school == 0
+        local ownResist = noSchool and (action == "RESIST" or action == "REFLECT" or action == "IMMUNE")
+            and math.abs(GetTime() - cast.at) <= AVOIDED_ACTIONS.MISS[1]
+        if not cast.previous and not ownResist then
             dot.doubtful = true
             trace(string.format("AVOID %s (school %s) right after %s: may be someone else's, waiting for its first tick",
                 action, tostring(school), cast.name))
@@ -1049,6 +1055,12 @@ local function onPlayerCast(spellID, castGUID)
         dot.oldTickSize = previous.normalTicks > 0 and previous.tickSum / previous.normalTicks or nil
     end
     dot.segmentOrder = previous and previous.segmentOrder
+    if not ns.Retail then
+        -- The mob's debuffs are looked at once the cast's own debuff has had time to show (ns._verifyAuras).
+        if previous then previous.replaced = nil end -- one step back is enough; never a chain of old casts
+        dot.replaced = previous
+        dot.verifyAt = now + ns._auraCheck.delay + (dot.travel or 0)
+    end
     dotsByTarget[key][name] = dot
     lastDotCast = { key = key, name = name, dot = dot, previous = previous, at = now }
     local learned = not ns.Retail and tickKey and db.ticks[tickKey]
@@ -1545,8 +1557,115 @@ local function onUnitCombat(unit, action, flag, amount, school)
     if wasWaiting then return key end
 end
 
+-- Debuff check (Forever). UNIT_SPELLCAST_SUCCEEDED also fires for a cast that was resisted or missed, and the
+-- UNIT_COMBAT outcome that tells them apart names no spell: next to other DoTs of the same school (an affliction
+-- warlock's) it can be lost or taken for someone else's, and the DoT that never landed was then fed by the other
+-- DoTs' ticks and stayed up. The debuff itself settles it wherever the client lets it be read: shortly after the
+-- cast the mob's debuffs from the player either hold the spell or they don't.
+--   * there: the DoT is real (a doubt left by an outcome event is over). A recast whose debuff is still the
+--     earlier application did not land, so the DoT it replaced is put back.
+--   * not there: the cast did not land and the DoT is dropped. Only for spells whose debuff has been read under
+--     the cast's name before (db.auras): a DoT whose debuff carries another name is never judged this way.
+--   * unreadable (secret auras, mob on no unit token): nothing is decided, the outcome events stand alone.
+-- Fields on ns: this chunk is at Lua 5.1's 200-local limit.
+ns._auraCheck = { delay = 0.4, giveUp = 3, startSlack = 0.75 }
+
+-- A unit token that currently shows the mob behind `key`, or nil.
+function ns._unitForKey(key)
+    if key == "target" then return "target" end
+    local token = type(key) == "string" and key:match("^plate:(nameplate%d+)$")
+    if token then return token end
+    for _, unit in ipairs({ "target", "softenemy", "focus", "mouseover" }) do
+        if unitKey(unit) == key then return unit end
+    end
+    for i = 1, 40 do
+        local unit = "nameplate" .. i
+        if unitKey(unit) == key then return unit end
+    end
+end
+
+-- Whether the player's own debuffs on `unit` hold the spell (by ID or by name), and when that debuff started
+-- if its timer is readable. nil when the list cannot be read well enough to say.
+function ns._ownDebuff(unit, spellID, name)
+    local byIndex = C_UnitAuras and (C_UnitAuras.GetAuraDataByIndex or C_UnitAuras.GetDebuffDataByIndex)
+    local filter = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex and "HARMFUL|PLAYER" or "PLAYER"
+    if type(byIndex) ~= "function" and type(UnitDebuff) ~= "function" then return nil end
+    local unsure = false
+    for i = 1, 40 do
+        local ok, auraName, id, duration, expires
+        if type(byIndex) == "function" then
+            local aura
+            ok, aura = pcall(byIndex, unit, i, filter)
+            if not ok or isSecret(aura) then return nil end
+            if aura == nil then break end
+            if type(aura) ~= "table" then return nil end
+            ok, auraName, id, duration, expires = pcall(function()
+                return aura.name, aura.spellId, aura.duration, aura.expirationTime
+            end)
+        else
+            local _
+            ok, auraName, _, _, _, duration, expires, _, _, _, id = pcall(UnitDebuff, unit, i, "PLAYER")
+            if ok and not isSecret(auraName) and auraName == nil then break end
+        end
+        if not ok then return nil end
+        local idKnown = not isSecret(id) and type(id) == "number"
+        local nameKnown = not isSecret(auraName) and type(auraName) == "string"
+        if (idKnown and id == spellID) or (nameKnown and auraName == name) then
+            local startedAt
+            if not isSecret(duration) and not isSecret(expires) and type(duration) == "number"
+                and type(expires) == "number" and duration > 0 and expires > 0 then
+                startedAt = expires - duration
+            end
+            return true, startedAt
+        end
+        -- An entry that cannot be identified may be the one looked for.
+        if not (idKnown and nameKnown) then unsure = true end
+    end
+    if unsure then return nil end
+    return false
+end
+
+function ns._verifyAuras(now)
+    local check = ns._auraCheck
+    for key, dots in pairs(dotsByTarget) do
+        local unit, looked
+        for name, dot in pairs(dots) do
+            if dot.verifyAt and now >= dot.verifyAt then
+                if not looked then unit, looked = ns._unitForKey(key), true end
+                local found, startedAt
+                if unit then found, startedAt = ns._ownDebuff(unit, dot.spellID, name) end
+                if found == nil then
+                    if now - dot.verifyAt > check.giveUp then dot.verifyAt, dot.replaced = nil, nil end
+                else
+                    local replaced = dot.replaced
+                    dot.verifyAt, dot.replaced = nil, nil
+                    if found then
+                        db.auras[name] = true
+                        if replaced and startedAt and startedAt < dot.appliedAt - check.startSlack then
+                            dots[name] = replaced
+                            trace(string.format("AURA %s on %s is still the earlier one (%.1fs old): the recast did not land; keeping the earlier one",
+                                name, unit, now - startedAt))
+                        elseif dot.doubtful then
+                            dot.doubtful = nil
+                            trace(string.format("AURA %s is on %s: it landed", name, unit))
+                        end
+                    elseif db.auras[name] then
+                        dots[name] = nil
+                        trace(string.format("AURA %s is not on %s: resisted or missed; dropped", name, unit))
+                    else
+                        trace(string.format("AURA %s is not on %s, but its debuff was never read under that name: not judged",
+                            name, unit))
+                    end
+                end
+            end
+        end
+        if next(dots) == nil then dotsByTarget[key] = nil end
+    end
+end
+
 local function housekeep(now)
     if ns.ProcDots then ns.ProcDots.Housekeep(now) end
+    if not ns.Retail then ns._verifyAuras(now) end
     for guid, sent in pairs(ns._retailPending) do
         if (sent.stoppedAt and now - sent.stoppedAt > CAST_STOP_GRACE)
             or now - sent.sentAt > CAST_MAX_SECONDS then ns._retailPending[guid] = nil end
@@ -2074,12 +2193,54 @@ local function healthBarWidth()
     return 150
 end
 
+-- The marker starts at the bar's "no health" end. That is the left edge, except on a bar that drains the other
+-- way: a mirrored unit frame (reverse fill) or X-Perl's inverse bars. "Fill direction" follows the bar or is set
+-- by hand. Fields on ns: this chunk is at Lua 5.1's 200-local limit.
+function ns._markerReversed()
+    if db.fillDirection == "rtl" then return true end
+    if db.fillDirection == "ltr" or previewHost or not healthBar then return false end
+    return BIT.Plate and BIT.Plate.FillsReversed and BIT.Plate.FillsReversed(healthBar) or false
+end
+
+-- Turns the marker, its segments and the marks on its leading edge around.
+function ns._applyMarkerDirection(reverse)
+    local lead, trail = reverse and "LEFT" or "RIGHT", reverse and "RIGHT" or "LEFT"
+    if type(remainingBar.SetReverseFill) == "function" then remainingBar:SetReverseFill(reverse) end
+    for i, segment in ipairs(segments) do
+        if type(segment.bar.SetReverseFill) == "function" then segment.bar:SetReverseFill(reverse) end
+        segment.texture:ClearAllPoints()
+        if i == 1 then
+            segment.texture:SetPoint("TOP" .. trail, remainingBar, "TOP" .. trail)
+        else
+            segment.texture:SetPoint("TOP" .. trail, segments[i - 1].fillEnd, "TOP" .. lead)
+        end
+        segment.texture:SetPoint("BOTTOM" .. lead, segment.fillEnd, "BOTTOM" .. lead)
+        for _, mark in ipairs({ segment.divider, segment.refresh }) do
+            mark:ClearAllPoints()
+            mark:SetPoint("TOP", segment.fillEnd, "TOP" .. lead)
+            mark:SetPoint("BOTTOM", segment.fillEnd, "BOTTOM" .. lead)
+        end
+    end
+    fillLayer.refreshMark:ClearAllPoints()
+    fillLayer.refreshMark:SetPoint("TOP", span, "TOP" .. lead)
+    fillLayer.refreshMark:SetPoint("BOTTOM", span, "BOTTOM" .. lead)
+    spark:ClearAllPoints()
+    spark:SetPoint("TOP", span, "TOP" .. lead, 0, 7)
+    spark:SetPoint("BOTTOM", span, "BOTTOM" .. lead, 0, -7)
+    -- The options window's mock bar drains the same way, so the preview reads like the real frame.
+    local mock = previewHost and previewHost.healthBar
+    if mock and type(mock.SetReverseFill) == "function" then mock:SetReverseFill(reverse) end
+end
+
 local function applyAppearance()
     local parts = {}
     for i, key in ipairs(APPEARANCE_KEYS) do parts[i] = tostring(db[key]) end
+    local reverse = ns._markerReversed()
+    parts[#parts + 1] = tostring(reverse)
     local signature = table.concat(parts, "|")
     if signature == appliedSignature then return end
     appliedSignature = signature
+    ns._applyMarkerDirection(reverse)
 
     -- Skull
     local size = db.skullSize
@@ -2128,7 +2289,8 @@ local function applyAppearance()
         fillTex:SetVertTile(fill.tiled or false)
         if fill.gradient and CreateColor then
             fillTex:SetVertexColor(1, 1, 1, 1)
-            fillTex:SetGradient("HORIZONTAL", CreateColor(r, g, b, 0), CreateColor(r, g, b, a))
+            -- Solid at the leading edge, whichever way the marker runs.
+            fillTex:SetGradient("HORIZONTAL", CreateColor(r, g, b, reverse and a or 0), CreateColor(r, g, b, reverse and 0 or a))
         elseif fill.raw then
             fillTex:SetVertexColor(1, 1, 1, a) -- a texture with colours of its own
         else
@@ -2649,6 +2811,7 @@ function ns.ensureDB()
         db.ticks, db.intervals, db.version = nil, nil, DB_VERSION
     end
     db.ticks = db.ticks or {}
+    db.auras = db.auras or {} -- spell names whose debuff has been read on a mob (ns._verifyAuras)
     db.log = db.log or {}
     applyDefaults()
     ns.db = db
