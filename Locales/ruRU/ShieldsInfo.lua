@@ -40,6 +40,20 @@ BIT.RegisterLocale("ruRU", {
   ["On raid frames"] = "На рамках рейда",
   ["The shields over compact raid member frames."] =
     "Щиты поверх компактных рамок участников рейда.",
+  ["Show the absorb number"] =
+    "Показывать число поглощения",
+  ["How much absorb is left, as a number on the player, target and focus health bars. It also shows in combat. Party, raid and nameplate bars are too small for it."] =
+    "Сколько поглощения осталось, числом на полосах здоровья игрока, цели и фокуса. Отображается и в бою. Полосы группы, рейда и табличек для него слишком малы.",
+  ["Number position"] =
+    "Положение числа",
+  ["Left end of the bar"] =
+    "Левый край полосы",
+  ["Middle of the bar"] =
+    "Середина полосы",
+  ["Right end of the bar"] =
+    "Правый край полосы",
+  ["Number size"] =
+    "Размер числа",
   ["On nameplates"] = "На табличках",
   ["The shields over every accessible nameplate."] = "Щиты поверх всех доступных табличек.",
 

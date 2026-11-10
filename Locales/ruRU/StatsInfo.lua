@@ -26,6 +26,56 @@ BIT.RegisterLocale("ruRU", {
   ["+3 Intellect"] = "+3 к интеллекту",
 
   -- вкладки
+  ["Arrows"] =
+    "Стрелки",
+  ["Help"] =
+    "Справка",
+  ["IN THE ITEM'S TOOLTIP"] =
+    "В ПОДСКАЗКЕ ПРЕДМЕТА",
+  ["HOW MUCH OF IT"] =
+    "НАСКОЛЬКО ПОДРОБНО",
+  ["WHERE THE ARROWS SHOW"] =
+    "ГДЕ ПОКАЗЫВАТЬ СТРЕЛКИ",
+  ["WHERE ON THE ITEM"] =
+    "МЕСТО НА ПРЕДМЕТЕ",
+  ["Corner"] =
+    "Угол",
+  ["Top right"] =
+    "Справа вверху",
+  ["Top left"] =
+    "Слева вверху",
+  ["Bottom right"] =
+    "Справа внизу",
+  ["Bottom left"] =
+    "Слева внизу",
+  ["The corner of the item the arrow and the spec icon sit in, for when another addon's mark (a junk coin, an item level) already uses one. Baganator places its corner marks itself: pick the same corner in its Icon Corners settings. Quest reward arrows keep their own place."] =
+    "Угол предмета, в котором находятся стрелка и значок специализации, на случай, если метка другого аддона (монета хлама, уровень предмета) уже занимает один из углов. Baganator размещает свои угловые метки сам: выберите тот же угол в его настройках Icon Corners. Стрелки наград за задания остаются на своём месте.",
+  ["Horizontal nudge"] =
+    "Сдвиг по горизонтали",
+  ["Vertical nudge"] =
+    "Сдвиг по вертикали",
+  ["Pixels right (+) or left (-) of the corner."] =
+    "Пиксели вправо (+) или влево (-) от угла.",
+  ["Pixels up (+) or down (-) from the corner."] =
+    "Пиксели вверх (+) или вниз (-) от угла.",
+  ["Arrow size"] =
+    "Размер стрелки",
+  ["The size of the arrow, the spec icon and the +N cue."] =
+    "Размер стрелки, значка специализации и пометки +N.",
+  ["Use the game's own upgrade arrow in Blizzard's bags"] =
+    "Использовать игровую стрелку улучшения в сумках Blizzard",
+  ["Blizzard's bag buttons have an upgrade arrow of their own, in a place the game chose. Checked: an upgrade lights that one. Unchecked: this addon's arrow is drawn instead, in the corner chosen above. Other bag addons always get this addon's arrow."] =
+    "У ячеек сумок Blizzard есть собственная стрелка улучшения в месте, выбранном игрой. С галочкой: улучшение включает её. Без галочки: вместо неё рисуется стрелка этого аддона в выбранном выше углу. В других аддонах для сумок всегда используется стрелка этого аддона.",
+  ["WHAT THE ICONS STAND FOR"] =
+    "ЧТО ОЗНАЧАЮТ ЗНАЧКИ",
+  ["HOW EACH SPEC RATES THE ITEM"] =
+    "КАК СПЕЦИАЛИЗАЦИИ ОЦЕНИВАЮТ ПРЕДМЕТ",
+  ["ARROWS ON BAG ITEMS"] =
+    "СТРЕЛКИ У ПРЕДМЕТОВ В СУМКАХ",
+  ["DIAGNOSTICS"] =
+    "ДИАГНОСТИКА",
+  ["Static sample. The coin stands for another addon's junk mark; the arrows follow the Arrows tab. Live upgrades are rated against your gear."] =
+    "Статический пример. Монета изображает метку хлама другого аддона; стрелки следуют вкладке «Стрелки». Игровые улучшения сравниваются с вашей экипировкой.",
   ["Legend"] = "Обозначения",
   ["Ratings"] = "Оценки",
   ["Bag arrows"] = "Стрелки сумки",
@@ -36,15 +86,15 @@ BIT.RegisterLocale("ruRU", {
   ["The differences against the item you wear in that slot, in the item's tooltip."] =
     "Показывает в подсказке предмета разницу с тем, который надет в этом слоте.",
   ["Under each stat, what it gives you"] = "Что даёт каждая характеристика",
-  ["Health, mana, armor, attack power, crit, hit and the rest, under each difference. The Legend tab has the icons."] =
-    "Здоровье, мана, броня, сила атаки, критический удар, меткость и прочие параметры под каждой разницей. Значки указаны на вкладке «Обозначения».",
+  ["Health, mana, armor, attack power, crit, hit and the rest, under each difference. The Help tab has the icons."] =
+    "Здоровье, мана, броня, сила атаки, критический удар, меткость и прочие параметры под каждой разницей. Значки указаны на вкладке «Справка».",
   ["How each spec of your class rates the item"] = "Оценка предмета для каждой специализации вашего класса",
-  ["The Ratings tab explains the numbers."] = "Числа объясняются на вкладке «Оценки».",
+  ["The Help tab explains the numbers."] = "Числа объясняются на вкладке «Справка».",
   ["Icons instead of words"] = "Значки вместо слов",
   ["Icons and one line each, instead of words."] = "Значок и отдельная строка для каждого параметра вместо слов.",
   ["Arrows on bag items"] = "Стрелки у предметов в сумках",
-  ["Green up for an upgrade, red down only when every path is worse. The Bag arrows tab explains them."] =
-    "Зелёная стрелка вверх означает улучшение; красная вниз появляется, только если все варианты хуже. Подробнее — на вкладке «Стрелки сумки».",
+  ["Green up for an upgrade, red down only when every path is worse. The Help tab explains them."] =
+    "Зелёная стрелка вверх означает улучшение; красная вниз появляется, только если все варианты хуже. Подробнее — на вкладке «Справка».",
   ["The beneficiary spec icon on an up arrow"] = "Значок подходящей специализации на стрелке вверх",
   ["+N for the rest of the specs it is an upgrade for, ~ for the approximate healer score. Needs the arrows on."] =
     "+N для остальных специализаций, которым предмет подходит как улучшение; ~ для примерной оценки целителя. Требуется включить стрелки.",

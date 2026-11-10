@@ -26,6 +26,56 @@ BIT.RegisterLocale("deDE", {
   ["+3 Intellect"] = "+3 Intelligenz",
 
   -- the tabs
+  ["Arrows"] =
+    "Pfeile",
+  ["Help"] =
+    "Hilfe",
+  ["IN THE ITEM'S TOOLTIP"] =
+    "IM TOOLTIP DES GEGENSTANDS",
+  ["HOW MUCH OF IT"] =
+    "WIE VIEL DAVON",
+  ["WHERE THE ARROWS SHOW"] =
+    "WO DIE PFEILE ERSCHEINEN",
+  ["WHERE ON THE ITEM"] =
+    "WO AUF DEM GEGENSTAND",
+  ["Corner"] =
+    "Ecke",
+  ["Top right"] =
+    "Oben rechts",
+  ["Top left"] =
+    "Oben links",
+  ["Bottom right"] =
+    "Unten rechts",
+  ["Bottom left"] =
+    "Unten links",
+  ["The corner of the item the arrow and the spec icon sit in, for when another addon's mark (a junk coin, an item level) already uses one. Baganator places its corner marks itself: pick the same corner in its Icon Corners settings. Quest reward arrows keep their own place."] =
+    "Die Ecke des Gegenstands, in der Pfeil und Spezialisierungssymbol sitzen, falls die Markierung eines anderen Addons (eine Plundermünze, eine Gegenstandsstufe) dort schon liegt. Baganator platziert seine Eckmarkierungen selbst: wählt dieselbe Ecke in dessen Einstellungen „Icon Corners“. Pfeile bei Questbelohnungen behalten ihren Platz.",
+  ["Horizontal nudge"] =
+    "Horizontal verschieben",
+  ["Vertical nudge"] =
+    "Vertikal verschieben",
+  ["Pixels right (+) or left (-) of the corner."] =
+    "Pixel rechts (+) oder links (-) von der Ecke.",
+  ["Pixels up (+) or down (-) from the corner."] =
+    "Pixel über (+) oder unter (-) der Ecke.",
+  ["Arrow size"] =
+    "Pfeilgröße",
+  ["The size of the arrow, the spec icon and the +N cue."] =
+    "Die Größe von Pfeil, Spezialisierungssymbol und +N-Hinweis.",
+  ["Use the game's own upgrade arrow in Blizzard's bags"] =
+    "Den spieleigenen Upgrade-Pfeil in Blizzards Taschen verwenden",
+  ["Blizzard's bag buttons have an upgrade arrow of their own, in a place the game chose. Checked: an upgrade lights that one. Unchecked: this addon's arrow is drawn instead, in the corner chosen above. Other bag addons always get this addon's arrow."] =
+    "Blizzards Taschenplätze haben einen eigenen Upgrade-Pfeil an einer vom Spiel gewählten Stelle. Mit Haken: Ein Upgrade lässt diesen aufleuchten. Ohne Haken: Stattdessen wird der Pfeil dieses Addons in der oben gewählten Ecke gezeichnet. Andere Taschen-Addons bekommen immer den Pfeil dieses Addons.",
+  ["WHAT THE ICONS STAND FOR"] =
+    "WOFÜR DIE SYMBOLE STEHEN",
+  ["HOW EACH SPEC RATES THE ITEM"] =
+    "WIE JEDE SPEZIALISIERUNG BEWERTET",
+  ["ARROWS ON BAG ITEMS"] =
+    "PFEILE BEI GEGENSTÄNDEN IN TASCHEN",
+  ["DIAGNOSTICS"] =
+    "DIAGNOSE",
+  ["Static sample. The coin stands for another addon's junk mark; the arrows follow the Arrows tab. Live upgrades are rated against your gear."] =
+    "Statisches Beispiel. Die Münze steht für die Plundermarkierung eines anderen Addons; die Pfeile folgen dem Reiter Pfeile. Echte Upgrades werden an Eurer Ausrüstung gemessen.",
   ["Legend"] = "Legende",
   ["Ratings"] = "Bewertungen",
   ["Bag arrows"] = "Taschenpfeile",
@@ -36,15 +86,15 @@ BIT.RegisterLocale("deDE", {
   ["The differences against the item you wear in that slot, in the item's tooltip."] =
     "Die Unterschiede zu dem Gegenstand, den Ihr an diesem Platz tragt, im Tooltip des Gegenstands.",
   ["Under each stat, what it gives you"] = "Unter jedem Wert, was er Euch bringt",
-  ["Health, mana, armor, attack power, crit, hit and the rest, under each difference. The Legend tab has the icons."] =
-    "Gesundheit, Mana, Rüstung, Angriffskraft, kritische Treffer, Treffer und das Übrige, unter jedem Unterschied. Der Reiter Legende zeigt die Symbole.",
+  ["Health, mana, armor, attack power, crit, hit and the rest, under each difference. The Help tab has the icons."] =
+    "Gesundheit, Mana, Rüstung, Angriffskraft, kritische Treffer, Treffer und das Übrige, unter jedem Unterschied. Der Reiter Hilfe zeigt die Symbole.",
   ["How each spec of your class rates the item"] = "Wie jede Spezialisierung Eurer Klasse den Gegenstand bewertet",
-  ["The Ratings tab explains the numbers."] = "Der Reiter Bewertungen erklärt die Zahlen.",
+  ["The Help tab explains the numbers."] = "Der Reiter Hilfe erklärt die Zahlen.",
   ["Icons instead of words"] = "Symbole statt Text",
   ["Icons and one line each, instead of words."] = "Symbole und je eine Zeile statt Text.",
   ["Arrows on bag items"] = "Pfeile bei Gegenständen in Taschen",
-  ["Green up for an upgrade, red down only when every path is worse. The Bag arrows tab explains them."] =
-    "Grün nach oben bei einem Upgrade, rot nach unten nur, wenn jeder Weg schlechter ist. Der Reiter Taschenpfeile erklärt sie.",
+  ["Green up for an upgrade, red down only when every path is worse. The Help tab explains them."] =
+    "Grün nach oben bei einem Upgrade, rot nach unten nur, wenn jeder Weg schlechter ist. Der Reiter Hilfe erklärt sie.",
   ["The beneficiary spec icon on an up arrow"] = "Das Symbol der begünstigten Spezialisierung am Pfeil nach oben",
   ["+N for the rest of the specs it is an upgrade for, ~ for the approximate healer score. Needs the arrows on."] =
     "+N für die übrigen Spezialisierungen, für die er ein Upgrade ist, ~ für die ungefähre Heilerwertung. Braucht eingeschaltete Pfeile.",

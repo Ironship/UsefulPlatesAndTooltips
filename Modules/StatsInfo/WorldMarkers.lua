@@ -49,6 +49,7 @@ local function paintButton(button, link)
   end
   local marker = ensure(button)
   if not marker or type(M.PaintVerdictMarker) ~= "function" or type(M.BagVerdict) ~= "function" then return end
+  if type(M.SeatMarker) == "function" then M.SeatMarker(marker, button) end -- the corner chosen for the arrows
   M.PaintVerdictMarker(marker, M.BagVerdict(link))
 end
 
