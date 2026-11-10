@@ -652,6 +652,8 @@ local function buildPage(name)
   page:Hide()
   page.name = name
 
+  -- A plain tab (Debug) is a tool page, not a part: no Enable box, and it is always built.
+  if not tab.plain then
   page.switch = UI.Check(page, string.format(BIT.L("Enable %s"), BIT.L(tab.title or name)),
     function() return BIT.IsSwitchedOn(name) end,
     function(v)
@@ -682,8 +684,9 @@ local function buildPage(name)
     if type(ReloadUI) == "function" then ReloadUI() end
   end)
   page.reload:SetPoint("TOPRIGHT", -4, -7)
+  end
 
-  local content = attachScroll(page, SWITCH_HEIGHT)
+  local content = attachScroll(page, tab.plain and 0 or SWITCH_HEIGHT)
 
   local viewport = page.scroll:GetHeight()
   local function layoutContent()
@@ -695,7 +698,7 @@ local function buildPage(name)
     if page.syncScroll then page.syncScroll() end
   end
 
-  local showLive = (BIT.IsRunning(name) or (BIT.woke and BIT.woke[name])) and type(tab.build) == "function"
+  local showLive = (tab.plain or BIT.IsRunning(name) or (BIT.woke and BIT.woke[name])) and type(tab.build) == "function"
   if showLive then
     content:SetHeight(tab.height or DEFAULT_TAB.height)
     local ok, err = pcall(tab.build, content)
