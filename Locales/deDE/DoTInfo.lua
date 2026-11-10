@@ -46,6 +46,8 @@ BIT.RegisterLocale("deDE", {
   ["Follow health bar"] = "Gesundheitsleiste folgen",
   ["Left to right"] = "Links nach rechts",
   ["Right to left"] = "Rechts nach links",
+  ["Which end of the target health bar the marker starts from. Follow health bar turns it around on a mirrored bar that drains the other way; choose Right to left if your unit frame addon is not recognized."] =
+    "An welchem Ende der Ziel-Gesundheitsleiste die Markierung beginnt. „Gesundheitsleiste folgen“ dreht sie auf einer gespiegelten Leiste um, die sich in die andere Richtung leert; wählt „Rechts nach links“, wenn Euer Einheitenfenster-Addon nicht erkannt wird.",
   ["Shows an icon at the chosen position when your DoTs on the target will kill it."] =
     "Zeigt ein Symbol an der gewählten Position, wenn Eure DoTs das Ziel töten werden.",
 

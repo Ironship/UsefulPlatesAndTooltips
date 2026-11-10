@@ -57,6 +57,22 @@ local function unitFrameBase(unit)
         or read(bar.IsForbidden, bar) == true or read(frame.IsVisible, frame) ~= true then return end
     return frame, bar, nil
   end
+  -- X-Perl (and its forks, which keep the frame names) hides Blizzard's frames and draws XPerl_<Part>, with the bar
+  -- at .statsFrame.healthBar and the portrait in .portraitFrame. It can be loaded with one frame type switched
+  -- off, so its frame only counts while it is on screen or Blizzard's carries X-Perl's own "disabled" flag.
+  local perl = _G["XPerl_" .. part]
+  if type(perl) == "table" and read(perl.IsForbidden, perl) ~= true and (read(perl.IsVisible, perl) == true
+      or (type(blizzard) == "table" and read(function() return blizzard.XPerlDisabled end) == true)) then
+    local stats = read(function() return perl.statsFrame end)
+    local bar = type(stats) == "table" and read(function() return stats.healthBar end)
+    if type(bar) ~= "table" then bar = _G["XPerl_" .. part .. "statsFramehealthBar"] end
+    if type(bar) == "table" and read(bar.IsForbidden, bar) ~= true then
+      local portrait = read(function() return perl.portraitFrame end)
+      if type(portrait) ~= "table" then portrait = _G["XPerl_" .. part .. "portraitFrame"] end
+      if type(portrait) ~= "table" or read(portrait.IsVisible, portrait) ~= true then portrait = nil end
+      return perl, bar, portrait
+    end
+  end
   local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
   local eui = type(modules) == "table" and modules.EllesmereUIUnitFrames
   local source = type(eui) == "table" and read(eui.GetUnitFrameSource, unit)
@@ -85,11 +101,30 @@ local function unitFrameBase(unit)
     local mirror = read(BBF.HealthBar, frame)
     if type(mirror) == "table" then bar = mirror end
   end
+  -- The unit is there but Blizzard's bar is not on screen: a unit frame addon this file does not know has hidden
+  -- it. Marks laid over a hidden bar float wherever that bar was left, so there is nothing to mark (a frame
+  -- named with /upt frame is used above). Without the unit the frame is merely hidden, and stays the answer.
+  if type(bar) == "table" and read(bar.IsVisible, bar) == false
+      and read(UnitExists, FRAME_PART[unit] and unit or "target") == true then return end
   local portraitHost = type(frame) == "table" and frame.TargetFrameContainer
   local portrait = type(portraitHost) == "table" and portraitHost.Portrait
   if type(portrait) ~= "table" then portrait = _G[part .. "FramePortrait"] end
   if type(portrait) ~= "table" then portrait = type(frame) == "table" and frame.portrait end
   return frame, bar, portrait
+end
+
+-- Whether a health bar's fill runs right to left, so marks measured from "no health" start at its right edge:
+-- a StatusBar with reverse fill (mirrored unit frames), or X-Perl's inverse bars, which fill with the health
+-- that is missing and leave the health that remains at the right end.
+function Plate.FillsReversed(bar)
+  if type(bar) ~= "table" then return false end
+  local reverse = read(bar.GetReverseFill, bar) == true
+  local name = read(bar.GetName, bar)
+  if type(name) == "string" and name:find("^XPerl_") and type(XPerlDB) == "table" then
+    local inverse = read(function() return XPerlDB.bar.inverse end)
+    if inverse then reverse = not reverse end
+  end
+  return reverse
 end
 
 -- The frame, health bar and portrait of a unit's frame. The kill icon spot the player named (Core/Frames.lua) replaces

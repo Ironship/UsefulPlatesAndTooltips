@@ -46,6 +46,8 @@ BIT.RegisterLocale("ruRU", {
   ["Follow health bar"] = "Как у полосы здоровья",
   ["Left to right"] = "Слева направо",
   ["Right to left"] = "Справа налево",
+  ["Which end of the target health bar the marker starts from. Follow health bar turns it around on a mirrored bar that drains the other way; choose Right to left if your unit frame addon is not recognized."] =
+    "С какого края полосы здоровья цели начинается метка. «Как у полосы здоровья» разворачивает её на зеркальной полосе, которая убывает в другую сторону; выберите «Справа налево», если ваш аддон рамок не распознан.",
   ["Shows an icon at the chosen position when your DoTs on the target will kill it."] =
     "Показывает значок в выбранном месте, когда ваши DoT убьют цель.",
 
