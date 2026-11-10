@@ -1294,7 +1294,8 @@ local function buildTabs(parent, isHunter)
 
     local range = addTab(BIT.L("Range"))
     parent.longRange = range:checkbox("longRange", "Extended range past 35 yd (Hawk Eye)",
-        { enabledIf = hunterOnly,
+        -- Once the spellbook has answered, the box shows that answer and a click could not change it.
+        { enabledIf = function() return isHunter and detectedAutoMax == nil end,
             tooltip = "Seven dots instead of six. Auto-detected from Auto Shot's reach when the spellbook "
                 .. "answers; tick manually otherwise." })
     range:info("Auto Shot's reach reads", function()

@@ -59,6 +59,9 @@ BIT.RegisterLocale("deDE", {
   ["The whole module: the finisher sound and the marks under the target."] =
     "Das ganze Modul: der Finisher-Ton und die Markierungen unter dem Ziel.",
   ["Only play while in combat"] = "Nur im Kampf abspielen",
+  ["Sound when the bar fills"] = "Ton bei voller Leiste",
+  ["The cue at full combo points. Unchecked keeps the dots and diamonds and only mutes this sound."] =
+    "Der Hinweiston bei vollen Combopunkten. Ohne Haken bleiben Kreise und Rauten, nur dieser Ton ist stumm.",
   ["A full bar out of combat stays quiet; it dings the moment combat starts."] =
     "Eine volle Leiste außerhalb des Kampfes bleibt still; der Ton erklingt, sobald der Kampf beginnt.",
   ["Hear it"] = "Anhören",

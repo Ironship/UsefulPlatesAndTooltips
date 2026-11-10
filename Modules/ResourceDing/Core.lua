@@ -102,6 +102,7 @@ local defaults = {
   enabled = true,
   combatOnly = true,
   sound = "auction",
+  fullSound = true, -- the sound at a full bar; off keeps the dots and diamonds without it
   dots = true,     -- combo points as dots under the target's nameplate (Dots.lua)
   dotSize = 14,
   dotOffset = -60,   -- vertical offset from the health bar (negative = above)
@@ -361,7 +362,7 @@ function Addon.CheckPower(silent)
   -- sound remains available when gain sounds are switched off.
   local shardGainSound = not isClassic() and resource.power == powerType("SoulShards", 7)
     and Addon.db.shards and Addon.CheckShards ~= nil
-  if not silent and isFull and not wasFull and Addon.db.enabled and not shardGainSound then
+  if not silent and isFull and not wasFull and Addon.db.enabled and Addon.db.fullSound ~= false and not shardGainSound then
     if not Addon.db.combatOnly or UnitAffectingCombat("player") then
       Addon.PlaySelectedSound()
     else

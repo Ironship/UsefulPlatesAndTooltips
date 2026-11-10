@@ -650,8 +650,9 @@ local function buildTabs()
     behavior:gap()
     behavior:frame("target", "Target health bar", "bar", { tooltip = "For unit frame addons that replace "
         .. "Blizzard's target frame (ElvUI, Shadowed Unit Frames, ...). Target something, click Pick, then click "
-        .. "its health bar; or type the frame's name (/fstack shows it), like ElvUF_Target.Health. The bar must "
-        .. "fill left to right. Empty: Blizzard's, or EllesmereUI's when it shows its own. Shared with ShieldsInfo "
+        .. "its health bar; or type the frame's name (/fstack shows it), like ElvUF_Target.Health. For a bar that "
+        .. "drains the other way, see Fill direction on the Marker tab. Empty: Blizzard's, or EllesmereUI's or "
+        .. "X-Perl's when it shows its own. Shared with ShieldsInfo "
         .. "and HealPrediction. Plater replaces nameplates, not the screen target frame; its nameplate marker is "
         .. "handled separately." })
     behavior:frame("icon", "Kill icon spot", "anchor", { tooltip = "Where the kill icon is centered (e.g. the "

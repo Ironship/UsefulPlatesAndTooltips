@@ -315,6 +315,25 @@ function Plate.HealthBar(plate)
   return autoHealthBar(plate)
 end
 
+-- Blizzard's own Mouseover Cast (Options > Combat, no macro): with it on and its key held (or none set), a cast
+-- goes on the mob under the mouse whatever the target is. Names cannot tell that apart: in a pack every mob shares
+-- the target's name. Returns "mouseover" when such a cast would land there: the option is plainly on, the unit is
+-- attackable and alive, and the cast names no other mob (sentName unreadable or empty counts as no name).
+-- Adapted from Does It Die v0.9.4 (Joe Greive, MIT).
+function Plate.MouseoverCastUnit(sentName)
+  local getBool = (C_CVar and C_CVar.GetCVarBool) or GetCVarBool
+  if read(getBool, "enableMouseoverCast") ~= true then return nil end
+  local key = read(GetModifiedClick, "MOUSEOVERCAST")
+  if key ~= "NONE" and read(IsModifiedClick, "MOUSEOVERCAST") ~= true then return nil end
+  if read(UnitExists, "mouseover") ~= true or read(UnitCanAttack, "player", "mouseover") ~= true
+      or read(UnitIsDeadOrGhost, "mouseover") == true then return nil end
+  local secret = type(issecretvalue) == "function" and issecretvalue(sentName)
+  if not secret and type(sentName) == "string" and sentName ~= "" and read(UnitName, "mouseover") ~= sentName then
+    return nil
+  end
+  return "mouseover"
+end
+
 -- Bottom and top of a widget seated with the live formula, positive y up.
 function Plate.Span(offset, height)
   local top = -(tonumber(offset) or 0)
