@@ -40,6 +40,20 @@ BIT.RegisterLocale("deDE", {
   ["On raid frames"] = "Auf Schlachtzugsfenstern",
   ["The shields over compact raid member frames."] =
     "Die Schilde über den kompakten Schlachtzugsmitgliederfenstern.",
+  ["Show the absorb number"] =
+    "Absorptionszahl anzeigen",
+  ["How much absorb is left, as a number on the player, target and focus health bars. It also shows in combat. Party, raid and nameplate bars are too small for it."] =
+    "Wie viel Absorption übrig ist, als Zahl auf den Gesundheitsleisten von Spieler, Ziel und Fokus. Sie wird auch im Kampf angezeigt. Gruppen-, Schlachtzugs- und Namensplakettenleisten sind dafür zu klein.",
+  ["Number position"] =
+    "Position der Zahl",
+  ["Left end of the bar"] =
+    "Linkes Ende der Leiste",
+  ["Middle of the bar"] =
+    "Mitte der Leiste",
+  ["Right end of the bar"] =
+    "Rechtes Ende der Leiste",
+  ["Number size"] =
+    "Größe der Zahl",
   ["On nameplates"] = "Auf Namensplaketten",
   ["The shields over every accessible nameplate."] = "Die Schilde über jeder zugänglichen Namensplakette.",
 

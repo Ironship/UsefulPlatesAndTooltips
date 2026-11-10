@@ -596,13 +596,52 @@ local driveNativeUpgradeIcon
 -- CONTAINER, TOPRIGHT, inside the 24x24 face), the same sizes and colours. The arrow is ONE
 -- texture, created here and reused for the container's whole life; the white-primitive
 -- fallback's four pieces are created once, only on a client that needs them (arrowMode below).
+-- Where the player wants the arrows (StatsInfo > Arrows): the item's corner, a nudge in pixels and a size.
+-- Another addon's mark (a junk coin, an item level) may own the default corner. sx/sy mirror the layout: the
+-- spec icon stays in the chosen corner and the arrow steps away from it toward the item's middle.
+local CORNERS = {
+  topright = { point = "TOPRIGHT", sx = 1, sy = 1 },
+  topleft = { point = "TOPLEFT", sx = -1, sy = 1 },
+  bottomright = { point = "BOTTOMRIGHT", sx = 1, sy = -1 },
+  bottomleft = { point = "BOTTOMLEFT", sx = -1, sy = -1 },
+}
+local function clampSetting(v, lo, hi, fallback)
+  v = tonumber(v)
+  if not v or v ~= v then return fallback end
+  if v < lo then return lo elseif v > hi then return hi end
+  return v
+end
+function M.MarkerLayout()
+  local s = M.settings or {}
+  local corner = CORNERS[s.bagArrowCorner] or CORNERS.topright
+  return corner, clampSetting(s.bagArrowX, -20, 20, 0), clampSetting(s.bagArrowY, -20, 20, 0),
+    clampSetting(s.bagArrowScale, 50, 150, 100) / 100
+end
+
+-- Seats a marker frame of this file's size in the chosen corner of an item button (our own frames only: a
+-- Baganator widget is anchored by Baganator, in the corner picked in its own Icon Corners settings).
+function M.SeatMarker(marker, host)
+  if type(marker) ~= "table" or type(host) ~= "table" then return end
+  local corner = M.MarkerLayout()
+  marker:ClearAllPoints()
+  marker:SetPoint(corner.point, host, corner.point, MARKER_DX * corner.sx, MARKER_DY * corner.sy)
+end
+
+-- The arrow, the spec icon and the +N cue live on `body`, a frame inside the container: the nudge and the
+-- size are its anchor and its scale, so they work the same on a native button, a Baganator widget, an
+-- EllesmereUI slot and the loot, roll and merchant buttons.
 local function initContents(container)
-  container.arrow = container:CreateTexture(nil, "OVERLAY")
+  local body = CreateFrame("Frame", nil, container)
+  body:SetSize(MARKER_W, MARKER_H)
+  body:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, 0)
+  if type(body.EnableMouse) == "function" then body:EnableMouse(false) end
+  container.body = body
+  container.arrow = body:CreateTexture(nil, "OVERLAY")
   container.arrow:SetSize(MARKER_W, MARKER_H)
-  container.icon = container:CreateTexture(nil, "OVERLAY")
+  container.icon = body:CreateTexture(nil, "OVERLAY")
   container.icon:SetSize(ICON_SIZE, ICON_SIZE)
-  container.plusN = container:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  container.tilde = container:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  container.plusN = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  container.tilde = body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 end
 
 -- The fallback's four primitive pieces: created once per container and only when this client
@@ -611,7 +650,7 @@ local function fallbackPieces(container)
   if container.arrowPieces then return container.arrowPieces end
   container.arrowPieces = {}
   for _ = 1, 4 do
-    container.arrowPieces[#container.arrowPieces + 1] = container:CreateTexture(nil, "OVERLAY")
+    container.arrowPieces[#container.arrowPieces + 1] = (container.body or container):CreateTexture(nil, "OVERLAY")
   end
   return container.arrowPieces
 end
@@ -654,7 +693,17 @@ local function paintContents(container, verdict, nativeUp)
   -- one icon-width + gap to the left; without the icon the arrow owns the corner.
   -- nativeUp: the button's own UpgradeIcon carries the green UP, so no custom
   -- arrow is painted (only the icon row below is ours).
-  local shift = (up and not nativeUp and s and s.bagSpecIcons and gave) and ARROW_SHIFT or 0
+  local corner, nudgeX, nudgeY, scale = M.MarkerLayout()
+  local point, sx, sy = corner.point, corner.sx, corner.sy
+  local body = container.body
+  if body then
+    body:SetScale(scale)
+    body:ClearAllPoints()
+    body:SetPoint(point, container, point, nudgeX / scale, nudgeY / scale) -- the nudge in screen pixels, whatever the size
+  else
+    body = container
+  end
+  local shift = (up and not nativeUp and s and s.bagSpecIcons and gave) and ARROW_SHIFT * sx or 0
   decideArrowMode(container.arrow)
   if nativeUp then
     container.arrow:Hide()
@@ -671,7 +720,7 @@ local function paintContents(container, verdict, nativeUp)
     if up then t:SetTexCoord(0, 1, 1, 0) else t:SetTexCoord(0, 1, 0, 1) end
     t:SetVertexColor(1, 1, 1, 1)
     t:ClearAllPoints()
-    t:SetPoint("TOPRIGHT", container, "TOPRIGHT", shift, 0)
+    t:SetPoint(point, body, point, shift, 0)
     t:Show()
   else
     -- the white-primitive fallback: the old arrow, unchanged geometry and colours
@@ -684,20 +733,22 @@ local function paintContents(container, verdict, nativeUp)
       t:SetVertexColor(r, g, b, 1)
       t:SetSize(p[1], p[2])
       t:ClearAllPoints()
-      t:SetPoint("TOPRIGHT", container, "TOPRIGHT", p[3] + shift, p[4])
+      -- the pieces draw at the box's right edge; on a left corner the arrow starts at its left edge instead
+      t:SetPoint("TOPRIGHT", body, "TOPRIGHT", p[3] + (sx < 0 and -14 or 0) + shift, p[4])
       t:Show()
     end
   end
   if up and s and s.bagSpecIcons and gave then
     container.icon:SetTexture(gave.spec.icon)
     container.icon:ClearAllPoints()
-    container.icon:SetPoint("TOPRIGHT", container, "TOPRIGHT", ICON_DX, ICON_DY)
+    container.icon:SetPoint(point, body, point, ICON_DX * sx, ICON_DY * sy)
     container.icon:Show()
     container.plusN:ClearAllPoints()
-    container.plusN:SetPoint("TOPRIGHT", container, "TOPRIGHT", PLUSN_DX, PLUSN_DY)
+    container.plusN:SetPoint(point, body, point, PLUSN_DX * sx, PLUSN_DY * sy)
     container.plusN:SetText(#verdict.beneficiaries > 1 and ("+" .. (#verdict.beneficiaries - 1)) or "")
     container.tilde:ClearAllPoints()
-    container.tilde:SetPoint("RIGHT", container.plusN, "LEFT", -1, 0)
+    if sx > 0 then container.tilde:SetPoint("RIGHT", container.plusN, "LEFT", -1, 0)
+    else container.tilde:SetPoint("LEFT", container.plusN, "RIGHT", 1, 0) end
     container.tilde:SetText(gave.approx and "~" or "") -- the heuristic's (approx.) cue
   else
     container.icon:Hide()
@@ -760,7 +811,10 @@ end
 
 local function applyMarker(button, verdict)
   local up = verdict and verdict.verdict == "up"
-  local native = driveNativeUpgradeIcon(button, up)
+  -- The game's own upgrade arrow sits where Blizzard put it. With "bagNativeUp" off it stays hidden and the
+  -- addon's arrow is drawn instead, in the corner the player chose.
+  local useNative = not (M.settings and M.settings.bagNativeUp == false)
+  local native = driveNativeUpgradeIcon(button, up and useNative) and useNative
   local marker = markers[button]
   if not verdict or verdict.verdict == "none" then
     if marker then hideMarker(button) end
@@ -773,6 +827,7 @@ local function applyMarker(button, verdict)
     end
     marker = createMarker(button)
   end
+  M.SeatMarker(marker, button)
   paintContents(marker, verdict, up and native)
   marker:Show()
 end
@@ -1074,6 +1129,7 @@ local function paintEUI(button, record)
     marker:SetFrameLevel((ask(record.host.GetFrameLevel, record.host) or 1) + 1)
     record.marker = marker
   end
+  M.SeatMarker(marker, record.host)
   M.PaintVerdictMarker(marker, verdict)
 end
 
@@ -1178,6 +1234,7 @@ end
 function M.RefreshBags(force)
   bumpRevision()
   refreshVisible()
+  if requestBaganatorRefresh then requestBaganatorRefresh() end -- its corner widgets repaint with the new settings
 end
 
 -- The marker pipeline over the buttons the client shows right now: one line per button --

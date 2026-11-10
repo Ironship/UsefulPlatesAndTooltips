@@ -40,6 +40,9 @@ local DEFAULTS = {
   raid = true,        -- raid frames
   nameplates = true,  -- every accessible nameplate
   overlayAlpha = 0.5, -- Juicy: half-opacity stripes, opposite to DoT damage
+  showNumber = false,       -- the remaining absorb as a number on the player, target and focus bars
+  numberPosition = "right", -- where on the bar: "left", "center" or "right"
+  numberSize = 10,          -- its font size
   fillTexture = "stripes", -- the fill art the overlay wears (FILL_TEXTURES below)
 }
 -- Retired keys (hud, numbers, scale, mirror, preview, locked, x, y) are not
@@ -292,6 +295,41 @@ local function overlayFor(healthBar)
   return o
 end
 
+-- The remaining absorb as a number (idea from Shield Aura Forever, MIT): the value goes straight from the
+-- client into the font string, so it also shows in combat, where it is secret. Lua never reads, compares or
+-- formats it itself. Only on the big frames: a party, raid or nameplate bar has no room for it.
+local NUMBER_UNITS = { player = true, target = true, focus = true }
+local function paintNumber(holder, bar, anchor, value, wanted)
+  if not wanted then
+    if holder.number then pcall(holder.number.Hide, holder.number) end
+    return
+  end
+  pcall(function()
+    local text = holder.number
+    if not text then
+      text = bar:CreateFontString(nil, "OVERLAY")
+      holder.number = text
+    end
+    local s = settings or DEFAULTS
+    local size = tonumber(s.numberSize) or DEFAULTS.numberSize
+    if size ~= size or size < 8 then size = 8 elseif size > 18 then size = 18 end
+    local font = type(GameFontHighlightSmall) == "table" and GameFontHighlightSmall:GetFont() or nil
+    text:SetFont(font or "Fonts\\FRIZQT__.TTF", size, "OUTLINE")
+    text:SetTextColor(1, 1, 1, 1)
+    text:ClearAllPoints()
+    -- Against the health bar, not the overlay: next to a DoT marker the overlay is only a thin edge.
+    if s.numberPosition == "left" then text:SetPoint("LEFT", anchor, "LEFT", 3, 0)
+    elseif s.numberPosition == "center" then text:SetPoint("CENTER", anchor, "CENTER", 0, 0)
+    else text:SetPoint("RIGHT", anchor, "RIGHT", -3, 0) end
+    if C_StringUtil and type(C_StringUtil.TruncateWhenZero) == "function" then
+      text:SetText(C_StringUtil.TruncateWhenZero(value))
+    else
+      text:SetFormattedText("%.0f", value)
+    end
+    text:Show()
+  end)
+end
+
 -- A DoT marker already paints the fill. The shield then keeps a thin edge along the top
 -- so both stay readable. With no DoT marker the overlay covers the bar, as before.
 local function applyOverlayMode(o, edge)
@@ -356,6 +394,7 @@ local function updateBar(unit, healthBar, enabled)
     o.bar:SetMinMaxValues(0, maxHealth)
     o.bar:SetValue(absorb)
     o.bar:Show()
+    paintNumber(o, o.bar, healthBar, absorb, (settings or DEFAULTS).showNumber and NUMBER_UNITS[unit] or false)
   end)
   if not ok then hideOverlay(o) end
 end
@@ -1264,6 +1303,9 @@ local function buildLivePreview(pane)
       scene.overlay:SetMinMaxValues(0, 100)
       scene.overlay:SetValue(clampPercent(preview.absorb))
       styleOverlay(scene.overlay)
+      -- The sample number, on the frames that get one in the game (the sample bar holds 1000).
+      paintNumber(scene, scene.overlay, kit.bar, math.floor(clampPercent(preview.absorb) * 10 + 0.5),
+        (settings or DEFAULTS).showNumber and (m.id == "player" or m.id == "target") or false)
     end)
   end
 end
@@ -1300,6 +1342,26 @@ local function buildTabs(area)
     "The shields over compact raid member frames.")
   toggle("nameplates", "On nameplates",
     "The shields over every accessible nameplate.")
+  frames:gap()
+  local numberOn = function(s) return s.showNumber end
+  frames:add(checkbox(frames.inner, "showNumber", "Show the absorb number",
+    { tooltip = "How much absorb is left, as a number on the player, target and focus health bars. "
+      .. "It also shows in combat. Party, raid and nameplate bars are too small for it." }), ROW_HEIGHT, "showNumber")
+  frames:add(BIT.Looks.Rows.Choice(frames.inner, "Number position", {
+    { id = "left", label = "Left end of the bar" },
+    { id = "center", label = "Middle of the bar" },
+    { id = "right", label = "Right end of the bar" },
+  }, function() return settings.numberPosition end, function(id)
+    settings.numberPosition = id
+    changed()
+  end, { enabledIf = numberOn, settings = function() return settings or DEFAULTS end,
+    register = function(r) controls[#controls + 1] = r end }), ROW_HEIGHT, "numberPosition")
+  frames:add(sliderRow(frames.inner, "Number size", 8, 18, 1,
+    function() return tonumber(settings.numberSize) or DEFAULTS.numberSize end,
+    function(v)
+      settings.numberSize = v
+      changed()
+    end, { enabledIf = numberOn, suffix = " px" }), ROW_HEIGHT, "numberSize")
 
   -- Fill: the art, its translucency and the absorb colour.
   local fill = addTab(BIT.L("Fill"), area)

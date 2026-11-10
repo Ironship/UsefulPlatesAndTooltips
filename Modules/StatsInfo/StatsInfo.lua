@@ -22,6 +22,10 @@ local DEFAULTS = {
   questMarkers = true, -- every upgrade reward; double arrow on the best, or the coin if none
   bagSpecIcons = true, -- on an up arrow, the beneficiary spec's icon (+N for the rest)
   worldMarkers = true, -- the same arrows on loot, need/greed rolls and merchant buttons
+  bagArrowCorner = "topright", -- which corner of the item the arrows sit in (BagMarkers.lua M.MarkerLayout)
+  bagArrowX = 0, bagArrowY = 0, -- a nudge from that corner, in pixels
+  bagArrowScale = 100,         -- the arrows' size in percent
+  bagNativeUp = true,          -- Blizzard bags: the game's own upgrade arrow for an upgrade (its place is the game's)
   detail = "full",  -- tooltip density: "compact" (one line; Shift or "full" expands it)
 }
 
@@ -2287,6 +2291,7 @@ end
 -- and quest badges to the Blizzard arrows; the mock follows). The tooltip, bag badge and
 -- sample quest markers are re-laid-out by renderMockTooltip on every change.
 local TIP_LINES = 20 -- the sample never needs more; the pool is padded with blanks
+local BAG_SLOT = 36 -- a mock bag slot, the size the arrows' geometry is made for
 local function buildMockTooltip(scene)
   local tip = CreateFrame("Frame", nil, scene, "BackdropTemplate")
   BIT.UI.Backdrop(tip, 0.09, 0.98)
@@ -2297,42 +2302,37 @@ local function buildMockTooltip(scene)
     line:SetJustifyH("LEFT")
     scene.tipLines[i] = line
   end
-  local bag = CreateFrame("Frame", nil, scene)
-  bag:SetSize(32, 32)
-  scene.bag = bag
-  local face = bag:CreateTexture(nil, "BACKGROUND")
-  face:SetAllPoints()
-  face:SetTexture("Interface\\Icons\\INV_Chest_Leather_01")
-  face:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-  scene.bagFace = face
-  -- The corner badge exactly as BagMarkers' paintContents builds it: one MARKER x MARKER box
-  -- in the button's TOPRIGHT corner with the arrow in it, and the beneficiary icon and the
-  -- +N cue inside the corner below. UI-MicroStream-Green ships pointing DOWN (a download
-  -- chevron), so the UP arrow mirrors the texture vertically with SetTexCoord (top and
-  -- bottom swapped). The file carries the Blizzard green itself: the vertex colour stays
-  -- white, never the tooltip's tint. The spec icon is shown too, so the arrow sits one
-  -- icon-width left of it (ARROW_SHIFT in BagMarkers).
-  local badge = CreateFrame("Frame", nil, bag)
-  badge:EnableMouse(false)
-  badge:SetSize(24, 24)
-  scene.bagBadge = badge
-  local arrow = badge:CreateTexture(nil, "OVERLAY")
-  arrow:SetTexture("Interface\\Buttons\\UI-MicroStream-Green")
-  arrow:SetTexCoord(0, 1, 1, 0) -- mirrored vertically: tip up
-  arrow:SetVertexColor(1, 1, 1, 1)
-  arrow:SetSize(24, 24)
-  scene.arrow = arrow
-  local specIcon = badge:CreateTexture(nil, "OVERLAY")
-  specIcon:SetSize(12, 12)
-  specIcon:SetTexture(SAMPLE.specs[1].icon)
-  scene.bagSpecIcon = specIcon
-  local plusN = badge:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  plusN:SetText("+1")
-  scene.bagPlusN = plusN
+  -- Three bag slots, painted by BagMarkers' own painter (M.PaintVerdictMarker, M.SeatMarker): an upgrade with
+  -- its spec icon, a plain upgrade and a downgrade. They follow the Arrows tab at once: the corner, the nudge,
+  -- the size and the spec icon. The coin on the first slot stands for another addon's junk mark, so a clash
+  -- with the arrows shows here before it shows in the bags.
+  scene.bagSlots = {}
+  local faces = { "Interface\\Icons\\INV_Chest_Leather_01", "Interface\\Icons\\INV_Boots_05",
+    "Interface\\Icons\\INV_Gauntlets_04" }
+  for i = 1, 3 do
+    local slot = CreateFrame("Frame", nil, scene)
+    slot:SetSize(BAG_SLOT, BAG_SLOT)
+    local face = slot:CreateTexture(nil, "BACKGROUND")
+    face:SetAllPoints()
+    face:SetTexture(faces[i])
+    face:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    local badge = CreateFrame("Frame", nil, slot)
+    badge:EnableMouse(false)
+    badge:SetSize(24, 24)
+    badge:SetPoint("TOPRIGHT", slot, "TOPRIGHT", -2, -2)
+    slot.badge = badge
+    scene.bagSlots[i] = slot
+  end
+  scene.bag = scene.bagSlots[1]
+  local coin = scene.bag:CreateTexture(nil, "ARTWORK")
+  coin:SetSize(14, 14)
+  coin:SetPoint("TOPLEFT", scene.bag, "TOPLEFT", 1, -1)
+  coin:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+  scene.junkCoin = coin
   scene.caption = scene:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   scene.caption:SetJustifyH("LEFT")
-  scene.caption:SetText(BIT.L("Static sample: bag and quest arrows follow their settings; live upgrades "
-    .. "are rated against your gear."))
+  scene.caption:SetText(BIT.L("Static sample. The coin stands for another addon's junk mark; the arrows "
+    .. "follow the Arrows tab. Live upgrades are rated against your gear."))
   local rewards = CreateFrame("Frame", nil, scene)
   rewards:SetSize(184, 48)
   scene.questRewardRow = rewards
@@ -2385,12 +2385,15 @@ local MIN_SCALE, MAX_SCALE = 0.5, 2
 -- corner: a MARKER x MARKER box at the button's TOPRIGHT holding the arrow, with the
 -- ICON x ICON beneficiary icon inside the corner and the +N cue under it. All of it is
 -- scaled with the button mock, so the Scale slider zooms the badge as it zooms the button.
-local MARKER = 24
-local ICON = 12
-local MARKER_DX, MARKER_DY = -2, -2
-local ICON_DX, ICON_DY = -2, -12
-local PLUSN_DX, PLUSN_DY = -2, -16
-local ARROW_SHIFT = -14 -- the arrow moves left of the icon when the icon is shown
+-- The sample verdicts the three mock bag slots are painted with (BagMarkers' own verdict shape).
+local function sampleBagVerdicts()
+  local first, second = SAMPLE.specs[1], SAMPLE.specs[2] or SAMPLE.specs[1]
+  return {
+    { verdict = "up", beneficiaries = { { spec = { icon = first.icon } }, { spec = { icon = second.icon } } } },
+    { verdict = "up", beneficiaries = {} },
+    { verdict = "down" },
+  }
+end
 
 local function clamp(v, lo, hi)
   if type(v) ~= "number" then return lo end
@@ -2431,10 +2434,8 @@ local function renderMockTooltip(scene, style)
   end
   local titleDepth = scene.title and (measure(scene.title, fs + 8) + 8) or (fs + 16)
   -- Measure the footer before placing it below the complete tooltip.
-  local bagSize = clamp(math.floor(32 * scale + 0.5), 16, 48)
-  local k = bagSize / 32 -- the button mock's zoom: the corner badge follows the scale
-  local badgeSize = math.max(10, math.floor(MARKER * k + 0.5))
-  local badgeIcon = math.max(6, math.floor(ICON * k + 0.5))
+  local bagSize = clamp(math.floor(BAG_SLOT * scale + 0.5), 18, 54)
+  local k = bagSize / BAG_SLOT -- the slots' zoom: the arrows are painted at their real size and zoom with them
   local captionFont = clamp(fs - 2, 9, 14)
   local caption = scene.caption
   caption:ClearAllPoints()
@@ -2444,24 +2445,6 @@ local function renderMockTooltip(scene, style)
   caption:SetTextColor(0.7, 0.7, 0.7, opacity)
   local captionH = measure(caption, captionFont + 2)
   local bagTop
-  scene.bag:ClearAllPoints()
-
-  scene.bag:SetSize(bagSize, bagSize)
-  scene.bag:SetAlpha(opacity) -- the badge fades with the lines above it
-  -- The corner badge, at the button's own zoom: the arrow one icon-width left of the icon,
-  -- exactly where BagMarkers puts it on a real button.
-  scene.bagBadge:ClearAllPoints()
-  scene.bagBadge:SetPoint("TOPRIGHT", scene.bag, "TOPRIGHT", MARKER_DX * k, MARKER_DY * k)
-  scene.bagBadge:SetSize(badgeSize, badgeSize)
-  scene.arrow:ClearAllPoints()
-  scene.arrow:SetPoint("TOPRIGHT", scene.bagBadge, "TOPRIGHT", ARROW_SHIFT * k, 0)
-  scene.arrow:SetSize(badgeSize, badgeSize)
-  scene.bagSpecIcon:ClearAllPoints()
-  scene.bagSpecIcon:SetPoint("TOPRIGHT", scene.bagBadge, "TOPRIGHT", ICON_DX * k, ICON_DY * k)
-  scene.bagSpecIcon:SetSize(badgeIcon, badgeIcon)
-  scene.bagPlusN:ClearAllPoints()
-  scene.bagPlusN:SetPoint("TOPRIGHT", scene.bagBadge, "TOPRIGHT", PLUSN_DX * k, PLUSN_DY * k)
-  scene.bagPlusN:SetFont(font, math.max(7, math.floor(10 * k + 0.5)), outline)
   local rewardSize = math.max(18, math.floor(30 * scale + 0.5))
   local markerSize = math.max(14, math.floor(22 * scale + 0.5))
   local showQuestArrows = (settings or DEFAULTS).questMarkers ~= false
@@ -2498,10 +2481,22 @@ local function renderMockTooltip(scene, style)
   end
   tip:SetHeight(y + 2)
   bagTop = titleDepth + y + 16
-  scene.bag:SetPoint("TOPLEFT", 12, -bagTop)
+  local showBagArrows = (settings or DEFAULTS).bagMarkers ~= false
+  local verdicts = sampleBagVerdicts()
+  for i, slot in ipairs(scene.bagSlots) do
+    slot:SetScale(k)
+    slot:SetAlpha(opacity) -- the slots fade with the lines above them
+    slot:ClearAllPoints()
+    slot:SetPoint("TOPLEFT", scene, "TOPLEFT", (12 + (i - 1) * (bagSize + 8)) / k, -bagTop / k)
+    if type(M.SeatMarker) == "function" then pcall(M.SeatMarker, slot.badge, slot) end
+    if type(M.PaintVerdictMarker) == "function" then
+      pcall(M.PaintVerdictMarker, slot.badge, showBagArrows and verdicts[i] or nil)
+    end
+  end
+  local rewardTop = bagTop + bagSize + 12
   local rewardRow = scene.questRewardRow
   rewardRow:ClearAllPoints()
-  rewardRow:SetPoint("TOPLEFT", scene, "TOPLEFT", 12 + bagSize + 12, -bagTop)
+  rewardRow:SetPoint("TOPLEFT", scene, "TOPLEFT", 12, -rewardTop)
   rewardRow:SetSize(math.max(184, 3 * rewardSize + 16), captionFont + rewardSize + 8)
   rewardRow:SetAlpha(opacity)
   scene.questRewardLabel:ClearAllPoints()
@@ -2527,7 +2522,7 @@ local function renderMockTooltip(scene, style)
       bestArrow:SetShown(showQuestArrows)
     end
   end
-  scene:SetHeight(bagTop + math.max(bagSize, captionFont + rewardSize + 8) + captionH + 10)
+  scene:SetHeight(rewardTop + captionFont + rewardSize + 8 + captionH + 14)
   if scene.onLayout then scene.onLayout() end
 end
 
@@ -2596,43 +2591,54 @@ BIT.RegisterTab("StatsInfo", {
     geometry = false, border = false, font = true, scale = true, opacity = true },
   title = "StatsInfo",
   summary = "In an item's tooltip: what its stats change against the item you wear in that slot.",
-  -- the preview pane at the left, the four short sections at its right
-  width = 760, height = 520,
+  -- the preview card at the left, the settings in tabs at its right
+  width = 760, height = 560,
   build = function(parent)
-    local UI = BIT.UI
+    local UI, Rows = BIT.UI, BIT.Looks.Rows
+    local PANE_WIDTH = 300
+    local LAYOUT = { label = 200, control = 130 } -- the settings column is narrower than the other modules'
 
-    -- Left: the live preview. A static sample item (the preview never reads the live API)
-    -- with this module's own lines on it; it follows the boxes at the right and the TRY IT
-    -- sliders below it.
-    local pane = CreateFrame("Frame", nil, parent)
-    pane:SetPoint("TOPLEFT", 8, -8)
-    pane:SetWidth(336)
+    -- Left: the live preview card, like every other module's. A static sample item (the preview never reads
+    -- the live API): the tooltip lines, three bag slots and the quest rewards. It follows the settings at the
+    -- right and the TRY IT sliders under it.
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    card:SetPoint("TOPLEFT", 10, -10)
+    card:SetWidth(PANE_WIDTH + 16)
+    UI.Backdrop(card, 0.09)
+    local cardTitle = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    cardTitle:SetPoint("TOPLEFT", 12, -12)
+    cardTitle:SetText(BIT.L("Live preview"))
+    local cardRule = card:CreateTexture(nil, "ARTWORK")
+    cardRule:SetColorTexture(unpack(UI.COLOR.divider))
+    cardRule:SetHeight(1)
+    cardRule:SetPoint("TOPLEFT", 8, -34)
+    cardRule:SetPoint("TOPRIGHT", -8, -34)
+
+    local pane = CreateFrame("Frame", nil, card)
+    pane:SetPoint("TOPLEFT", 8, -40)
+    pane:SetWidth(PANE_WIDTH)
     pane.title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    pane.title:SetText(BIT.L("Live preview (sample item, not your gear)"))
     previewScene = pane
-    pane.onLayout = function()
-      parent:SetHeight(math.max(520, pane:GetHeight() + 220))
-    end
     pane:RegisterEvent("MODIFIER_STATE_CHANGED")
     pane:SetScript("OnEvent", function(_, _, key)
       if pane:IsVisible() and (key == "LSHIFT" or key == "RSHIFT") then renderPreview() end
     end)
     buildMockTooltip(pane)
 
-    -- TRY IT: the appearance the preview is drawn in -- the same three fields the shared
-    -- appearance editor writes, so either one moves the preview. Each row is registered in
-    -- tryItSliders so renderPreview re-seats its thumb on the stored value after any write.
+    -- TRY IT: the appearance the preview is drawn in -- the same three fields the shared appearance editor
+    -- writes, so either one moves the preview. Each row is registered in tryItSliders so renderPreview
+    -- re-seats its thumb on the stored value after any write.
     local tryIt = BIT.Looks.TryItHeader(pane, pane, 0, -10)
     local tryLayout = BIT.Looks.PREVIEW_LAYOUT
-    local fontSlider = BIT.Looks.Rows.Slider(pane, "Font size", 6, 24, 1,
+    local fontSlider = Rows.Slider(pane, "Font size", 6, 24, 1,
       styleGet("fontSize", 12), styleSet("fontSize"),
       { layout = tryLayout, suffix = " px",
         tooltip = "The size the preview's text is drawn in. The same field the shared appearance editor changes." })
-    local scaleSlider = BIT.Looks.Rows.Slider(pane, "Scale", 0.5, 2, 0.05,
+    local scaleSlider = Rows.Slider(pane, "Scale", 0.5, 2, 0.05,
       styleGet("scale", 1), styleSet("scale"),
       { layout = tryLayout, display = function(v) return string.format("%.2fx", v) end,
         tooltip = "Scales the preview's card, rows, icons and bag button. The same field the shared appearance editor changes." })
-    local opacitySlider = BIT.Looks.Rows.Slider(pane, "Opacity", 0, 1, 0.05,
+    local opacitySlider = Rows.Slider(pane, "Opacity", 0, 1, 0.05,
       styleGet("opacity", 1), styleSet("opacity"),
       { layout = tryLayout, display = function(v) return math.floor(v * 100 + 0.5) .. "%" end,
         tooltip = "How see-through the preview's lines and bag button are. The same field the shared appearance editor changes." })
@@ -2640,237 +2646,278 @@ BIT.RegisterTab("StatsInfo", {
     fontSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -4, -4)
     scaleSlider:SetPoint("TOPLEFT", fontSlider, "BOTTOMLEFT", 0, 0)
     opacitySlider:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", 0, 0)
-
-    -- Right: the settings in four short sections instead of one wall of text. Each block
-    -- is anchored to the one above it, so a wrapped block never runs into the next.
-    local area = CreateFrame("Frame", nil, parent)
-    area:SetPoint("TOPLEFT", pane, "TOPRIGHT", 14, 0)
-    area:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -8, 0)
-    area:SetHeight(430)
-
-    local tabs = {}
-    local active -- the tab whose content is on screen; re-asserted whenever the tab is shown
-    -- Only the active tab's content is ever shown. Every flip is its own pcall and Show/Hide,
-    -- not SetShown: not every widget the suites hand in has SetShown (see BagMarkers' own
-    -- guard), so one raising call used to stop the loop half way -- the clicked tab's content
-    -- never came up and the leftovers stayed visible together.
-    local function setVisible(widget, on)
-      if not widget then return end
-      pcall(on and widget.Show or widget.Hide, widget)
+    -- The card wraps the sample and the sliders, whatever height the sample measured itself at.
+    local AREA_HEIGHT = 500
+    pane.onLayout = function()
+      local height = 40 + (pane:GetHeight() or 0) + 10 + 20 + 3 * 26 + 14
+      card:SetHeight(height)
+      parent:SetHeight(math.max(AREA_HEIGHT, height) + 20)
     end
+
+    -- Right: the settings, in tabs, with "Reset this tab" under them.
+    local area = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    area:SetPoint("TOPLEFT", card, "TOPRIGHT", 10, 0)
+    area:SetPoint("RIGHT", parent, "RIGHT", -10, 0)
+    area:SetHeight(AREA_HEIGHT)
+    UI.Backdrop(area, 0.09)
+    local divider = area:CreateTexture(nil, "ARTWORK")
+    divider:SetColorTexture(unpack(UI.COLOR.divider))
+    divider:SetHeight(1)
+    divider:SetPoint("TOPLEFT", 8, -34)
+    divider:SetPoint("TOPRIGHT", -8, -34)
+
+    local controls = {} -- every settings row, refreshed after each change
+    local function refreshControls()
+      for _, row in ipairs(controls) do
+        if type(row.Refresh) == "function" then pcall(row.Refresh, row) end
+      end
+    end
+    -- One change path for every control and for "Reset this tab": the switch itself, what it turns on or off
+    -- in the game, the bags (and Baganator's corner marks) repainted, then the rows and the preview.
+    local function apply(key, value, quiet)
+      settings[key] = value
+      if key == "bagMarkers" then
+        if value then M.EnableBagMarkers() else M.DisableBagMarkers() end
+      elseif key == "questMarkers" then
+        if value then M.EnableQuestMarkers() else M.DisableQuestMarkers() end
+      elseif key == "worldMarkers" then
+        if value and M.EnableWorldMarkers then M.EnableWorldMarkers()
+        elseif not value and M.DisableWorldMarkers then M.DisableWorldMarkers() end
+      end
+      if quiet then return end
+      if type(M.RefreshBags) == "function" then M.RefreshBags(true) end
+      refreshControls()
+      renderPreview()
+    end
+    local function rowOpts(opts)
+      opts = opts or {}
+      return { tooltip = opts.tooltip, enabledIf = opts.enabledIf, suffix = opts.suffix, display = opts.display,
+        layout = LAYOUT, settings = function() return settings or DEFAULTS end,
+        register = function(row) controls[#controls + 1] = row end }
+    end
+
+    local tabs, active = {}, nil
+    local resetButton
     local function selectTab(tab)
-      if not tab or not tab.content then return end
+      if not tab then return end
+      if BIT.Looks and BIT.Looks.ClosePickList then BIT.Looks.ClosePickList() end
       active = tab
       for _, other in ipairs(tabs) do
         local on = other == tab
-        setVisible(other.content, on)
-        if other.button then pcall(BIT.UI.TabSelected, other.button, on) end
+        -- Show/Hide under pcall, one tab at a time: a raising widget must not leave two contents up.
+        pcall(on and other.column.Show or other.column.Hide, other.column)
+        pcall(UI.TabSelected, other.button, on)
       end
+      if resetButton then resetButton:SetShown(#tab.keys > 0) end
     end
     local function addTab(name)
-      local tab = {}
-      tab.content = CreateFrame("Frame", nil, area)
-      tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -32)
-      tab.content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", 0, 0)
-      tab.content:Hide()
+      local tab = { keys = {}, y = 0 }
+      tab.column = UI.ScrollColumn(area)
+      tab.column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
+      tab.column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
+      tab.column:Hide()
+      tab.content = tab.column.content
       local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
-      -- "caption", not "text": the settings and the suites read a frame's .text as the
-      -- string it shows, so a font string must not live under that name
-      button:SetText(name)
+      -- "caption", not "text": the settings read a frame's .text as the string it shows
+      button:SetText(BIT.L(name))
       button.caption = button:GetFontString()
-      button:SetSize(BIT.UI.TabWidth(button.caption), 26)
+      button:SetSize(UI.TabWidth(button.caption), 26)
       button.caption:SetPoint("CENTER")
-      BIT.UI.SkinTabButton(button, button.caption)
+      UI.SkinTabButton(button, button.caption)
       local previous = tabs[#tabs]
       if previous then
-        button:SetPoint("LEFT", previous.button, "RIGHT", BIT.UI.TAB_GAP, 0)
+        button:SetPoint("LEFT", previous.button, "RIGHT", UI.TAB_GAP, 0)
       else
-        button:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -2)
+        button:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -8)
       end
       button:SetScript("OnClick", function() selectTab(tab) end)
       tab.button = button
-      function tab:place(widget, gap)
-        widget:ClearAllPoints()
-        if self.last then
-          widget:SetPoint("TOPLEFT", self.last, "BOTTOMLEFT", 0, -(gap or 6))
-        else
-          widget:SetPoint("TOPLEFT", self.content, "TOPLEFT", 4, 0)
-        end
-        self.last = widget
-        return widget
+
+      function tab:place(row, height)
+        self.y = UI.PlaceRow(row, self.y, row.standard and row:GetHeight() or height or 26)
+        return row
       end
-      function tab:heading(text)
-        local label = self.content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetJustifyH("LEFT")
-        label:SetText(text)
-        label:SetTextColor(0.85, 0.7, 0.3)
-        self:place(label, 0)
-        label:SetPoint("RIGHT", self.content, "RIGHT", -4, 0)
-        return label
+      function tab:header(text)
+        if self.y > 0 then self.y = self.y + 8 end
+        return self:place(UI.Header(self.content, text), 26)
       end
-      function tab:body(text, muted)
-        local block = self.content:CreateFontString(nil, "OVERLAY",
-          muted and "GameFontDisableSmall" or "GameFontHighlightSmall")
-        block:SetJustifyH("LEFT")
-        block:SetText(text)
-        self:place(block, 8)
-        block:SetPoint("RIGHT", self.content, "RIGHT", -4, 0)
-        return block
+      function tab:check(key, label, opts)
+        self.keys[#self.keys + 1] = key
+        return self:place(Rows.Check(self.content, label,
+          function() return (settings or DEFAULTS)[key] end,
+          function(v) apply(key, v) end, rowOpts(opts)))
       end
-      table.insert(tabs, tab)
+      function tab:slider(key, label, min, max, step, opts)
+        self.keys[#self.keys + 1] = key
+        return self:place(Rows.Slider(self.content, label, min, max, step,
+          function() return tonumber((settings or DEFAULTS)[key]) or DEFAULTS[key] end,
+          function(v) apply(key, v) end, rowOpts(opts)))
+      end
+      function tab:choice(key, label, list, opts)
+        self.keys[#self.keys + 1] = key
+        return self:place(Rows.Choice(self.content, label, list,
+          function() return (settings or DEFAULTS)[key] end,
+          function(id) apply(key, id) end, rowOpts(opts)))
+      end
+      -- A wrapped paragraph (already translated); muted is the grey of a footnote.
+      function tab:text(text, muted)
+        local row = CreateFrame("Frame", nil, self.content)
+        row.text = row:CreateFontString(nil, "OVERLAY", muted and "GameFontDisableSmall" or "GameFontHighlightSmall")
+        row.text:SetPoint("TOPLEFT", 0, 0)
+        row.text:SetWidth(LAYOUT.label + LAYOUT.control + 40)
+        row.text:SetJustifyH("LEFT")
+        row.text:SetWordWrap(true)
+        row.text:SetText(text)
+        local h = row.text:GetStringHeight()
+        h = math.max(14, type(h) == "number" and math.ceil(h) or 14)
+        row:SetHeight(h)
+        return self:place(row, h + 8)
+      end
+      function tab:finish() self.column:Fit(self.y + 12) end
+      tabs[#tabs + 1] = tab
       return tab
     end
 
-    -- Display: the boxes, each with what it does on hover. The beneficiary-icon box greys
-    -- out with the arrows off: it has nothing to sit on then.
-    local display = addTab(BIT.L("Display"))
-    local checkRows = {}
-    local updateBagIconState
-    local function toggle(key, v)
-      settings[key] = v
-      if key == "bagMarkers" then
-        if v then M.EnableBagMarkers() else M.DisableBagMarkers() end
-        if updateBagIconState then updateBagIconState() end
-      elseif key == "questMarkers" then
-        if v then M.EnableQuestMarkers() else M.DisableQuestMarkers() end
-      elseif key == "worldMarkers" then
-        if v and M.EnableWorldMarkers then M.EnableWorldMarkers()
-        elseif M.DisableWorldMarkers then M.DisableWorldMarkers() end
-      elseif key == "bagSpecIcons" then
-        M.RefreshBags(true)
-      end
-      renderPreview()
-    end
-    local displayKeys = {} -- what "Reset this tab" puts back: this tab's boxes, nothing from another tab
-    local function box(key, label, tooltip)
-      displayKeys[#displayKeys + 1] = key
-      local check = BIT.Looks.Rows.Check(display.content, label,
-        function() return (settings or DEFAULTS)[key] end,
-        function(v) toggle(key, v) end, { tooltip = tooltip })
-      display:place(check)
-      checkRows[#checkRows + 1] = check
-      return check
-    end
-    box("compare", "Show what the item changes against the equipped one",
-      "The differences against the item you wear in that slot, in the item's tooltip.")
-    box("worth", "Under each stat, what it gives you",
-      "Health, mana, armor, attack power, crit, hit and the rest, under each difference. "
-        .. "The Legend tab has the icons.")
-    box("specs", "How each spec of your class rates the item",
-      "The Ratings tab explains the numbers.")
-    box("icons", "Icons instead of words",
-      "Icons and one line each, instead of words.")
-    box("bagMarkers", "Arrows on bag items",
-      "Green up for an upgrade, red down only when every path is worse. The Bag arrows tab explains them.")
-    local bagSpecIcons = box("bagSpecIcons", "The beneficiary spec icon on an up arrow",
-      "+N for the rest of the specs it is an upgrade for, ~ for the approximate healer score. "
-        .. "Needs the arrows on.")
-    box("questMarkers", "Quest reward arrows",
-      "A green up arrow on every usable upgrade. The reward with the highest positive "
-        .. "'% better' rating shown in its tooltip gets a second arrow. If nothing is an "
-        .. "upgrade, a coin marks the choice with the highest vendor price.")
-    box("worldMarkers", "Arrows on loot, rolls and merchants",
-      "The same bag verdict on loot slots, need/greed rolls and merchant buttons.")
-    -- The row dims and disables its check box itself while the bag arrows are off.
-    bagSpecIcons.enabledIf = function() return (settings or DEFAULTS).bagMarkers end
-    updateBagIconState = function() bagSpecIcons:Refresh() end
-    display:body(BIT.L("Hover a box for what it does. The preview at the left follows these boxes at once."))
-    -- Reset: the settings above, back to their defaults. The appearance and the other tabs are not touched.
-    local reset = BIT.Looks.ResetButton(display.content, function()
-      for _, k in ipairs(displayKeys) do settings[k] = DEFAULTS[k] end
-      if settings.bagMarkers then M.EnableBagMarkers() else M.DisableBagMarkers() end
-      if settings.questMarkers then M.EnableQuestMarkers() else M.DisableQuestMarkers() end
-      if settings.worldMarkers ~= false and M.EnableWorldMarkers then M.EnableWorldMarkers()
-      elseif M.DisableWorldMarkers then M.DisableWorldMarkers() end
-      M.RefreshBags(true)
-      for _, c in ipairs(checkRows) do c:Refresh() end
-      updateBagIconState()
-      renderPreview()
-    end)
-    display:place(reset, 12)
+    -- Tooltip: what the item tooltip shows.
+    local tooltipTab = addTab("Tooltip")
+    tooltipTab:header("IN THE ITEM'S TOOLTIP")
+    tooltipTab:check("compare", "Show what the item changes against the equipped one",
+      { tooltip = "The differences against the item you wear in that slot, in the item's tooltip." })
+    tooltipTab:check("worth", "Under each stat, what it gives you",
+      { tooltip = "Health, mana, armor, attack power, crit, hit and the rest, under each difference. "
+        .. "The Help tab has the icons." })
+    tooltipTab:check("specs", "How each spec of your class rates the item",
+      { tooltip = "The Help tab explains the numbers." })
+    tooltipTab:check("icons", "Icons instead of words",
+      { tooltip = "Icons and one line each, instead of words." })
+    tooltipTab:header("HOW MUCH OF IT")
+    tooltipTab.keys[#tooltipTab.keys + 1] = "detail"
+    tooltipTab:place(Rows.Check(tooltipTab.content, "Always show the full tooltip",
+      function() return (settings or DEFAULTS).detail == "full" end,
+      function(v) apply("detail", v and "full" or "compact") end,
+      rowOpts({ tooltip = "Off: one line, the best spec and its arrow. Hold Shift for the full breakdown." })))
+    tooltipTab:text(BIT.L("Hold Shift for the full breakdown."), true)
 
-    -- Legend: the icons, and what the worth line says in words.
-    local legend = addTab(BIT.L("Legend"))
-    legend:heading(BIT.L("What the icons stand for"))
+    -- Arrows: where the upgrade arrows show, and where on the item they sit.
+    local arrowsOn = function(s) return s.bagMarkers or s.worldMarkers end
+    local arrows = addTab("Arrows")
+    arrows:header("WHERE THE ARROWS SHOW")
+    arrows:check("bagMarkers", "Arrows on bag items",
+      { tooltip = "Green up for an upgrade, red down only when every path is worse. The Help tab explains them." })
+    arrows:check("bagSpecIcons", "The beneficiary spec icon on an up arrow",
+      { enabledIf = function(s) return s.bagMarkers end,
+        tooltip = "+N for the rest of the specs it is an upgrade for, ~ for the approximate healer score. "
+          .. "Needs the arrows on." })
+    arrows:check("questMarkers", "Quest reward arrows",
+      { tooltip = "A green up arrow on every usable upgrade. The reward with the highest positive "
+        .. "'% better' rating shown in its tooltip gets a second arrow. If nothing is an "
+        .. "upgrade, a coin marks the choice with the highest vendor price." })
+    arrows:check("worldMarkers", "Arrows on loot, rolls and merchants",
+      { tooltip = "The same bag verdict on loot slots, need/greed rolls and merchant buttons." })
+    arrows:header("WHERE ON THE ITEM")
+    arrows:choice("bagArrowCorner", "Corner", {
+      { id = "topright", label = "Top right" },
+      { id = "topleft", label = "Top left" },
+      { id = "bottomright", label = "Bottom right" },
+      { id = "bottomleft", label = "Bottom left" },
+    }, { enabledIf = arrowsOn,
+      tooltip = "The corner of the item the arrow and the spec icon sit in, for when another addon's mark "
+        .. "(a junk coin, an item level) already uses one. Baganator places its corner marks itself: pick the "
+        .. "same corner in its Icon Corners settings. Quest reward arrows keep their own place." })
+    arrows:slider("bagArrowX", "Horizontal nudge", -20, 20, 1,
+      { enabledIf = arrowsOn, suffix = " px", tooltip = "Pixels right (+) or left (-) of the corner." })
+    arrows:slider("bagArrowY", "Vertical nudge", -20, 20, 1,
+      { enabledIf = arrowsOn, suffix = " px", tooltip = "Pixels up (+) or down (-) from the corner." })
+    arrows:slider("bagArrowScale", "Arrow size", 50, 150, 5,
+      { enabledIf = arrowsOn, suffix = "%", tooltip = "The size of the arrow, the spec icon and the +N cue." })
+    arrows:check("bagNativeUp", "Use the game's own upgrade arrow in Blizzard's bags",
+      { enabledIf = function(s) return s.bagMarkers end,
+        tooltip = "Blizzard's bag buttons have an upgrade arrow of their own, in a place the game chose. "
+          .. "Checked: an upgrade lights that one. Unchecked: this addon's arrow is drawn instead, in the "
+          .. "corner chosen above. Other bag addons always get this addon's arrow." })
+
+    -- Help: the legend, how the ratings come about, when an arrow shows, and the probe.
+    local help = addTab("Help")
+    help:header("WHAT THE ICONS STAND FOR")
     local words = {}
     for _, kind in ipairs({ "armor", "ap", "crit", "hit", "haste", "expertise", "dodge", "parry", "block", "blockvalue", "defense",
       "health", "mana", "spellcrit", "regen", "hpregen", "healing", "spellpower" }) do
       words[#words + 1] = icon(ICONS[kind], 12) .. " " .. BIT.L(WORTH_WORDS[kind])
     end
-    legend:body(table.concat(words, "    "))
-    legend:body(BIT.L("Under each difference: what the stats give this character -- the game's own numbers, "
+    help:text(table.concat(words, "    "))
+    help:text(BIT.L("Under each difference: what the stats give this character -- the game's own numbers, "
       .. "worked out as its character sheet works them out. Green is up, red is down."))
-    legend:body(BIT.L("Armor is 2 per Agility and mana regeneration a quarter of Spirit, as measured on Forever. "
+    help:text(BIT.L("Armor is 2 per Agility and mana regeneration a quarter of Spirit, as measured on Forever. "
       .. "Health regeneration from Spirit is the character sheet's own number (standing, out of combat), taken "
       .. "per point of Spirit: it assumes the two are proportional. "
       .. "In combat the game may hide these numbers; then the line is left out."))
-
-    -- Ratings: how the spec numbers come about, and what they do not claim.
-    local ratings = addTab(BIT.L("Ratings"))
-    ratings:heading(BIT.L("How each spec rates the item"))
-    ratings:body(BIT.L("Each spec of your class rates the item against what you wear: \"25% better dmg spec\" "
+    help:header("HOW EACH SPEC RATES THE ITEM")
+    help:text(BIT.L("Each spec of your class rates the item against what you wear: \"25% better dmg spec\" "
       .. "means its stats are worth a quarter more to that spec."))
-    ratings:body(BIT.L("A tank has two numbers: for survival (less damage taken) and for threat gen. (holding aggro)."))
-    ratings:body(BIT.L("With nothing worth comparing, or a change past the cap: \">300% ...\", at most triple."))
-    ratings:body(BIT.L("Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is "
+    help:text(BIT.L("A tank has two numbers: for survival (less damage taken) and for threat gen. (holding aggro)."))
+    help:text(BIT.L("With nothing worth comparing, or a change past the cap: \">300% ...\", at most triple."))
+    help:text(BIT.L("Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is "
       .. "rated by this addon's own starter heuristic, and its line is marked \"(approx.)\": "
       .. "an approximate item score, not a measured healing gain."))
-    ratings:body(BIT.L("Its weights are design choices of this addon (tools/data/healer_weights.json): "
+    help:text(BIT.L("Its weights are design choices of this addon (tools/data/healer_weights.json): "
       .. "1 x +Healing, 1 x Spell Power, 0.5 x Intellect, 0.5 x Spirit and 2 x MP5. "
       .. "Every other stat counts for nothing to it."))
-    ratings:body(BIT.L("The other ratings use ForeverSim's stat weights, measured on a level 60 build of each spec "
+    help:text(BIT.L("The other ratings use ForeverSim's stat weights, measured on a level 60 build of each spec "
       .. "with its own talents, gear and buffs: below 60 they are an estimate."), true)
-    ratings:body(BIT.L("A weapon's damage per second counts as the simulator weighs it for the spec: main hand, "
+    help:text(BIT.L("A weapon's damage per second counts as the simulator weighs it for the spec: main hand, "
       .. "off hand and ranged slot apart."), true)
-    ratings:body(BIT.L("Not counted: what a hunter's pet gets from your stats, weapon skill, and Spirit for the "
+    help:text(BIT.L("Not counted: what a hunter's pet gets from your stats, weapon skill, and Spirit for the "
       .. "specs the simulator does not weigh it for."), true)
-    local detailBox = BIT.Looks.Rows.Check(ratings.content, "Always show the full tooltip",
-      function() return (settings or DEFAULTS).detail == "full" end,
-      function(v)
-        settings.detail = v and "full" or "compact"
-        renderPreview()
-      end,
-      { tooltip = "Off: one line, the best spec and its arrow. Hold Shift for the full breakdown." })
-    ratings:place(detailBox)
-    checkRows[#checkRows + 1] = detailBox
-    ratings:body(BIT.L("Hold Shift for the full breakdown."))
-
-    -- Bag arrows: the two arrows, and when neither shows.
-    local bags = addTab(BIT.L("Bag arrows"))
-    bags:heading(BIT.L("Arrows on bag items"))
-    bags:body(BIT.L("On the game's own bags and the Baganator bag grid: green up when at least one spec's score "
+    help:header("ARROWS ON BAG ITEMS")
+    help:text(BIT.L("On the game's own bags and the Baganator bag grid: green up when at least one spec's score "
       .. "is outright better and none of it worse."))
-    bags:body(BIT.L("Red down only when every replacement path is strictly worse for every spec. "
+    help:text(BIT.L("Red down only when every replacement path is strictly worse for every spec. "
       .. "Mixed, equal or unknown: no arrow."))
-    bags:body(BIT.L("Always against what you wear in that slot, never a BiS verdict."))
-    bags:body(BIT.L("Stats the simulator does not model are compared conservatively by the raw differences, "
+    help:text(BIT.L("Always against what you wear in that slot, never a BiS verdict."))
+    help:text(BIT.L("Stats the simulator does not model are compared conservatively by the raw differences, "
       .. "with no spec icon; the healer's approximate score gets a ~ icon."))
-    bags:body(BIT.L("While the client hides stats (in combat) or the item's data has not arrived, no arrow is shown."))
-
-    selectTab(tabs[1])
-
-    -- The probe row (a direct child of the tab's content): what /upt probe records.
-    local count -- SI-751: declared before the button so its OnClick sees the local
-    local button = UI.Button(parent, BIT.L("Record the probe"), 170, function()
-      M.Probe()
-      -- SI-751: the counter must refresh on click, not only on OnShow.
+    help:text(BIT.L("While the client hides stats (in combat) or the item's data has not arrived, no arrow is shown."))
+    -- The probe row: what /upt probe records.
+    help:header("DIAGNOSTICS")
+    local probeRow = CreateFrame("Frame", nil, help.content)
+    probeRow:SetHeight(24)
+    local count -- declared before the button so its OnClick sees the local
+    local function showCount()
       local probes = BIT.DB().probes
       count:SetText(string.format(BIT.L("%d recorded so far"), type(probes) == "table" and #probes or 0))
+    end
+    local probeButton = UI.Button(probeRow, BIT.L("Record the probe"), 170, function()
+      M.Probe()
+      showCount() -- the counter refreshes on the click, not only when the tab is shown
     end)
-    button:SetPoint("TOPLEFT", opacitySlider, "BOTTOMLEFT", 0, -12)
-    count = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    count:SetPoint("LEFT", button, "RIGHT", 10, 0)
+    probeButton:SetPoint("LEFT", 0, 0)
+    count = probeRow:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    count:SetPoint("LEFT", probeButton, "RIGHT", 10, 0)
+    help:place(probeRow, 30)
+
+    for _, tab in ipairs(tabs) do tab:finish() end
+
+    -- "Reset this tab": the open tab's own settings back to their defaults; the appearance is not touched.
+    resetButton = BIT.Looks.ResetButton(area, function()
+      if not active then return end
+      for _, key in ipairs(active.keys) do apply(key, DEFAULTS[key], true) end
+      if type(M.RefreshBags) == "function" then M.RefreshBags(true) end
+      refreshControls()
+      renderPreview()
+    end)
+    resetButton:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -10, 10)
+
+    selectTab(tabs[1])
     parent:SetScript("OnShow", function()
       -- re-asserted here too: whatever re-showed a content in between, one tab at a time
       selectTab(active or tabs[1])
-      local probes = BIT.DB().probes
-      count:SetText(string.format(BIT.L("%d recorded so far"), type(probes) == "table" and #probes or 0))
-      for _, c in ipairs(checkRows) do c:Refresh() end
-      updateBagIconState()
+      showCount()
+      refreshControls()
       renderPreview()
     end)
     -- drawn once here too: the preview is already there the moment the tab is built
-    updateBagIconState()
+    showCount()
+    refreshControls()
     renderPreview()
   end,
 })
