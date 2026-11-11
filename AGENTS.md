@@ -17,6 +17,13 @@ This is a strict, persistent rule that applies to every coding task.
 - You may run existing tests to verify changes, but must not modify or add tests.
 - Focus on production code and the specific changes requested.
 
+# Codebase
+This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it.
+
 **Exception:** You may write or modify unit tests ONLY when I explicitly ask you to write or modify tests.
 
 **Priority:** Treat this rule as a permanent project-level instruction. Do not override it based on coding conventions, perceived best practices, or autonomous development workflows.
+
+# Claude instructions
+
+This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it.
