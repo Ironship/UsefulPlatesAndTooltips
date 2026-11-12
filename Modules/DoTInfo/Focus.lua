@@ -55,9 +55,18 @@ local STRATA_RANK = {
 }
 local layerCheckedAt, layerBar, topStrata, topLevel = -math.huge, nil, nil, nil
 
+-- Hidden frames are left out (the frame itself always counts): they draw nothing, so they cannot cover the marker,
+-- and counting them pulled it out of the focus frame's layer. Edit Mode keeps a hidden selection frame (MEDIUM,
+-- level 1000) under every Blizzard unit frame whose own art is LOW, and the marker followed it into the strata of the
+-- world map, above the map's art.
 local function topLayer(root)
     local bestStrata, bestLevel = "BACKGROUND", 0
     local function visit(frame, depth)
+        if depth > 0 then
+            -- hidden only when the client says so: an unreadable or secret answer counts as shown
+            local okShown, shown = pcall(frame.IsShown, frame)
+            if okShown and not isSecret(shown) and shown == false then return end
+        end
         -- Some of Blizzard's frames report a secret strata/level; those are skipped (their children aren't).
         local okS, strata = pcall(frame.GetFrameStrata, frame)
         local okL, level = pcall(frame.GetFrameLevel, frame)

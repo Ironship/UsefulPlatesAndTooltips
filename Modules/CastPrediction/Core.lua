@@ -1272,12 +1272,21 @@ local STRATA_RANK = {
     BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
 }
 local layerCheckedAt, lastStrata, lastLevel = 0, nil, nil
+-- Highest strata/level of the frame and of what is shown under it. A hidden frame draws nothing, so it cannot cover our
+-- marks, and counting it pulled them out of the unit frame's layer: Edit Mode keeps a hidden selection frame (MEDIUM,
+-- level 1000) under every Blizzard unit frame whose own art is LOW, and the marks followed it into the strata of the
+-- world map, above the map's art. The frame itself always counts, shown or not.
 local function topLayerOf(frame)
     -- A missing custom unit frame must not expand the scan to the whole UI.
     if not frame or frame == UIParent then return end
     local topStrata, topLevel = "BACKGROUND", 0
     local function visit(f, depth)
         if f == markerClip then return end
+        if depth > 0 then
+            -- hidden only when the client says so: an unreadable or secret answer counts as shown
+            local okShown, shown = pcall(f.IsShown, f)
+            if okShown and not isSecret(shown) and shown == false then return end
+        end
         local ok, forbidden = pcall(function() return f.IsForbidden and f:IsForbidden() end)
         if not ok or isSecret(forbidden) or forbidden then return end
         local readOK, strata, level = pcall(function() return f:GetFrameStrata(), f:GetFrameLevel() end)

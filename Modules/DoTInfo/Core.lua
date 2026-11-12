@@ -2584,14 +2584,23 @@ local STRATA_RANK = {
 }
 local LAYER_CHECK_INTERVAL = 1
 
--- Highest strata/level anywhere in the target frame's tree. Blizzard (Edit Mode) re-layers the target
+-- Highest strata/level of the target frame and of what is shown under it. Blizzard (Edit Mode) re-layers the target
 -- frame after addons load, so a level picked once at load ends up underneath the health bar and portrait.
+-- A hidden frame draws nothing, so it cannot cover our marks, and counting it pulled them out of the target frame's
+-- layer: Edit Mode keeps a hidden selection frame (MEDIUM, level 1000) under every Blizzard unit frame whose own art
+-- is LOW, and the marker and skull followed it into the strata of the world map, above the map's art. The frame
+-- itself always counts, shown or not. (No new file-level local here: this file is at Lua's limit of 200.)
 local function targetFrameTopLayer()
     local root = targetHost or healthBar
     -- Hidden custom frames resolve to nil. Never scan the entire UI as a fallback.
     if not root or root == UIParent then return end
     local topStrata, topLevel = "BACKGROUND", 0
     local function visit(frame, depth)
+        if depth > 0 then
+            -- hidden only when the client says so: an unreadable or secret answer counts as shown
+            local okShown, shown = pcall(frame.IsShown, frame)
+            if okShown and not isSecret(shown) and shown == false then return end
+        end
         local ok, forbidden = pcall(function() return frame.IsForbidden and frame:IsForbidden() end)
         if not ok or isSecret(forbidden) or forbidden then return end
         -- Some of Blizzard's frames report a secret strata/level in Forever; those can't be compared, so skip
