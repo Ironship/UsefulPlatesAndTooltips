@@ -4,6 +4,7 @@
 -- The icon is lit by a StatusBar whose fill is compared to the mob's health by the widget (health is secret in
 -- combat), so everything here only decides the number the bar is given:
 --   * casts still in progress are left out (an interrupt or a miss would take them back);
+--   * the optional weapon hit (settings: swingKill) adds one average swing, wand or ranged shot;
 --   * the Kill margin (killMargin, 50-100%) leaves room for heals, regeneration and estimate error;
 --   * a mob whose shield absorbed one of our ticks in the last seconds shows no icon (ns.shielded).
 local _, BIT = ...
@@ -19,7 +20,15 @@ function ns.lethalDamage(entries)
     end
     local db = ns.db
     local margin = math.max(0, math.min(db and tonumber(db.killMargin) or 100, 100)) / 100
-    return sum * margin
+    local swing = 0
+    if db and db.swingKill and sum > 0 then
+        local sdi = BIT.modules.SpellDamageInfo
+        if type(sdi) == "table" and type(sdi.SwingAverage) == "function" then
+            local ok, value = pcall(sdi.SwingAverage)
+            if ok and type(value) == "number" then swing = value end
+        end
+    end
+    return (sum + swing) * margin
 end
 
 -- Core.lua's check (absorbs, known protection auras) plus what the combat log taught us: an ABSORB on one of our

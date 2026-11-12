@@ -423,6 +423,13 @@ function ns.MainHandAverage()
   return avg > 0 and avg or nil
 end
 
+-- The average hit of the player's best weapon attack (melee swing, or wand / bow / gun shot), as the character
+-- sheet reports it (attack power included), or nil. DoTInfo's "next hit kills" check adds it to the DoTs' damage.
+function ns.SwingAverage()
+  local best = math.max(weaponStats.melee or 0, weaponStats.ranged or 0)
+  return best > 0 and best or nil
+end
+
 -- The target's attack speed, for what a lower attack power takes off each of its hits: Classic's
 -- rule, 14 attack power are 1 damage for each second of weapon speed (the rule WeaponView uses for
 -- the player's own weapon). UnitAttackSpeed can be secret in combat (SecretWhenUnitStatsRestricted):

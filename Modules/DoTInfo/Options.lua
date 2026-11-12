@@ -500,6 +500,10 @@ local function buildTabs()
         { tooltip = "Shows an icon at the chosen position when your DoTs on the target will kill it." })
     icon:choice("skullIcon", "Kill icon", lists.icons)
     icon:slider("skullSize", "Icon size", 20, 128, 2)
+    icon:checkbox("swingKill", "Count one weapon hit", { tooltip = "The kill icon also shows when your DoTs plus one "
+        .. "average hit of your best weapon attack (melee swing, wand or ranged shot) would kill. The hit is "
+        .. "the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. "
+        .. "The marker itself still shows only the DoTs." })
     icon:slider("killMargin", "Kill margin", 50, 100, 5, { suffix = "%", tooltip = "The icon shows only when this "
         .. "share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the "
         .. "icon; 100% compares the full estimate. The marker always shows the full estimate." })

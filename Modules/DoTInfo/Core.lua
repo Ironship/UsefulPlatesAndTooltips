@@ -173,6 +173,7 @@ local DEFAULTS = {
     -- Accuracy
     waitFirstTick = "off",
     estimateDuringCast = true,
+    swingKill = false, -- the kill icon also counts one average weapon hit (melee swing, wand or ranged shot)
     killMargin = 90, -- % of the estimate the kill icon trusts: heals, regen and estimate error eat the rest
     targetOverMouseover = false, -- a same-named mob under the mouse doesn't blank a target cast (_namedEnemyKey)
     -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
