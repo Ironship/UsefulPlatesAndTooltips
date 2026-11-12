@@ -64,6 +64,23 @@ do
     TICK_SHAPES["Curse of Agony"] = agony
 end
 
+-- Amplify Curse (Forever spell 18288): "Increases the effect of your next Curse of Weakness or Bane of Agony by 50%, or
+-- your next Curse of Exhaustion by 20%. Lasts 30 sec." One charge, 3 min cooldown (the client's tables, build 70790).
+-- A tooltip number and a learned tick size are both what the spell does without the buff, and a buffed tick is far
+-- outside what the tick matching accepts, so Agony's buffed ticks were thrown away as someone else's hits and the
+-- marker stayed on the unbuffed damage. The buff itself is secret in combat, its cast is not: the charge goes to the next
+-- cast of one of the curses below (by name: the tables answer to every language), whatever becomes of that cast.
+-- "start" is the Amplify Curse cast itself (also found by its spell id), "boost" raises that DoT's ticks by `boost`, and
+-- "charge" only takes the charge (those curses deal no damage). A DoT flagged this way is checked against its ticks
+-- (tryRelearn): if they say the buff did not reach it, it goes back to its own size. Nothing else ever flags a DoT, so
+-- every DoT cast without Amplify Curse behaves exactly as before.
+ns.AMPLIFY = { spellID = 18288, seconds = 30, boost = 1.5 }
+ns.AMPLIFY_USES = {
+    ["Amplify Curse"] = "start",
+    ["Bane of Agony"] = "boost", ["Curse of Agony"] = "boost", -- Forever's name and Classic's
+    ["Curse of Weakness"] = "charge", ["Curse of Exhaustion"] = "charge",
+}
+
 -- Descriptions that don't name their school (Siphon Life's, and in Chinese also Corruption's, Fireball's and
 -- Pyroblast's periodic part). Ported from Does It Die v0.8.3.
 local SCHOOL_BY_NAME = {
@@ -99,7 +116,7 @@ ns.DELAYED_DOTS = { ["Wyvern Sting"] = true }
 ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
-    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS }
+    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS, ns.AMPLIFY_USES }
 ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -442,9 +459,12 @@ end
 -- Before its own first tick a DoT keeps the size it was applied with (learnedAtApply): the store is shared by
 -- every mob, so another mob's tick (a different debuff set) must not move this one's marker. A DoT applied with
 -- nothing learned still picks up a size learned since.
+-- dot.boost (Amplify Curse, ns.AMPLIFY) is what the cast's buff adds to a DoT's own size: the learned size and the
+-- description hold the unbuffed one, so they are scaled; the observed ticks are the buffed DoT's own and are not.
 local function expectedTick(dot)
     if dot.normalTicks > 0 then return dot.tickSum / dot.normalTicks end
-    return dot.learnedAtApply or (dot.tickKey and db.ticks[dot.tickKey]) or (dot.total / dot.totalTicks)
+    return (dot.learnedAtApply or (dot.tickKey and db.ticks[dot.tickKey]) or (dot.total / dot.totalTicks))
+        * (dot.boost or 1)
 end
 
 -- Which tick of the DoT (1 = first) lands around `when`.
@@ -980,6 +1000,40 @@ function ns.ReadSpellText(spellID, desc)
     return parseDot(desc, 1)
 end
 
+-- Amplify Curse (ns.AMPLIFY). Every successful cast of the player comes here first: the Amplify Curse cast leaves a
+-- charge, and the next cast of a curse in ns.AMPLIFY_USES takes it, whatever becomes of that cast (a resisted curse
+-- spends it too). Returns the factor that cast's DoT is raised by, or nil. `name` may be missing (the spell's name did
+-- not load): the Amplify Curse cast is found by its id as well. Fields on ns: this file is at Lua's limit of 200
+-- local variables.
+function ns._amplifyCast(spellID, name)
+    if ns.Retail then return nil end -- no such buff there, and Retail reads its auras
+    local amplify = ns.AMPLIFY
+    local use = type(name) == "string" and not isSecret(name) and ns.AMPLIFY_USES[name] or nil
+    if spellID == amplify.spellID or use == "start" then
+        ns._amplifyAt = GetTime()
+        trace(string.format("AMPLIFY CURSE cast: its charge goes to the next curse within %ds", amplify.seconds))
+        return nil
+    end
+    if not use or not ns._amplifyAt then return nil end
+    local age = GetTime() - ns._amplifyAt
+    ns._amplifyAt = nil
+    if age > amplify.seconds then
+        trace(string.format("AMPLIFY CURSE had run out %.1fs before %s", age - amplify.seconds, name))
+        return nil
+    end
+    if use == "boost" then return amplify.boost end
+    trace(string.format("AMPLIFY CURSE charge went into %s", name))
+end
+
+-- The sizes the ticks of a DoT may have, the expected one first. Only a DoT the cast events flagged as buffed has
+-- two: the buffed one, or its own when the buff did not reach it. An unflagged DoT keeps its own size alone: ticks
+-- 1.5 times the usual are not allowed to turn it into a buffed one, since other players' DoTs and the next DoT's
+-- ticks pass for such hits now and then.
+function ns._boostChoices(dot)
+    if dot.boost and dot.boost ~= 1 then return { dot.boost, 1 } end
+    return { 1 }
+end
+
 -- Returns the target key the DoT was applied to, or nil if the cast wasn't a tracked DoT.
 local function onPlayerCast(spellID, castGUID)
     if isSecret(spellID) or type(spellID) ~= "number" then return end
@@ -993,6 +1047,8 @@ local function onPlayerCast(spellID, castGUID)
     if ns.Retail then ok, name, desc = pcall(ns.Retail.SpellDescription, spellID, spellNameAndDescription) end
     if not ns.Retail then ok, name, desc = pcall(spellNameAndDescription, spellID) end
     if ns.Retail and sent and sent.name and sent.desc then ok, name, desc = true, sent.name, sent.desc end
+    -- Amplify Curse: the factor this cast's DoT is raised by, or nil. Before the name check: its own cast is found by id.
+    local amplified = ns._amplifyCast(spellID, ok and name or nil)
     if not ok or not name or isSecret(name) then return end
     if ns.ProcDots then ns.ProcDots.NoteCast(key, spellID, name, desc) end
     if type(desc) == "string" and not isSecret(desc) then
@@ -1059,11 +1115,13 @@ local function onPlayerCast(spellID, castGUID)
     dotsByTarget[key] = dotsByTarget[key] or {}
     local previous = dotsByTarget[key][name]
     local dot = newDot(spellID, tickKey, name, total, school, duration, statedInterval, now)
+    dot.boost = amplified
     if ns.Retail then ns.Retail.ApplyRefresh(dot, previous, now) end
-    -- A recast may keep the old DoT's tick timer: remember its rhythm and tick size (ns.discoverRhythm).
+    -- A recast may keep the old DoT's tick timer: remember its rhythm and tick size (ns.discoverRhythm), unbuffed:
+    -- the old DoT may have had Amplify Curse's buff and this one may not, or the other way round.
     if not ns.Retail and previous and previous.lastTickAt and previous.interval == dot.interval then
         dot.oldRhythmAt = previous.lastTickAt
-        dot.oldTickSize = previous.normalTicks > 0 and previous.tickSum / previous.normalTicks or nil
+        dot.oldTickSize = previous.normalTicks > 0 and previous.tickSum / previous.normalTicks / (previous.boost or 1) or nil
     end
     dot.segmentOrder = previous and previous.segmentOrder
     if not ns.Retail then
@@ -1079,9 +1137,10 @@ local function onPlayerCast(spellID, castGUID)
     -- The starting estimate is shaky without a learned tick size (description numbers leave out spell power
     -- and attack power) or, for finishers, without knowing the combo points.
     dot.unsure = not learned
-    trace(string.format("CAST %s (id %d)%s: %d dmg over %ss, school %d, tick every %ss, per-tick %s%s", name, spellID,
+    trace(string.format("CAST %s (id %d)%s: %d dmg over %ss, school %d, tick every %ss, per-tick %s%s%s", name, spellID,
         isFinisher and string.format(" %s combo points (%s)", comboPoints or "?", comboSource) or "",
         total, duration, dot.school, dot.interval, learned and ("learned " .. learned) or "from description",
+        amplified and string.format(", amplified x%.2f -> %.1f", amplified, expectedTick(dot)) or "",
         isWaiting(dot) and ", waiting for first tick" or ""))
     local avoided, avoidedSchool
     if not ns.Retail then avoided, avoidedSchool = avoidJustBefore(key, true) end
@@ -1185,6 +1244,7 @@ local function plausibleTickAmount(dot, amount, isCrit, number)
         known, tolerance = dot.tickSum / dot.normalTicks, TICK_AMOUNT_TOLERANCE
     else
         known, tolerance = dot.tickKey and db.ticks[dot.tickKey], FIRST_TICK_AMOUNT_TOLERANCE
+        known = known and known * (dot.boost or 1) -- the learned size is the unbuffed one
     end
     if not known then
         -- DOT-3: a white hit looks like a Physical tick. Without a learned
@@ -1195,7 +1255,7 @@ local function plausibleTickAmount(dot, amount, isCrit, number)
         -- A DoT lit by a crit (Ignite, Deep Wounds) has no learned size either, and the crit that lights the next
         -- one must not pass for its tick.
         if dot.school == SCHOOL_MASKS.Physical or dot.procDot then
-            known, tolerance = dot.total / dot.totalTicks, FIRST_TICK_AMOUNT_TOLERANCE
+            known, tolerance = dot.total / dot.totalTicks * (dot.boost or 1), FIRST_TICK_AMOUNT_TOLERANCE
         else
             return true
         end
@@ -1217,10 +1277,13 @@ local function referenceTickSize(dot)
     if dot.normalTicks > 1 then
         return (dot.tickSum - dot.lastTickAmount / dot.lastTickShape) / (dot.normalTicks - 1)
     end
-    return dot.learnedAtApply or (dot.total / dot.totalTicks)
+    return (dot.learnedAtApply or (dot.total / dot.totalTicks)) * (dot.boost or 1)
 end
 
 local function saveLearnedTick(dot)
+    -- The learned size is the spell's own. A buffed DoT's ticks are not (Amplify Curse), and dividing them by a
+    -- percentage that may be off would leave the next unbuffed cast with a wrong size, so a buffed DoT writes nothing.
+    if dot.boost and dot.boost ~= 1 then return end
     if dot.tickKey and dot.normalTicks > 0 then
         db.ticks[dot.tickKey] = math.floor(dot.tickSum / dot.normalTicks * 10 + 0.5) / 10
     end
@@ -1294,9 +1357,22 @@ local function tryRelearn(dot, name, amount, isCrit, index, distance, now)
     end
     local learnedSize = dot.tickKey and db.ticks[dot.tickKey]
     local descShare = dot.total / dot.totalTicks
-    if not near(learnedSize) and not near(descShare) then return false end
+    -- Trusted sizes: the DoT's own and, for a DoT flagged as buffed by Amplify Curse, the buffed one (see
+    -- ns._boostChoices, the expected one first). Ticks that fit the DoT's own size say the buff did not reach it.
+    local boost
+    for _, choice in ipairs(ns._boostChoices(dot)) do
+        if near(learnedSize and learnedSize * choice) or near(descShare * choice) then
+            boost = choice
+            break
+        end
+    end
+    if not boost then return false end
     trace(string.format("RELEARN %s: ticks of %d and %d on its rhythm didn't fit %.1f/tick", name,
         previous.amount, amount, expectedTick(dot)))
+    if boost ~= (dot.boost or 1) then
+        trace(string.format("AMPLIFY %s: its ticks say the buff did not reach it", name))
+        dot.boost = nil -- before saveLearnedTick: a buffed DoT writes nothing
+    end
     dot.offBeatCandidate = nil
     dot.tickSum, dot.normalTicks = previous.average + average, 2
     dot.ticksSeen = dot.ticksSeen + 2
@@ -1324,13 +1400,16 @@ end
 function ns.discoverRhythm(dot, name, amount, isCrit, now)
     if dot.firstTickAt or dot.ticksSeen > 0 or isCrit or amount <= 0 or dot.procDot then return false end
     local since = now - dot.appliedAt
+    -- The learned size and the old DoT's (oldTickSize, kept unbuffed) are scaled to this DoT's Amplify Curse buff.
+    local boost = dot.boost or 1
     local learned = dot.tickKey and db.ticks[dot.tickKey]
+    learned = learned and learned * boost
     local function near(size, reference)
         return math.abs(size - reference) <= math.max(1, reference * FIRST_TICK_AMOUNT_TOLERANCE)
     end
     if dot.oldRhythmAt and since > 0 and since < dot.interval + TICK_MATCH_WINDOW_ANCHORED then
         local k = math.floor((now - dot.oldRhythmAt) / dot.interval + 0.5)
-        local size = dot.oldTickSize or learned
+        local size = dot.oldTickSize and dot.oldTickSize * boost or learned
         if k >= 1 and math.abs(now - (dot.oldRhythmAt + k * dot.interval)) <= TICK_MATCH_WINDOW_ANCHORED
             and size and near(amount, size * tickShape(dot, 1)) then
             dot.appliedAt = now - dot.interval
@@ -1349,7 +1428,7 @@ function ns.discoverRhythm(dot, name, amount, isCrit, now)
     local earliest = dot.interval + TICK_MATCH_WINDOW + (dot.travel or 0)
     local latest = earliest + 1.5
     if since < earliest or since > latest + dot.interval + TICK_MATCH_WINDOW_ANCHORED then return false end
-    local share = dot.total / dot.totalTicks
+    local share = dot.total / dot.totalTicks * boost
     local function plausible(size, number)
         local factor = tickShape(dot, number)
         if learned then return near(size, learned * factor) end
