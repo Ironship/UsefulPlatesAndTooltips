@@ -220,24 +220,42 @@ local function shownTargetFrame()
   return frame
 end
 
+-- The icon takes the strata of what it is anchored to and a level well above it (the unit frame's children and a
+-- plate's decorations stay under it). It used to be HIGH: over the world map and every other window that covers the
+-- target frame. Read on every placement, as the client re-levels frames while they live (a clicked target frame is
+-- raised). Where the layer cannot be read (Forever can answer secret values for some frames) the icon takes LOW, the
+-- strata of the game's unit frames, and a level above the game's target frame (500 and what hangs under it).
+local LAYER = { over = 50, fallbackLevel = 600, fallbackStrata = "LOW", maxLevel = 10000 }
+
+local function sitOver(anchor)
+  local strata = ask(anchor.GetFrameStrata, anchor)
+  local level = ask(anchor.GetFrameLevel, anchor)
+  icon:SetFrameStrata(type(strata) == "string" and strata or LAYER.fallbackStrata)
+  icon:SetFrameLevel(type(level) == "number" and math.min(level + LAYER.over, LAYER.maxLevel) or LAYER.fallbackLevel)
+end
+
 local function place(plate)
   icon:ClearAllPoints()
   local beside = settings.frameFirst and shownTargetFrame()
+  local anchor
   if beside then
     icon:SetParent(UIParent)
     icon:SetPoint("LEFT", beside, "RIGHT", 2, 8)
+    anchor = beside
   elseif plate then
     local bar = BIT.Plate.HealthBar(plate)
     if not bar then return false end
     icon:SetParent(plate)
     icon:SetPoint("BOTTOM", bar or plate, "TOP", 0, settings.offset)
+    anchor = bar
   else
     local frame = BIT.Plate.UnitFrame("target")
     if not (settings.besideFrame and type(frame) == "table") then return false end
     icon:SetParent(UIParent)
     icon:SetPoint("LEFT", frame, "RIGHT", 2, 8)
+    anchor = frame
   end
-  icon:SetFrameStrata("HIGH")
+  sitOver(anchor)
   return true
 end
 
