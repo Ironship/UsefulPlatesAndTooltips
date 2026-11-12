@@ -66,6 +66,7 @@ Modules\DoTInfo\Locale_zhCN.lua
 Modules\DoTInfo\Retail.lua
 Modules\DoTInfo\RogueAuras.lua
 Modules\DoTInfo\Core.lua
+Modules\DoTInfo\KillCheck.lua
 Modules\DoTInfo\RogueEffects.lua
 Modules\DoTInfo\Options.lua
 Modules\DoTInfo\Nameplates.lua
