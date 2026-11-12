@@ -9,6 +9,7 @@
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
 Core\Init.lua
+Core\Trace.lua
 Core\Locale.lua
 Locales\deDE\Core.lua
 Locales\deDE\CastPrediction.lua

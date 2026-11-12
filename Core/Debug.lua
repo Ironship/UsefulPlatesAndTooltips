@@ -79,6 +79,72 @@ end
 
 local BUTTON_WIDTH, ROW, HEADING = 170, 26, 28
 
+-- The box of stack traces (Core/Trace.lua): Lua errors and blocked protected actions that name
+-- this addon, newest first. An edit box, so the text can be marked and copied into a report;
+-- typing into it is undone. Returns the y below the box.
+local TRACE_HEIGHT = 170
+local function buildTraces(content, y)
+  local Trace = BIT.Trace
+  if type(Trace) ~= "table" then return y end
+  local UI = BIT.UI
+  local heading = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  heading:SetPoint("TOPLEFT", 8, y - 6)
+  local clear = UI.Button(content, BIT.L("Clear"), 80, function() Trace.Clear() end)
+  clear:SetPoint("TOPRIGHT", -8, y - 2)
+  -- raises a real Lua error on purpose: it must show up in the box below (and in the game's
+  -- own error window, when that is switched on)
+  local test = UI.Button(content, BIT.L("Test"), 80, function()
+    error("trace test: this error was raised on purpose by the Debug tab")
+  end)
+  test:SetPoint("RIGHT", clear, "LEFT", -6, 0)
+  y = y - HEADING
+
+  local box = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  box:SetPoint("TOPLEFT", 8, y)
+  box:SetPoint("RIGHT", -8, 0)
+  box:SetHeight(TRACE_HEIGHT)
+  UI.Backdrop(box, 0.09)
+  local scroll = CreateFrame("ScrollFrame", nil, box)
+  scroll:SetPoint("TOPLEFT", 6, -6)
+  scroll:SetPoint("BOTTOMRIGHT", -6, 6)
+  scroll:EnableMouseWheel(true)
+  local edit = CreateFrame("EditBox", nil, scroll)
+  edit:SetMultiLine(true)
+  edit:SetAutoFocus(false)
+  edit:SetFontObject("GameFontHighlightSmall")
+  edit:SetWidth(math.max(60, (content:GetWidth() or 600) - 28))
+  scroll:SetScrollChild(edit)
+
+  local shown = ""
+  local function refresh()
+    local n = #Trace.entries
+    heading:SetText(string.format(BIT.L("Errors and blocked actions of this addon (%d)"), n))
+    shown = n > 0 and Trace.Text()
+      or BIT.L("Nothing caught since the last reload. Lua errors and \"blocked action\" reports that name this addon appear here with their stack.")
+    edit:SetText(shown)
+    edit:SetCursorPosition(0)
+    scroll:SetVerticalScroll(0)
+  end
+  edit:SetScript("OnTextChanged", function(self, userInput)
+    if userInput then self:SetText(shown) end
+  end)
+  edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  scroll:SetScript("OnMouseWheel", function(self, delta)
+    local max = math.max(0, (edit:GetHeight() or 0) - (self:GetHeight() or 0))
+    local v = (self:GetVerticalScroll() or 0) - (delta or 0) * 36
+    self:SetVerticalScroll(math.min(math.max(v, 0), max))
+  end)
+  scroll:SetScript("OnSizeChanged", function(_, width)
+    if type(width) == "number" and width > 0 then edit:SetWidth(width) end
+  end)
+  -- a click anywhere in the box puts the cursor in the text, so Ctrl+A / Ctrl+C work
+  box:EnableMouse(true)
+  box:SetScript("OnMouseDown", function() edit:SetFocus() end)
+  Trace.OnChange(refresh)
+  refresh()
+  return y - TRACE_HEIGHT - 8
+end
+
 local function build(content)
   local UI = BIT.UI
   local y = -8
@@ -94,6 +160,7 @@ local function build(content)
   end)
   reload:SetPoint("TOPLEFT", 8, y)
   y = y - ROW - 4
+  y = buildTraces(content, y)
 
   for _, section in ipairs(SECTIONS) do
     local rows = {}
