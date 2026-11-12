@@ -30,6 +30,13 @@ end
 -- frame's template, so its bar and portrait sit at the target frame's paths.
 local FRAME_PART = { player = "Player", focus = "Focus" }
 
+-- Hooks for other addons' frames (Core/Integrations/*.lua): each source returns what it finds, or nothing.
+--   Plate.RegisterUnitFrameSource(function(unit, part) return host, bar, portrait end)
+--   Plate.RegisterPlateBarSource(function(plate) return bar, path end)
+Plate.unitFrameSources, Plate.plateBarSources = {}, {}
+function Plate.RegisterUnitFrameSource(fn) Plate.unitFrameSources[#Plate.unitFrameSources + 1] = fn end
+function Plate.RegisterPlateBarSource(fn) Plate.plateBarSources[#Plate.plateBarSources + 1] = fn end
+
 -- EUI keeps Blizzard's frames alive but hidden, so follow the profile's active source.
 local function unitFrameBase(unit)
   local part = FRAME_PART[unit] or "Target"
@@ -72,6 +79,11 @@ local function unitFrameBase(unit)
       if type(portrait) ~= "table" or read(portrait.IsVisible, portrait) ~= true then portrait = nil end
       return perl, bar, portrait
     end
+  end
+  -- Frame addons registered in Core/Integrations (ElvUI, ...): host, bar, portrait of the unit's own frame.
+  for _, source in ipairs(Plate.unitFrameSources) do
+    local host, bar, portrait = source(unit, part)
+    if host or bar then return host, bar, portrait end
   end
   local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
   local eui = type(modules) == "table" and modules.EllesmereUIUnitFrames
@@ -148,6 +160,10 @@ local function visibleHealthBar(bar)
   end)
   return ok and visible == true
 end
+
+-- For the integrations: Plate.Read is the pcall reader of this file, Plate.VisibleHealthBar its visibility test.
+function Plate.Read(fn, ...) return read(fn, ...) end
+function Plate.VisibleHealthBar(bar) return visibleHealthBar(bar) end
 
 local function isUnder(frame, plate)
   for _ = 1, 12 do
@@ -261,6 +277,10 @@ function Plate.HealthBar(plate)
       local bar = Frames.ResolveFromPlate(plate, path)
       if bar and visibleHealthBar(bar) then return bar, "custom " .. path end
     end
+  end
+  for _, source in ipairs(Plate.plateBarSources) do
+    local bar, path = source(plate)
+    if bar then return bar, path end
   end
   if type(EllesmereNameplates_NS) == "table" then
     local children = { pcall(plate.GetChildren, plate) }
