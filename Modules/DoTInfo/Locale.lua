@@ -38,6 +38,7 @@ end
 L.SPELL_IDS = {
     ["Corruption"] = 172, ["Shadow Word: Pain"] = 589,
     ["Insect Swarm"] = 5570, ["Curse of Agony"] = 980, ["Fireball"] = 133, ["Pyroblast"] = 11366,
+    ["Amplify Curse"] = 18288, ["Curse of Weakness"] = 702, ["Curse of Exhaustion"] = 18223, -- Core.lua, ns.AMPLIFY_USES
     ["Serpent Sting"] = 1978, ["Holy Fire"] = 14914,
     ["Rip"] = 1079, ["Rupture"] = 1943, ["Siphon Life"] = 18265,
     -- The rogue/druid bleed and poison family (Classic Era rank 1; Lacerate is Forever's own, ids 24118-24120):

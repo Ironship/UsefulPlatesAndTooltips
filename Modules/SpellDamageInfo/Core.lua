@@ -191,8 +191,68 @@ local COMBO_POWER_TYPE = (Enum and Enum.PowerType and Enum.PowerType.ComboPoints
 -- numeric Enum.PowerType.ComboPoints that the UnitPower API itself takes -- never the shape
 -- an event payload arrives in.
 local COMBO_EVENT_TOKEN = "COMBO_POINTS"
+
+-- What the game's own combo point display shows: the count for a client that hands insecure code a secret one.
+-- Forever's API documentation marks GetComboPoints SecretWhenUnitPowerRestricted, and ResourceDing saw it answer
+-- with a secret during a fight (2026-09-19); a finisher's number needs exactly the count of a fight. The display is
+-- drawn by secure code that may read the count, and what it keeps is plain state: Forever's ComboFrame (the
+-- Camelot Blizzard_UnitFrame, since build 70291) holds RogueComboPointTemplate frames in ComboFrame.ComboPoints,
+-- RogueComboPointMixin:Update stores isFull on each, and the frame hides itself at zero (ComboFrameMixin:Update).
+-- Returns the number of lit points (0 while the frame is hidden), or nil when the display cannot be read: no
+-- ComboFrame of that shape (a unit frame addon may have replaced it) or a value that is secret. Never a guess.
+-- A field on ns: the main chunk of this file is close to Lua's limit of 200 local variables.
+function ns.DisplayedComboPoints()
+  local frame = _G and _G.ComboFrame
+  if type(frame) ~= "table" or type(frame.IsShown) ~= "function" then return nil end
+  local points = frame.ComboPoints
+  if type(points) ~= "table" or #points == 0 then return nil end
+  -- A unit frame addon that took the frame over has stopped its events (and may keep it hidden): what it holds is
+  -- then not what the target has, and a hidden frame must not read as zero. It listens to this one from OnLoad on.
+  if type(frame.IsEventRegistered) == "function" then
+    local okEvent, listening = pcall(frame.IsEventRegistered, frame, "PLAYER_TARGET_CHANGED")
+    if okEvent and not isSecret(listening) and listening == false then return nil end
+  end
+  local okShown, shown = pcall(frame.IsShown, frame)
+  if not okShown or isSecret(shown) or type(shown) ~= "boolean" then return nil end
+  if not shown then return 0 end
+  local count = 0
+  for index = 1, #points do
+    local point = points[index]
+    if type(point) ~= "table" or type(point.IsShown) ~= "function" then return nil end
+    local okVisible, visible = pcall(point.IsShown, point)
+    if not okVisible or isSecret(visible) then return nil end
+    -- a point the frame does not draw (past the resource's maximum) is not lit, whatever it last held
+    if visible == true then
+      local lit = ns.ComboPointLit(point)
+      if lit == nil then return nil end
+      if lit then count = count + 1 end
+    end
+  end
+  return count
+end
+
+-- Is this combo point frame lit? isFull is the answer when it is plain (nil: never drawn yet). It is itself a
+-- secret if the client carries the secrecy through the comparison that set it, and then the point's own drawing is
+-- the answer, plain state as ResourceDing found the classic frame's highlight alpha to be: a full point shows its
+-- BGActive background (the RogueComboPointTemplate animations fade it to alpha 1, an empty point's to 0).
+-- true, false, or nil when neither can be read.
+function ns.ComboPointLit(point)
+  local full = point.isFull
+  if not isSecret(full) then
+    if full == nil then return false end
+    if type(full) == "boolean" then return full end
+    return nil
+  end
+  local background = point.BGActive
+  if type(background) ~= "table" or type(background.GetAlpha) ~= "function" then return nil end
+  local ok, alpha = pcall(background.GetAlpha, background)
+  if not ok or isSecret(alpha) or type(alpha) ~= "number" then return nil end
+  return alpha > 0.5
+end
+
+-- The count, whether it is known, and where it came from ("display" when GetComboPoints would not say).
 local function comboPoints()
-  local raw, maximum = nil, 5
+  local raw, maximum, source = nil, 5, nil
   if isRetail() then
     if type(UnitPower) ~= "function" then return nil, false end
     local ok, value = pcall(UnitPower, "player", COMBO_POWER_TYPE)
@@ -204,14 +264,35 @@ local function comboPoints()
         or cap ~= cap or cap <= 0 or cap == math.huge or cap % 1 ~= 0 then return nil, false end
     maximum = cap
   else
-    if type(GetComboPoints) ~= "function" then return nil, false end
-    local ok, value = pcall(GetComboPoints, "player", "target")
-    if not ok then return nil, false end
-    raw = value
+    -- Forever keeps the points on the target. A call that fails, or answers with a secret as it does in a fight,
+    -- is not the end of it: the game's own display shows the same count (ns.DisplayedComboPoints).
+    local ok, value = false, nil
+    if type(GetComboPoints) == "function" then ok, value = pcall(GetComboPoints, "player", "target") end
+    if ok and not isSecret(value) and type(value) == "number" then
+      raw = value
+    else
+      raw, source = ns.DisplayedComboPoints(), "display"
+      if raw == nil then return nil, false end
+    end
   end
   if isSecret(raw) or type(raw) ~= "number" then return nil, false end
   if raw ~= raw or raw < 0 or raw > maximum or raw % 1 ~= 0 then return nil, false end
-  return raw, true
+  return raw, true, source
+end
+
+-- For /sdi combo: what this client says about the combo points, and which source the numbers use.
+function ns.DescribeCombo(say)
+  local function show(v)
+    if isSecret(v) then return "secret" end
+    return tostring(v)
+  end
+  local ok, value = false, nil
+  if type(GetComboPoints) == "function" then ok, value = pcall(GetComboPoints, "player", "target") end
+  say("GetComboPoints(player, target): " .. (ok and show(value) or "not available"))
+  local displayed = ns.DisplayedComboPoints()
+  say("combo display (ComboFrame): " .. (displayed ~= nil and tostring(displayed) or "cannot be read"))
+  local n, known, source = comboPoints()
+  say("finishers use: " .. (known and (tostring(n) .. " from " .. (source or "GetComboPoints")) or "unknown (a ? on the button)"))
 end
 
 -- Which client's spell tables SpellCoefficients.lua holds for this one: "forever" (1.60),
@@ -660,18 +741,18 @@ local function finisherView(f, spellID, pet)
   -- not to the highest row the description lists: pick that exact parsed row. When there is no
   -- row for the count, or the client cannot say what the count is, no precise amount is shown:
   -- the tooltip then explains the parsed table as a static preview.
-  local n, known = comboPoints()
+  local n, known, source = comboPoints()
   local picked = known and n >= 1 and n <= f.top and f.points[n]
   local view
   if picked then
     local parsed = { school = "physical" }
     if f.kind == "dot" then parsed.dot = picked else parsed.direct = picked end
     view = applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet)
-    if view then view.finisherAt = { n = n, known = true } end
+    if view then view.finisherAt = { n = n, known = true, source = source } end
   elseif known and n == 0 then
     -- zero combo points (or no selected target): the button hides the amount, the tooltip
     -- explains the table without pretending a count
-    view = { finisherAt = { n = 0, known = true } }
+    view = { finisherAt = { n = 0, known = true, source = source } }
   else
     -- secret, failed or invalid count, or a count the parsed rows do not reach: a neutral
     -- placeholder on the button, and an explicitly static preview in the tooltip -- never the
@@ -2375,6 +2456,9 @@ local function slash(msg)
     db.position = arg
   elseif cmd == "buttons" then
     ns.DescribeButtons(say)
+    return
+  elseif cmd == "combo" then
+    ns.DescribeCombo(say)
     return
   elseif cmd == "where" then
     ns.DescribeMouseFrame(say)
