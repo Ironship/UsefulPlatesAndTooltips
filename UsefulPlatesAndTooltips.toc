@@ -60,6 +60,7 @@ Modules\SpellDamageInfo\Options.lua
 Modules\CastPrediction\Auras.lua
 Modules\CastPrediction\Talents.lua
 Modules\CastPrediction\Core.lua
+Modules\CastPrediction\ManaCost.lua
 Modules\CastPrediction\Options.lua
 Modules\CastPrediction\API.lua
 
