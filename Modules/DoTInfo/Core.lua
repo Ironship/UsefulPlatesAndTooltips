@@ -1812,12 +1812,18 @@ local function housekeep(now)
         pendingCast, comboAtSend = nil, nil
     end
     for key, dots in pairs(dotsByTarget) do
+        local onToken -- whether a unit token shows the mob now: ticks only arrive (UNIT_COMBAT) for a mob on one
         for name, dot in pairs(dots) do
             local late = (dot.ticksSeen == 0 and dot.travel) or 0
             while not dot.predictionOnly and dot.nextTickAt < now - TICK_MATCH_WINDOW - late
                 and dot.nextTickAt <= dot.expiresAt do
                 dot.nextTickAt = dot.nextTickAt + dot.interval
+                if dot.missed == 0 then dot.missedUnseen = 0 end
                 dot.missed = dot.missed + 1
+                -- A tick due while the mob was on no token (another target, no nameplate) could not be seen:
+                -- it says nothing about the DoT having stopped.
+                if onToken == nil then onToken = ns._unitForKey(key) ~= nil end
+                if not onToken then dot.missedUnseen = (dot.missedUnseen or 0) + 1 end
             end
             if not dot.predictionOnly and not dot.auraObserved and dot.ticksSeen == 0 and dot.missed >= math.max(MISSED_TICKS_BEFORE_DROP, dot.totalTicks) then
                 dots[name] = nil
@@ -1825,8 +1831,10 @@ local function housekeep(now)
             -- Ticked, then went quiet on its known rhythm: dispelled or pushed off by the debuff cap. Its leftover
             -- ticks would keep the kill icon lit. Physical is left out: hidden-amount bleed ticks don't reset
             -- `missed` once anchored (onHiddenAmountHit). Proc DoTs keep their own books (ProcDots.lua).
+            -- Only ticks missed while the mob was on a unit token count (missedUnseen: the rest).
             elseif not dot.predictionOnly and not dot.auraObserved and not dot.procDot and dot.firstTickAt
-                and dot.school ~= SCHOOL_MASKS.Physical and dot.missed >= MISSED_TICKS_BEFORE_DROP + 1 then
+                and dot.school ~= SCHOOL_MASKS.Physical
+                and dot.missed - (dot.missedUnseen or 0) >= MISSED_TICKS_BEFORE_DROP + 1 then
                 dots[name] = nil
                 trace("DROP " .. name .. " stopped ticking (dispelled?)")
             elseif now > dot.expiresAt + TICK_MATCH_WINDOW then
@@ -1902,8 +1910,12 @@ local function dotBreakdown(key)
         end
     end
     if cast and not isWaiting(cast.dot) then
+        -- `running`: what the DoT this cast would refresh still has to deal. The cast's entry stands in for it
+        -- above, so the kill check (KillCheck.lua), which leaves the cast out, counts this instead.
+        local refreshed = dots and dots[cast.name]
         table.insert(list, { name = cast.name, spellID = cast.spellID, school = cast.dot.school, appliedAt = cast.dot.appliedAt,
             expiresAt = cast.dot.expiresAt,
+            running = refreshed and not isWaiting(refreshed) and remainingDamage(refreshed) or nil,
             segmentOrder = { rank = 3, appliedAt = cast.dot.appliedAt },
             damage = remainingDamage(cast.dot), familyID = cast.dot.familyID, provisional = true, refreshDue = refreshDueFor(cast.name, cast.dot) })
     end
