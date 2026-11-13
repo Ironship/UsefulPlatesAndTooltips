@@ -81,14 +81,6 @@ local function slider(parent, key, labelText, min, max, step, opts)
     function(value) applySetting(key, value) end, opts)
 end
 
-local function pushButton(parent, text, width, onClick)
-  local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  button:SetSize(width, 22)
-  button:SetText(text)
-  button:SetScript("OnClick", onClick)
-  return BIT.UI.SkinButton(button)
-end
-
 local function actionRow(parent, labelText, buttonText, onClick, opts)
   local row = BIT.Looks.Rows.Button(parent, labelText, buttonText, onClick, rowOpts(opts))
   return row, row.widget
@@ -577,7 +569,7 @@ function Addon.CreateSettingsPanel(parent)
   panel.manaDropdown = widgets.manaSound
   panel.tabs = tabs
 
-  panel.resetButton = pushButton(area, BIT.L("Reset this tab"), 120, function() resetTab(activeTab) end)
+  panel.resetButton = BIT.Looks.ResetButton(area, function() resetTab(activeTab) end)
   panel.resetButton:SetPoint("BOTTOMRIGHT", -10, 10)
 
   panel.refresh = function()
@@ -628,9 +620,7 @@ local PREVIEW_X = 118
 local PREVIEW_WIDTH = 560
 local PREVIEW_TITLE_X = 12
 local PREVIEW_TITLE_TOP = -4
-local PREVIEW_TITLE_WIDTH = 536
 local PREVIEW_LABEL_X = 12
-local PREVIEW_LABEL_WIDTH = 536
 local PREVIEW_ROW_GAP = 10
 local PREVIEW_BOTTOM = 8
 -- Fixed data only: a partial row and a full row. Plain numbers by construction, so the
@@ -685,20 +675,22 @@ local function layoutResourceDingPreview(scene, style)
   end
   local needed = -y + PREVIEW_BOTTOM
   if needed < 1 then needed = 1 end
-  scene:SetSize(PREVIEW_WIDTH, needed)
+  scene:SetSize(scene.previewWidth or PREVIEW_WIDTH, needed)
 end
 
 local function buildResourceDingPreview(parent)
   local scene = CreateFrame("Frame", nil, parent)
-  scene:SetSize(PREVIEW_WIDTH, 96)
+  local parentWidth = parent:GetWidth()
+  scene.previewWidth = math.min(PREVIEW_WIDTH, math.max(1, parentWidth - 24))
+  scene:SetSize(scene.previewWidth, 96)
   scene.title = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  previewFixWidth(scene.title, PREVIEW_TITLE_WIDTH)
+  previewFixWidth(scene.title, scene.previewWidth - 24)
   scene.title:SetPoint("TOPLEFT", PREVIEW_TITLE_X, PREVIEW_TITLE_TOP)
   scene.title:SetText(BIT.L("ResourceDing sample (silent, not your target)"))
   scene.rows = {}
   for r, spec in ipairs(PREVIEW_ROWS) do
     local label = scene:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    previewFixWidth(label, PREVIEW_LABEL_WIDTH)
+    previewFixWidth(label, scene.previewWidth - 24)
     label:SetPoint("TOPLEFT", PREVIEW_LABEL_X, -30 - (r - 1) * 30)
     label:SetText(BIT.L(spec.label))
     local row = { label = label, dots = {} }

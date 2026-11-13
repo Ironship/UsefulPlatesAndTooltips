@@ -6,6 +6,9 @@ local _, BIT = ...
 BIT.RegisterLocale("ruRU", {
   -- предпросмотр и блок «Попробуйте»
   ["Simulate: out of range"] = "Сымитировать выход за пределы дальности",
+  ["Simulate: no nameplate"] = "Без таблички цели",
+  ["Preview the target without a visible nameplate."] = "Показать цель без видимой таблички в предпросмотре.",
+  ["No nameplate - marker hidden"] = "Нет таблички — отметка скрыта",
   ["The preview only: the red X while it is checked, the green checkmark while it is not."] =
     "Только для предпросмотра: при установленном флажке отображается красный крест, без него — зелёная галочка.",
   ["In range - the green checkmark"] = "В пределах дальности — зелёная галочка",

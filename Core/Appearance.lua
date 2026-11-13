@@ -731,6 +731,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   local roles = capabilities.roles or ROLES
   local width = capabilities.width or 560
   local panel = CreateFrame("Frame", nil, parent)
+  panel:SetWidth(width)
 
   local controls = { sliders = {}, checks = {}, swatches = {}, rgb = {} }
   panel.controls = controls
@@ -775,12 +776,28 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   controls.advancedButton = advancedButton
 
   local scopeButton
+  local function setResetText(button, text)
+    button:SetText(BIT.L(text))
+    local label = button:GetFontString()
+    if not label then return end
+    local font, size, flags = label:GetFont()
+    if not button.resetFontSize then button.resetFontSize = size end
+    if font and button.resetFontSize then
+      if label.SetWordWrap then label:SetWordWrap(false) end
+      label:SetFont(font, button.resetFontSize, flags)
+      local textWidth = label.GetUnboundedStringWidth and label:GetUnboundedStringWidth() or label:GetStringWidth()
+      local available = button:GetWidth() - 24
+      if textWidth > available and available > 0 then
+        label:SetFont(font, button.resetFontSize * available / textWidth, flags)
+      end
+    end
+  end
   scopeButton = BIT.UI.Button(advanced, BIT.L("Editing: this module"), 300, function()
     scopeIsGlobal = not scopeIsGlobal
     scopeButton:SetText(BIT.L(scopeIsGlobal and "Editing: all modules" or "Editing: this module"))
     if controls.reset then
-      controls.reset:SetText(BIT.L(scopeIsGlobal and "Reset shared appearance (all modules)"
-        or "Reset this module's appearance"))
+      setResetText(controls.reset, scopeIsGlobal and "Reset shared appearance (all modules)"
+        or "Reset this module's appearance")
     end
     refreshPanel()
   end)
@@ -984,12 +1001,14 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   end)
   if width < 500 then
     resetButton:SetPoint("TOPLEFT", presetButton, "BOTTOMLEFT", 0, -6)
-    resetButton:SetWidth(math.min(300, width - 24))
+    resetButton:SetWidth(width - 24)
     y = y - 62
   else
     resetButton:SetPoint("LEFT", presetButton, "RIGHT", 10, 0)
+    resetButton:SetWidth(width - presetButton:GetWidth() - 34)
     y = y - 34
   end
+  setResetText(resetButton, "Reset this module's appearance")
   controls.preset, controls.reset = presetButton, resetButton
 
   local resetHint = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

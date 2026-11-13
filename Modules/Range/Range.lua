@@ -587,7 +587,7 @@ end
 ---------------------------------------------------------------------------------------------
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 470
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 520
 local PREVIEW_TOP = 40 -- the presets' row above the two columns
 local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = 26
@@ -606,7 +606,7 @@ local PRESETS = {
 local window -- the tab's content frame: the preview and the settings are built into it
 local controls = {} -- every settings and preview row, refreshed after each change
 local tabs, activeTab = {}, nil
-local preview = { out = false } -- the TRY IT switch: the preview's own state, never a setting
+local preview = { out = false, noPlate = false } -- preview state, never a setting
 
 local function setBackdrop(frame, shade, alpha)
   BIT.UI.Backdrop(frame, shade, alpha)
@@ -624,33 +624,27 @@ local function updatePreview()
   local on = (state == "in" and settings.showIn) or (state == "out" and settings.showOut)
   local mark = window.previewIcon
   mark:ClearAllPoints()
-  local beside = settings.frameFirst and true or false
-  window.previewPlate.frame:SetShown(not beside)
-  window.previewTarget.frame:SetShown(beside)
-  if beside then
+  local beside = settings.frameFirst or (preview.noPlate and settings.besideFrame)
+  window.previewPlate.frame:SetShown(not beside and not preview.noPlate)
+  window.previewTarget.frame:SetShown(beside or preview.noPlate)
+  if beside or preview.noPlate then
     window.previewTarget.frame:ClearAllPoints()
     window.previewTarget.frame:SetPoint("CENTER", window.previewScene, "CENTER", -settings.size / 2, 0)
+  end
+  if beside then
     mark:SetPoint("LEFT", window.previewTarget.frame, "RIGHT", 2, 8)
   else
     mark:SetPoint("BOTTOM", window.previewBar, "TOP", 0, settings.offset)
   end
   mark:SetSize(settings.size, settings.size)
   mark.texture:SetTexture(ICON[state])
-  mark:SetShown(on and true or false)
-  -- Center the ensemble (the plate with the mark above its bar) in the scene: the mark's
-  -- seat moves with the offset and size sliders, so the plate follows them. 17 is the bar
-  -- top below the plate top; 19 puts the mark's bottom 1px past the plate's when it sits low.
-  local scene, plate = window.previewScene, window.previewPlate
-  if scene and plate and not beside then
-    local above = math.max(0, settings.offset + settings.size - 17)
-    local below = math.max(0, -settings.offset - 19)
-    local sceneH = select(2, pcall(scene.GetHeight, scene))
-    sceneH = type(sceneH) == "number" and sceneH or 184
-    plate.frame:ClearAllPoints()
-    plate.frame:SetPoint("TOP", scene, "TOP", 0, -(sceneH / 2 - 18 + (above - below) / 2))
-  end
+  mark:SetShown(on and (not preview.noPlate or beside) and true or false)
   local stateText = state == "in" and BIT.L("In range - the green checkmark") or BIT.L("Out of range - the red X")
-  if not on then stateText = string.format(BIT.L("%s (off on your target)"), stateText) end
+  if preview.noPlate and not beside then
+    stateText = BIT.L("No nameplate - marker hidden")
+  elseif not on then
+    stateText = string.format(BIT.L("%s (off on your target)"), stateText)
+  end
   window.previewState:SetText(stateText)
   local dim = settings.dimIcons and state == "out"
   window.previewButtonIcon:SetDesaturated(dim)
@@ -727,14 +721,6 @@ local function editRow(parent, key, labelText, opts)
     self:ApplyEnabled(box)
   end
   return row
-end
-
-local function pushButton(parent, text, width, onClick)
-  local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  button:SetSize(width, 22)
-  button:SetText(text)
-  button:SetScript("OnClick", onClick)
-  return BIT.UI.SkinButton(button)
 end
 
 ---------------------------------------------------------------------------------------------
@@ -824,7 +810,7 @@ local function buildLivePreview(pane)
   local scene = BIT.UI.Preview.Scene(pane, CARD_WIDTH, 184)
   scene:SetPoint("TOP", pane, "TOP", 0, -44)
   local plate = BIT.UI.Preview.Nameplate(scene, { width = 190, health = 72 })
-  plate.frame:SetPoint("TOP", scene, "TOP", 0, -(184 / 2 - 18))
+  plate.frame:SetPoint("TOP", scene, "TOP", 0, -140)
   local bar = plate.bar
   local target = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 72 })
   target.frame:SetScale(0.7)
@@ -865,11 +851,17 @@ local function buildLivePreview(pane)
     { layout = PREVIEW_LAYOUT,
       tooltip = "The preview only: the red X while it is checked, the green checkmark while it is not." })
   toggle:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -4)
+  local noPlate = checkboxRow(pane, "Simulate: no nameplate",
+    function() return preview.noPlate end,
+    function(v) preview.noPlate = v; changed() end,
+    { layout = PREVIEW_LAYOUT,
+      tooltip = "Preview the target without a visible nameplate." })
+  noPlate:SetPoint("TOPLEFT", toggle, "BOTTOMLEFT", 0, 0)
 
   -- The action bar button the module dims.
   local barCard = CreateFrame("Frame", nil, pane, "BackdropTemplate")
   barCard:SetSize(CARD_WIDTH, 56)
-  barCard:SetPoint("TOPLEFT", toggle, "BOTTOMLEFT", -6, -10)
+  barCard:SetPoint("TOPLEFT", noPlate, "BOTTOMLEFT", 6, -10)
   setBackdrop(barCard, 0.07)
   local button = CreateFrame("Frame", nil, barCard, "BackdropTemplate")
   button:SetSize(36, 36)
@@ -891,7 +883,7 @@ local function buildLivePreview(pane)
   window.previewButtonNote:SetJustifyH("LEFT")
 
   local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", SIDE, 12)
+  hint:SetPoint("TOPLEFT", barCard, "BOTTOMLEFT", 0, -8)
   hint:SetWidth(CARD_WIDTH)
   hint:SetJustifyH("LEFT")
   hint:SetText(BIT.L("A sample only: the mark and the dimming happen on your own target and bars."))
@@ -961,7 +953,7 @@ local function buildContent(top, anchor)
   divider:SetPoint("TOPRIGHT", -8, -34)
 
   buildTabs()
-  local reset = pushButton(area, BIT.L("Reset this tab"), 120, function() resetTab(activeTab) end)
+  local reset = BIT.Looks.ResetButton(area, function() resetTab(activeTab) end)
   reset:SetPoint("BOTTOMRIGHT", -10, 10)
 
   window:SetScript("OnShow", function()
