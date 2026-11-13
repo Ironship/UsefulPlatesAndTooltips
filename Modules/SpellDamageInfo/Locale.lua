@@ -310,11 +310,11 @@ ns.InterfaceLang = function() return interfaceLang end
 -- Description language: what the parser reads. Decided at login from textLocale CVar if the
 -- parser knows it, else from GetLocale(), and cannot be changed (the player would only see spell
 -- descriptions in one language anyway). Core.lua passes it to Parser.Parse and Parser.ParseReduction.
--- PARSER_LANGS maps a client locale to the wording set the parser reads ("en", "de", "ru", "fr"); a locale
+-- PARSER_LANGS maps a client locale to the wording set the parser reads ("en", "de", "ru", "fr", "es"); a locale
 -- missing from it falls back to the English wordings and stays without numbers rather than guess.
 -- A new language joins here together with its wordings in a pack, Parser_xxXX.lua (see the top
 -- of Parser.lua), and its "Use:" label in Core.lua's USE_PREFIXES.
-local PARSER_LANGS = { deDE = "de", ruRU = "ru", frFR = "fr", enUS = "en", enGB = "en" }
+local PARSER_LANGS = { deDE = "de", ruRU = "ru", frFR = "fr", esES = "es", esMX = "es", enUS = "en", enGB = "en" }
 ns.PARSER_LANGS = PARSER_LANGS
 local descriptionLang = nil
 ns.DescriptionLang = function() return descriptionLang end
