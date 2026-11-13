@@ -5,7 +5,7 @@
 ## Notes-ruRU: Тестовая версия Retail: урон заклинаний, периодический урон, лечение, эффекты разбойника, ресурсы, щиты и числа урона. /upt
 ## Author: Ironship
 ## Version: 0.9.133-retail
-## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames
+## OptionalDeps: ElvUI, EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
 Core\Init.lua
@@ -24,6 +24,7 @@ Locales\ruRU\ResourceDing.lua
 Locales\ruRU\ShieldsInfo.lua
 Locales\ruRU\HealPrediction.lua
 Core\PlateLayout.lua
+Core\Integrations\ElvUI.lua
 Core\Orbs.lua
 Core\Appearance.lua
 Core\Gamepad.lua

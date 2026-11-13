@@ -5,7 +5,7 @@
 ## Notes-ruRU: Информация для WoW: Forever: урон заклинаний, периодический урон, лечение, щиты, дальность, серии приемов, сравнение характеристик и числа на панелях действий. /upt
 ## Author: Ironship
 ## Version: 0.9.124
-## OptionalDeps: EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
+## OptionalDeps: ElvUI, EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
 Core\Init.lua
@@ -32,6 +32,7 @@ Locales\ruRU\HunterRangeFinder.lua
 Core\TalentModsData.lua
 Core\TalentMods.lua
 Core\PlateLayout.lua
+Core\Integrations\ElvUI.lua
 Core\Orbs.lua
 Core\Appearance.lua
 Core\Gamepad.lua
