@@ -616,27 +616,32 @@ local function refreshControls()
   for _, control in ipairs(controls) do control:Refresh() end
 end
 
--- The preview draws what update() draws on the target: the mark above the health bar at the set
--- height and size, and the action bar button grey and dim while the simulated target is out of
--- range. The sample always wears the real mark, as the game wears it over the target: showIn and
--- showOut hide only the live mark (update), never this one, so the icon is here to look at and
--- tune whatever those settings hide on the target. The line under the sample names the mark and
--- says when its setting keeps it off the real target.
+-- The preview draws the mark on the mock plate or beside the mock target frame, and the
+-- action bar button grey and dim while the simulated target is out of range.
 local function updatePreview()
   if not window or not window.previewIcon then return end
   local state = preview.out and "out" or "in"
   local on = (state == "in" and settings.showIn) or (state == "out" and settings.showOut)
   local mark = window.previewIcon
   mark:ClearAllPoints()
-  mark:SetPoint("BOTTOM", window.previewBar, "TOP", 0, settings.offset)
+  local beside = settings.frameFirst and true or false
+  window.previewPlate.frame:SetShown(not beside)
+  window.previewTarget.frame:SetShown(beside)
+  if beside then
+    window.previewTarget.frame:ClearAllPoints()
+    window.previewTarget.frame:SetPoint("CENTER", window.previewScene, "CENTER", -settings.size / 2, 0)
+    mark:SetPoint("LEFT", window.previewTarget.frame, "RIGHT", 2, 8)
+  else
+    mark:SetPoint("BOTTOM", window.previewBar, "TOP", 0, settings.offset)
+  end
   mark:SetSize(settings.size, settings.size)
   mark.texture:SetTexture(ICON[state])
-  mark:Show()
+  mark:SetShown(on and true or false)
   -- Center the ensemble (the plate with the mark above its bar) in the scene: the mark's
   -- seat moves with the offset and size sliders, so the plate follows them. 17 is the bar
   -- top below the plate top; 19 puts the mark's bottom 1px past the plate's when it sits low.
   local scene, plate = window.previewScene, window.previewPlate
-  if scene and plate then
+  if scene and plate and not beside then
     local above = math.max(0, settings.offset + settings.size - 17)
     local below = math.max(0, -settings.offset - 19)
     local sceneH = select(2, pcall(scene.GetHeight, scene))
@@ -821,6 +826,9 @@ local function buildLivePreview(pane)
   local plate = BIT.UI.Preview.Nameplate(scene, { width = 190, health = 72 })
   plate.frame:SetPoint("TOP", scene, "TOP", 0, -(184 / 2 - 18))
   local bar = plate.bar
+  local target = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 72 })
+  target.frame:SetScale(0.7)
+  target.frame:Hide()
 
   -- The mark, painted above the mock nameplate as the real one is above the real one.
   local mark = CreateFrame("Frame", nil, scene)
@@ -829,7 +837,7 @@ local function buildLivePreview(pane)
   mark.texture:SetAllPoints()
   mark.texture:SetTexture(ICON["in"])
   window.previewBar, window.previewIcon = bar, mark
-  window.previewScene, window.previewPlate = scene, plate
+  window.previewScene, window.previewPlate, window.previewTarget = scene, plate, target
 
   window.previewState = pane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   window.previewState:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -6)
@@ -965,6 +973,7 @@ local function buildContent(top, anchor)
 end
 
 BIT.RegisterTab("Range", {
+  defaults = DEFAULTS,
   buildPreview = buildRangePreview,
   previewRender = renderRangePreview,
   capabilities = { roles = { "good", "bad", "muted", "text" }, shapes = false,

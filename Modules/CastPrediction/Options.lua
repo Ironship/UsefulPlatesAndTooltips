@@ -18,6 +18,7 @@ local areas
 local tabButtons
 local controls = {}
 local panel
+local hostsSet = false
 local preview = { health = 35, spell = 3 } -- TRY IT: a lethal Shadow Bolt by default, never settings
 
 -- The sample casts the preview walks through, in the order of the button.
@@ -38,17 +39,18 @@ local function currentSpell()
     return SAMPLE_SPELLS[preview.spell] or SAMPLE_SPELLS[1]
 end
 
--- Values the marker shows in the preview: the chosen sample cast at its average, against a mock
--- target whose health runs on the same 0..1000 scale.
+-- The sample's range uses the selected estimate against a mock target on a 0..1000 scale.
 local function previewState()
     local spell = currentSpell()
     local health = preview.health * HEALTH_SCALE
+    local estimate = db().estimate
     return {
         name = spell.name,
         spellID = spell.spellID,
         min = spell.min,
         max = spell.max,
-        value = (spell.min + spell.max) / 2,
+        value = estimate == "min" and spell.min or estimate == "max" and spell.max
+            or (spell.min + spell.max) / 2,
         school = spell.school,
         channel = spell.channel,
         preview = spell.preview,
@@ -63,9 +65,14 @@ local function refreshControls()
     end
 end
 
+local function inCombat()
+    return (type(InCombatLockdown) == "function" and InCombatLockdown())
+        or (type(UnitAffectingCombat) == "function" and UnitAffectingCombat("player")) or false
+end
+
 local function updatePreview()
     if not panel then return end
-    ns.setPreviewState(previewState())
+    ns.setPreviewState(hostsSet and not inCombat() and previewState() or nil)
     if panel.targetHealthBar then panel.targetHealthBar:SetValue(preview.health) end
     if panel.plateHealthBar then panel.plateHealthBar:SetValue(preview.health) end
     if panel.healthPercent then panel.healthPercent:SetText(string.format("%d%%", preview.health)) end
@@ -81,10 +88,6 @@ local function changed()
     updatePreview()
 end
 
-local function inCombat()
-    return type(InCombatLockdown) == "function" and InCombatLockdown() and true or false
-end
-
 local function releasePreview()
     ns.setPreviewState(nil)
     ns.setDisplayHost(nil)
@@ -93,14 +96,16 @@ end
 
 -- The preview takes the display over out of combat; in combat the real target keeps it, exactly
 -- like DoTInfo's preview.
-local hostsSet = false
 local function syncDisplayHost()
-    if not (panel and window and window:IsShown()) then return end
-    if hostsSet and inCombat() then
-        hostsSet = false
-        releasePreview()
+    if not (panel and window and window:IsVisible()) then return end
+    if inCombat() then
         if panel.combatNote then panel.combatNote:Show() end
-    elseif not hostsSet and not inCombat() then
+        if hostsSet then
+            hostsSet = false
+            releasePreview()
+            ns._refresh()
+        end
+    elseif not hostsSet then
         hostsSet = true
         if panel.combatNote then panel.combatNote:Hide() end
         ns.setDisplayHost(panel.host)
@@ -233,9 +238,11 @@ local function buildMarkerTab(parent)
     local y = section(parent, 0, "FRAMES")
     y = place(checkRow(parent, "Show on target frame", "showTargetFrame",
         "Show the prediction on the Blizzard or configured target frame."), y)
+    local retail = ns.Talents and ns.Talents.IsRetail and ns.Talents.IsRetail()
     y = place(checkRow(parent, "Show mana cost on your mana bar", "showManaCost",
-        "While you cast a spell with a cast time, marks on your own mana bar how much mana it will take. The client "
-        .. "takes the mana only when the cast lands."), y)
+        retail and "While you cast a spell with a cast time, marks its estimated mana cost on your mana bar."
+        or "While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. "
+            .. "This illustrates mana already spent, not another deduction."), y)
     y = place(checkRow(parent, "Show on focus frame", "showFocusFrame",
         "Also show the prediction on the focus frame when it represents the cast's target."), y)
     y = place(checkRow(parent, "Show on party frames", "showPartyFrames",
@@ -610,6 +617,9 @@ if BIT.RegisterTab then
                 hostsSet = false
                 releasePreview()
             end)
+            parent:RegisterEvent("PLAYER_REGEN_DISABLED")
+            parent:RegisterEvent("PLAYER_REGEN_ENABLED")
+            parent:SetScript("OnEvent", function() syncDisplayHost() end)
         end,
         buildPreview = function(pane)
             -- The core's OFF-scene sample: a static line naming the module, no live numbers.

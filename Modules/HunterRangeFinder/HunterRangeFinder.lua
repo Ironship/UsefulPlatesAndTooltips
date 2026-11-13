@@ -800,6 +800,7 @@ local function setPreview(value)
         hud:Show()
     else
         band = nil
+        lastRenderedBand, lastRenderedScatter, lastRenderedScatterRange = nil, nil, nil
         hud:Hide()
     end
 end
@@ -871,14 +872,15 @@ local function start()
     end)
 
     position()
-    setPreview(settings.locked == false)
+    settings.locked = true
+    setPreview(false)
     -- Live style subscription: appearance edits re-render the real HUD even
     -- while the settings tab is closed. Pure re-render of the retained scene
     -- from the cached band (no new unit/target reads beyond the Y25
     -- Scatter re-check the poll already performs).
     if BIT.Style and BIT.Style.Subscribe then
         pcall(BIT.Style.Subscribe, M.moduleName, function()
-            if hud and band and band ~= "OOR" then
+            if hud and band and band ~= "OOR" and reanchorHunterHud() then
                 local ok = pcall(renderScene, hud,
                     BIT.Style.Resolve(M.moduleName, hunterLegacy), band, scatterRed)
                 if not ok then end
@@ -1270,7 +1272,7 @@ local function buildTabs(parent, isHunter)
         function() return settings.locked and BIT.L("Unlock and move") or BIT.L("Lock position") end,
         function() setLocked(not settings.locked) end,
         { enabledIf = hunterOnly,
-            tooltip = "Unlock, drag the rail to a screen spot of your own, then lock to save its position." })
+            tooltip = "Unlock and drag the rail to a screen spot of your own. It locks when you leave this page." })
     parent.resetPosition = display:action("Dragged position", BIT.L("Reset position"), function()
         resetPosition()
         refreshAll()
@@ -1403,6 +1405,9 @@ local function build(parent)
     local _, class = UnitClass("player")
     local isHunter = class == "HUNTER"
     settings = settings or BIT.Settings(M.moduleName, DEFAULTS)
+    parent:HookScript("OnHide", function()
+        if preview then setLocked(true) end
+    end)
 
     -- Top strip: the rail's style presets on the right, the class note on the left.
     local anchor = CreateFrame("Frame", nil, parent)
@@ -1479,6 +1484,7 @@ end
 
 ----------------------------------------------------------------------------------------------
 BIT.RegisterTab("HunterRangeFinder", {
+    defaults = DEFAULTS,
     title = "Hunter range",
     summary = "Six native dots tell a hunter the approximate range, 8-10 yd to 30-35 yd; a seventh past 35 yd with Hawk Eye.",
     width = WINDOW_WIDTH, height = WINDOW_HEIGHT,

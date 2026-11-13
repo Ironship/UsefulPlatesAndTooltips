@@ -47,6 +47,13 @@ BIT.RegisterLocale("ruRU", {
   -- окно настроек
   ["Enable %s"] = "Включить %s",
   ["Reload UI"] = "Перезагрузить интерфейс",
+  ["Reset module"] = "Сбросить модуль",
+  ["Reset all settings for %s? The interface will reload. Module enable state, learned data and shared settings are kept."] =
+    "Сбросить все настройки модуля %s? Интерфейс будет перезагружен. Состояние модуля, накопленные данные и общие настройки сохранятся.",
+  ["Cannot reset %s: defaults are unavailable."] = "Не удалось сбросить %s: настройки по умолчанию недоступны.",
+  ["Cannot reset settings: reloading the interface is unavailable."] = "Не удалось сбросить настройки: перезагрузка интерфейса недоступна.",
+  ["Cannot reset %s: its settings are invalid."] = "Не удалось сбросить %s: настройки повреждены.",
+  ["Cannot reset %s appearance: %s"] = "Не удалось сбросить оформление %s: %s",
   ["Running."] = "Работает.",
   ["Open settings"] = "Открыть настройки",
   ["Open the settings window. You can also type /upt."] = "Открывает окно настроек. Также можно ввести /upt.",

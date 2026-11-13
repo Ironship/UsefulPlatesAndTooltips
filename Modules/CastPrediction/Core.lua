@@ -70,6 +70,7 @@ local DEFAULTS = {
     showPartyFrames = true,
     showRaidFrames = true,
     showNameplates = true,
+    showManaCost = true,
     fillColor = "school",
     fillOpacity = 45,
     outlineStyle = "solid",

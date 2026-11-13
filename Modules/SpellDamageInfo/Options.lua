@@ -131,6 +131,7 @@ local function updatePreview()
   for widget, key in pairs(localized) do widget:SetText(L[key]) end
   for _, mock in ipairs(window.mocks) do
     local mainText, mainColor, sideText, sideColor, layout = sampleText(mock.sample)
+    if db().button == "off" then mainText = nil end
     ns.DrawNumber(mock, mock.main, mock.side, mainText, mainColor, sideText, false, sideColor, layout)
   end
   window.offNote:SetShown(db().button == "off")

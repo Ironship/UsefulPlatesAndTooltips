@@ -47,6 +47,13 @@ BIT.RegisterLocale("deDE", {
   -- the window
   ["Enable %s"] = "%s aktivieren",
   ["Reload UI"] = "UI neu laden",
+  ["Reset module"] = "Modul zurücksetzen",
+  ["Reset all settings for %s? The interface will reload. Module enable state, learned data and shared settings are kept."] =
+    "Alle Einstellungen für %s zurücksetzen? Die Oberfläche wird neu geladen. Modulstatus, erlernte Daten und gemeinsame Einstellungen bleiben erhalten.",
+  ["Cannot reset %s: defaults are unavailable."] = "%s kann nicht zurückgesetzt werden: Standardwerte fehlen.",
+  ["Cannot reset settings: reloading the interface is unavailable."] = "Einstellungen können nicht zurückgesetzt werden: Die Oberfläche kann nicht neu geladen werden.",
+  ["Cannot reset %s: its settings are invalid."] = "%s kann nicht zurückgesetzt werden: Die Einstellungen sind ungültig.",
+  ["Cannot reset %s appearance: %s"] = "Das Aussehen von %s kann nicht zurückgesetzt werden: %s",
   ["Running."] = "Läuft.",
   ["Open settings"] = "Einstellungen öffnen",
   ["Open the settings window. You can also type /upt."] = "Öffnet das Einstellungsfenster. Ihr könnt auch /upt eingeben.",

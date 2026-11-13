@@ -1303,9 +1303,12 @@ local function buildLivePreview(pane)
       scene.overlay:SetMinMaxValues(0, 100)
       scene.overlay:SetValue(clampPercent(preview.absorb))
       styleOverlay(scene.overlay)
+      local s = settings or DEFAULTS
+      local enabled = s[m.id == "nameplate" and "nameplates" or m.id] ~= false
+      scene.overlay:SetShown(enabled)
       -- The sample number, on the frames that get one in the game (the sample bar holds 1000).
       paintNumber(scene, scene.overlay, kit.bar, math.floor(clampPercent(preview.absorb) * 10 + 0.5),
-        (settings or DEFAULTS).showNumber and (m.id == "player" or m.id == "target") or false)
+        enabled and s.showNumber and (m.id == "player" or m.id == "target") or false)
     end)
   end
 end
@@ -1485,6 +1488,7 @@ local function buildContent(parent)
 end
 
 BIT.RegisterTab("ShieldsInfo", {
+  defaults = DEFAULTS,
   buildPreview = buildShieldsPreview,
   previewRender = renderShieldsPreview,
   capabilities = CAPABILITIES,

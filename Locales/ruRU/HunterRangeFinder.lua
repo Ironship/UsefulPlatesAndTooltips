@@ -14,14 +14,14 @@ BIT.RegisterLocale("ruRU", {
   -- вкладка «Отображение»
   ["Unlock and move"] = "Разблокировать и переместить",
   ["Lock position"] = "Закрепить положение",
-  ["Unlock, drag the rail to a screen spot of your own, then lock to save its position."] =
-    "Разблокируйте шкалу, перетащите её в нужное место на экране, затем закрепите, чтобы сохранить положение.",
+  ["Unlock and drag the rail to a screen spot of your own. It locks when you leave this page."] =
+    "Разблокируйте шкалу и перетащите её в нужное место экрана. При выходе с этой страницы она закрепится.",
   ["Dragged position"] = "Перемещённое положение",
   ["Reset position"] = "Сбросить положение",
   ["Back to the requested centre offset."] = "Вернуться к заданному смещению от центра.",
   ["Attach to target nameplate"] = "Закрепить на табличке цели",
-  ["The rail rides above the target's nameplate, like the ResourceDing dots. Unchecked keeps the draggable screen position."] =
-    "Шкала отображается над табличкой цели, как точки ResourceDing. Если снять флажок, сохранится возможность перемещать её по экрану.",
+  ["The rail rides above the target's nameplate, like the ResourceDing dots. It is hidden when that plate is not visible. Unchecked keeps the draggable screen position."] =
+    "Шкала отображается над табличкой цели, как точки ResourceDing. Если табличка не видна, шкала скрывается. Если снять флажок, сохранится возможность перемещать её по экрану.",
   ["Vertical offset (- = above)"] = "Смещение по вертикали (− = вверх)",
   ["How far the rail sits from the plate's health bar. The same seat as the combo dots: top of the row, -offset under the bar."] =
     "Расстояние шкалы от полосы здоровья таблички. Положение такое же, как у точек серии приёмов: верхний край ряда, смещение под полосой со знаком минус.",

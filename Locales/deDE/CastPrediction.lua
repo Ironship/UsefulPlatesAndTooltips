@@ -184,6 +184,8 @@ BIT.RegisterLocale("deDE", {
   ["/upt castpred - open the settings; line - toggle the marker; talents - what the talent tree answers; auras - what buffs/debuffs are readable; learned - what the hits taught; census - read the whole talent tree into the saved settings (census clear removes it); reset - forget learned factors; debug - echo the trace log"] =
     "/upt castpred - öffnet die Einstellungen; line - schaltet die Markierung um; talents - was der Talentbaum antwortet; auras - welche Stärkungs- und Schwächungszauber lesbar sind; learned - was die Treffer gelehrt haben; census - liest den ganzen Talentbaum in die gespeicherten Einstellungen ein (census clear entfernt ihn); reset - vergisst gelernte Faktoren; debug - gibt das Ablaufprotokoll im Chat aus",
   ["Show mana cost on your mana bar"] = "Manakosten auf Eurer Manaleiste zeigen",
-  ["While you cast a spell with a cast time, marks on your own mana bar how much mana it will take. The client takes the mana only when the cast lands."] =
-    "Während Ihr einen Zauber mit Zauberzeit wirkt, markiert ein Abschnitt auf Eurer eigenen Manaleiste, wie viel Mana er kosten wird. Der Client zieht das Mana erst ab, wenn der Zauber wirkt.",
+  ["While you cast a spell with a cast time, marks its estimated mana cost on your mana bar."] =
+    "Während Ihr einen Zauber mit Zauberzeit wirkt, markiert ein Abschnitt auf Eurer Manaleiste seine geschätzten Manakosten.",
+  ["While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. This illustrates mana already spent, not another deduction."] =
+    "Während Ihr einen Zauber mit Zauberzeit wirkt, markiert ein Abschnitt rechts vom verbleibenden Mana seine geschätzten Kosten. Er zeigt bereits verbrauchtes Mana, keinen weiteren Abzug.",
 })

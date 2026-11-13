@@ -2585,6 +2585,7 @@ if BIT.Style and BIT.Style.Subscribe then
 end
 
 BIT.RegisterTab("StatsInfo", {
+  defaults = DEFAULTS,
   buildPreview = buildStatsPreview,
   previewRender = renderStatsPreview,
   capabilities = { roles = { "text" }, shapes = false,

@@ -14,14 +14,14 @@ BIT.RegisterLocale("deDE", {
   -- the Display tab
   ["Unlock and move"] = "Entsperren",
   ["Lock position"] = "Sperren",
-  ["Unlock, drag the rail to a screen spot of your own, then lock to save its position."] =
-    "Entsperren, die Leiste an eine Stelle Eurer Wahl auf dem Bildschirm ziehen und dann sperren, um die Position zu speichern.",
+  ["Unlock and drag the rail to a screen spot of your own. It locks when you leave this page."] =
+    "Entsperren und die Leiste an eine Stelle Eurer Wahl ziehen. Beim Verlassen dieser Seite wird sie gesperrt.",
   ["Dragged position"] = "Verschobene Position",
   ["Reset position"] = "Zurücksetzen",
   ["Back to the requested centre offset."] = "Zurück zum vorgegebenen Versatz von der Bildschirmmitte.",
   ["Attach to target nameplate"] = "An Namensplakette des Ziels anheften",
-  ["The rail rides above the target's nameplate, like the ResourceDing dots. Unchecked keeps the draggable screen position."] =
-    "Die Leiste sitzt über der Namensplakette des Ziels, wie die Kreise von ResourceDing. Ohne Häkchen bleibt die verschiebbare Bildschirmposition erhalten.",
+  ["The rail rides above the target's nameplate, like the ResourceDing dots. It is hidden when that plate is not visible. Unchecked keeps the draggable screen position."] =
+    "Die Leiste sitzt über der Namensplakette des Ziels, wie die Kreise von ResourceDing. Ist die Plakette nicht sichtbar, wird die Leiste ausgeblendet. Ohne Häkchen bleibt die verschiebbare Bildschirmposition erhalten.",
   ["Vertical offset (- = above)"] = "Vertikaler Versatz (- = darüber)",
   ["How far the rail sits from the plate's health bar. The same seat as the combo dots: top of the row, -offset under the bar."] =
     "Wie weit die Leiste von der Gesundheitsleiste der Plakette entfernt sitzt. Derselbe Platz wie bei den Combopunkten: Oberkante der Reihe, -Versatz unter der Leiste.",

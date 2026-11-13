@@ -644,6 +644,70 @@ end
 
 local selectTab
 
+local MODULE_STORES = {
+  SpellDamageInfo = "UsefulPlatesAndTooltips_SpellDamageInfoDB",
+  DoTInfo = "UsefulPlatesAndTooltips_DoTInfoDB",
+  ResourceDing = "UsefulPlatesAndTooltips_ResourceDingDB",
+}
+
+local function copyDefault(value)
+  if type(value) ~= "table" then return value end
+  local copy = {}
+  for key, entry in pairs(value) do copy[key] = copyDefault(entry) end
+  return copy
+end
+
+local function resetModule(name)
+  local tab, module = BIT.tabs[name], BIT.modules[name]
+  local defaults = tab and (tab.defaults or (module and (module.DEFAULTS or module.defaults)))
+  if type(defaults) ~= "table" then
+    BIT.Say(string.format(BIT.L("Cannot reset %s: defaults are unavailable."), name))
+    return
+  end
+  if type(ReloadUI) ~= "function" then
+    BIT.Say(BIT.L("Cannot reset settings: reloading the interface is unavailable."))
+    return
+  end
+  local storeName = MODULE_STORES[name]
+  local store
+  if storeName then store = _G[storeName] else store = BIT.DB().modules[name] end
+  if store ~= nil and type(store) ~= "table" then
+    BIT.Say(string.format(BIT.L("Cannot reset %s: its settings are invalid."), name))
+    return
+  end
+  if store == nil then
+    store = {}
+    if storeName then _G[storeName] = store else BIT.DB().modules[name] = store end
+  end
+  if BIT.Style and BIT.Style.Reset then
+    local ok, err = pcall(BIT.Style.Reset, name)
+    if not ok then
+      BIT.Say(string.format(BIT.L("Cannot reset %s appearance: %s"), name, tostring(err)))
+      return
+    end
+  end
+  for key, value in pairs(defaults) do store[key] = copyDefault(value) end
+  if name == "ResourceDing" then
+    store.manaLevels, store.manaPercent = nil, nil
+  elseif name == "CastPrediction" then
+    store.talentForce, store.auraForce = {}, {}
+  elseif name == "HunterRangeFinder" then
+    store.plateScheme = 2
+  end
+  ReloadUI()
+end
+
+local function confirmResetModule(name)
+  StaticPopupDialogs["UPT_RESET_MODULE"] = {
+    text = BIT.L("Reset all settings for %s? The interface will reload. Module enable state, learned data and shared settings are kept."),
+    button1 = BIT.L("Reset module"), button2 = CANCEL,
+    OnAccept = function(_, moduleName) resetModule(moduleName) end,
+    timeout = 0, whileDead = true, hideOnEscape = true,
+  }
+  local tab = BIT.tabs[name]
+  StaticPopup_Show("UPT_RESET_MODULE", BIT.L(tab.title or name), nil, name)
+end
+
 local function buildPage(name)
   local tab = BIT.tabs[name] or {}
   local page = CreateFrame("Frame", nil, window)
@@ -684,6 +748,8 @@ local function buildPage(name)
     if type(ReloadUI) == "function" then ReloadUI() end
   end)
   page.reload:SetPoint("TOPRIGHT", -4, -7)
+  page.resetModule = UI.Button(page, BIT.L("Reset module"), 140, function() confirmResetModule(name) end)
+  page.resetModule:SetPoint("RIGHT", page.reload, "LEFT", -8, 0)
   end
 
   local content = attachScroll(page, tab.plain and 0 or SWITCH_HEIGHT)

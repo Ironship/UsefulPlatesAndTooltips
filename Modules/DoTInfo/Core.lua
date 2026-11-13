@@ -114,9 +114,11 @@ ns.TRAP_DOTS = { ["Immolation Trap"] = true }
 ns.DELAYED_DOTS = { ["Wyvern Sting"] = true }
 -- Any new Fire trap replaces the armed one (by name, so it works in every language).
 ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
+-- This projectile has no direct damage confirming that the cast actually landed.
+ns.CONFIRM_PROJECTILE_DOTS = { ["Serpent Sting"] = true }
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
-    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS, ns.AMPLIFY_USES }
+    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS, ns.AMPLIFY_USES, ns.CONFIRM_PROJECTILE_DOTS }
 ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -496,6 +498,11 @@ end
 -- A waiting DoT doesn't count toward the marker until its first tick lands (see WAIT_MODES).
 local function isWaiting(dot)
     if dot.predictionOnly then return false end
+    if dot.confirmationPending then
+        -- A tick from the old application cannot prove that a refresh landed.
+        return not (dot.ticksSeen > 0 and dot.lastTickAt
+            and (not dot.replaced or dot.lastTickAt > dot.replaced.expiresAt + TICK_MATCH_WINDOW))
+    end
     if dot.ticksSeen > 0 then return false end
     -- An avoid right after the cast that may not have been its own: always wait for the first tick.
     if dot.doubtful or db.waitFirstTick == "always" then return true end
@@ -1111,8 +1118,14 @@ local function onPlayerCast(spellID, castGUID)
     local now = GetTime()
     dotsByTarget[key] = dotsByTarget[key] or {}
     local previous = dotsByTarget[key][name]
+    if not ns.Retail and previous and previous.confirmationPending and isWaiting(previous) then
+        previous = previous.replaced
+    end
+    if not ns.Retail and ns.CONFIRM_PROJECTILE_DOTS[name]
+        and previous and now > previous.expiresAt + TICK_MATCH_WINDOW then previous = nil end
     local dot = newDot(spellID, tickKey, name, total, school, duration, statedInterval, now)
     dot.boost = amplified
+    dot.confirmationPending = not ns.Retail and ns.CONFIRM_PROJECTILE_DOTS[name] or nil
     if ns.Retail then ns.Retail.ApplyRefresh(dot, previous, now) end
     -- A recast may keep the old DoT's tick timer: remember its rhythm and tick size (ns.discoverRhythm), unbuffed:
     -- the old DoT may have had Amplify Curse's buff and this one may not, or the other way round.
@@ -1525,10 +1538,11 @@ function ns.onHiddenAmountHit(key, unit, school, absorbed)
         tickIndex = anchorTick(best, bestIndex, now)
     end
     hit.fed[bestName] = true
+    local nowShown = wasWaiting and not isWaiting(best)
     trace(string.format("TICK %s (amount hidden) on %s (tick %d/%d, expecting %.1f for this tick)%s", bestName,
         unit, tickIndex, best.totalTicks, expectedTick(best) * tickShape(best, tickIndex),
-        wasWaiting and ", now shown" or ""))
-    if wasWaiting then return key end
+        nowShown and ", now shown" or ""))
+    if nowShown then return key end
 end
 
 local function onUnitCombat(unit, action, flag, amount, school)
@@ -1613,11 +1627,11 @@ local function onUnitCombat(unit, action, flag, amount, school)
                 local wasWaiting = isWaiting(dot)
                 if trySwapSameSlot(dot, name, amount, isCrit, now) then return end
                 if tryRelearn(dot, name, amount, isCrit, index, distance, now) then
-                    return wasWaiting and key or nil
+                    return wasWaiting and not isWaiting(dot) and key or nil
                 end
                 if ns.discoverRhythm(dot, name, amount, isCrit, now) then
                     lastCombatFed[name] = true
-                    return wasWaiting and key or nil
+                    return wasWaiting and not isWaiting(dot) and key or nil
                 end
             end
         end
@@ -1648,10 +1662,11 @@ local function onUnitCombat(unit, action, flag, amount, school)
     local tickIndex = anchorTick(best, bestIndex, now)
     lastCombatFed[bestName] = true
     if ns.DeathMark then ns.DeathMark.OnTick(key, bestName, amount, now) end
+    local nowShown = wasWaiting and not isWaiting(best)
     trace(string.format("TICK %s %d%s on %s (tick %d/%d, expecting %.1f for this tick)%s", bestName, amount,
         isCrit and " CRIT" or "", unit, tickIndex, best.totalTicks, expectedTick(best) * factor,
-        wasWaiting and ", now shown" or ""))
-    if wasWaiting then return key end
+        nowShown and ", now shown" or ""))
+    if nowShown then return key end
 end
 
 -- Debuff check (Forever). UNIT_SPELLCAST_SUCCEEDED also fires for a cast that was resisted or missed, and the
@@ -1732,24 +1747,35 @@ function ns._verifyAuras(now)
                 local found, startedAt
                 if unit then found, startedAt = ns._ownDebuff(unit, dot.spellID, name) end
                 if found == nil then
-                    if now - dot.verifyAt > check.giveUp then dot.verifyAt, dot.replaced = nil, nil end
+                    if now - dot.verifyAt > check.giveUp then
+                        dot.verifyAt = nil
+                        if not dot.confirmationPending then dot.replaced = nil end
+                    end
                 else
                     local replaced = dot.replaced
-                    dot.verifyAt, dot.replaced = nil, nil
                     if found then
                         db.auras[name] = true
                         if replaced and startedAt and startedAt < dot.appliedAt - check.startSlack then
                             dots[name] = replaced
                             trace(string.format("AURA %s on %s is still the earlier one (%.1fs old): the recast did not land; keeping the earlier one",
                                 name, unit, now - startedAt))
-                        elseif dot.doubtful then
-                            dot.doubtful = nil
-                            trace(string.format("AURA %s is on %s: it landed", name, unit))
+                        elseif dot.confirmationPending and replaced and not startedAt
+                            and now <= replaced.expiresAt + TICK_MATCH_WINDOW then
+                            -- An undated aura may still be the old application.
+                            if now - dot.verifyAt > check.giveUp then dot.verifyAt = nil end
+                        else
+                            dot.verifyAt, dot.replaced = nil, nil
+                            if dot.doubtful or dot.confirmationPending then
+                                dot.doubtful, dot.confirmationPending = nil, nil
+                                trace(string.format("AURA %s is on %s: it landed", name, unit))
+                            end
                         end
                     elseif db.auras[name] then
                         dots[name] = nil
                         trace(string.format("AURA %s is not on %s: resisted or missed; dropped", name, unit))
                     else
+                        dot.verifyAt = nil
+                        if not dot.confirmationPending then dot.replaced = nil end
                         trace(string.format("AURA %s is not on %s, but its debuff was never read under that name: not judged",
                             name, unit))
                     end
@@ -1802,6 +1828,12 @@ local function housekeep(now)
     for key, dots in pairs(dotsByTarget) do
         local onToken -- whether a unit token shows the mob now: ticks only arrive (UNIT_COMBAT) for a mob on one
         for name, dot in pairs(dots) do
+            local replaced = dot.confirmationPending and isWaiting(dot) and dot.replaced
+            if replaced then
+                while replaced.nextTickAt < now - TICK_MATCH_WINDOW and replaced.nextTickAt <= replaced.expiresAt do
+                    replaced.nextTickAt = replaced.nextTickAt + replaced.interval
+                end
+            end
             local late = (dot.ticksSeen == 0 and dot.travel) or 0
             while not dot.predictionOnly and dot.nextTickAt < now - TICK_MATCH_WINDOW - late
                 and dot.nextTickAt <= dot.expiresAt do
@@ -1887,7 +1919,11 @@ local function dotBreakdown(key)
     local list = {}
     if not dots and not cast then return list end
     for name, dot in pairs(dots or {}) do
-        if not isWaiting(dot) and not (castVisible and name == cast.name) then
+        if dot.confirmationPending and isWaiting(dot) then
+            dot = dot.replaced
+            if dot and GetTime() >= dot.expiresAt then dot = nil end
+        end
+        if dot and not isWaiting(dot) and not (castVisible and name == cast.name) then
             if not dot.segmentOrder then
                 dot.segmentOrder = { rank = dot.estimatedClock and 2
                     or ((dot.predictionOnly or (dot.unsure and dot.normalTicks == 0)) and 1 or 0),
