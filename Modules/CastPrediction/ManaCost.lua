@@ -128,12 +128,24 @@ for _, event in ipairs({ "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_FAILED", "UNIT_S
     "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_CHANNEL_START" }) do
   frame:RegisterUnitEvent(event, "player")
 end
-frame:SetScript("OnEvent", function(_, event, _, _, spellID)
+local shownCast -- the cast GUID the segment is shown for, when the client gives a readable one
+
+frame:SetScript("OnEvent", function(_, event, _, castGUID, spellID)
   if event == "PLAYER_LOGIN" then
     BIT.Settings("CastPrediction", { showManaCost = true }) -- the option's default, before the settings tab reads it
     return
   end
-  if event ~= "UNIT_SPELLCAST_START" then return hide() end
+  if type(castGUID) ~= "string" or isSecret(castGUID) then castGUID = nil end
+  if event ~= "UNIT_SPELLCAST_START" then
+    -- Pressing another spell during a cast fires FAILED (and an instant one SUCCEEDED) with its own cast GUID
+    -- while the first cast goes on: only the end of the cast that is shown hides the segment.
+    if shownCast and castGUID and castGUID ~= shownCast
+      and (event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED"
+        or event == "UNIT_SPELLCAST_INTERRUPTED" or event == "UNIT_SPELLCAST_SUCCEEDED") then return end
+    shownCast = nil
+    return hide()
+  end
+  shownCast = castGUID
   if not enabled() then return hide() end
   if type(spellID) ~= "number" or isSecret(spellID) then spellID = castingSpellID() end
   local cost = spellID and manaCost(spellID)
