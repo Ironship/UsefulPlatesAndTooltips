@@ -345,7 +345,7 @@ end
 -- Nameplate anchor (ResourceDing pattern): the rail rides above the target's
 -- own plate, where the eyes already are, instead of a fixed screen spot.
 -- Forbidden plates are never touched; without a plate the saved screen
--- position is the fallback, so the HUD never strands.
+-- position is used only when the attachment option is off.
 local function hunterTargetPlate()
     if type(UnitExists) ~= "function" then return nil end
     local ok, exists = pcall(UnitExists, "target")
@@ -376,26 +376,37 @@ local function reanchorHunterHud()
             hud:SetPoint("CENTER", UIParent, "CENTER", finiteNum(settings.x, DEFAULTS.x), finiteNum(settings.y, DEFAULTS.y))
             reanchorKey = "screen"
         end
+        return true
+    end
+    local function noPlate()
+        if reanchorKey ~= "unseated" then
+            if hud:GetParent() ~= UIParent then hud:SetParent(UIParent) end
+            hud:ClearAllPoints()
+            reanchorKey, reanchorOffset = "unseated", nil
+        end
+        return false
     end
     if preview or settings.attachToPlate ~= true then
-        screenFallback()
-        return
+        return screenFallback()
     end
     local plate = hunterTargetPlate()
-    if not plate then
-        screenFallback()
-        return
-    end
+    if not plate then return noPlate() end
     local offset = finiteNum(tonumber(settings.plateOffset), DEFAULTS.plateOffset)
     if offset < -80 then offset = -80 elseif offset > 30 then offset = 30 end
     local bar = hunterHealthBarOf(plate)
-    if not bar then screenFallback(); return end
+    if not bar then return noPlate() end
     if reanchorKey ~= bar or reanchorOffset ~= offset then
         if hud:GetParent() ~= plate then hud:SetParent(plate) end
         hud:ClearAllPoints()
         hud:SetPoint("TOP", bar, "BOTTOM", 0, -offset)
         reanchorKey, reanchorOffset = bar, offset
     end
+    return true
+end
+
+local function hideUnseatedHud()
+    hud:Hide()
+    lastRenderedBand, lastRenderedScatter, lastRenderedScatterRange = nil, nil, nil
 end
 
 local function buildScene(parent)
@@ -741,7 +752,10 @@ local function updateDisplay(_, dt)
         return
     end
     local scatter = updateScatterFlag(band)
-    reanchorHunterHud()
+    if not reanchorHunterHud() then
+        hideUnseatedHud()
+        return
+    end
     local scatterRange = band == "Y25" and scatter and scatterShotRange() == true
     if band == lastRenderedBand and scatter == lastRenderedScatter
         and scatterRange == lastRenderedScatterRange then return end
@@ -769,7 +783,7 @@ local function resetPosition()
     reanchorKey, reanchorOffset = nil, nil
     if hud then
         position()
-        reanchorHunterHud()
+        if not reanchorHunterHud() then hideUnseatedHud() end
     end
 end
 M.ResetPosition = resetPosition
@@ -852,7 +866,7 @@ local function start()
             driver:SetShown(preview or hasTarget())
         elseif band and band ~= "OOR" and not preview then
             -- Plates recycle between units: re-seat the rail on the new plate.
-            reanchorHunterHud()
+            if not reanchorHunterHud() then hideUnseatedHud() end
         end
     end)
 
@@ -1034,7 +1048,11 @@ local function refreshAll()
         local style = BIT.Style.Resolve(M.moduleName, hunterLegacy)
         local b = preview and "PREVIEW" or band
         if b and b ~= "OOR" then
-            renderScene(hud, style, b, scatterRed)
+            if reanchorHunterHud() then
+                renderScene(hud, style, b, scatterRed)
+            else
+                hideUnseatedHud()
+            end
         end
     end
     refreshControls()
@@ -1260,7 +1278,7 @@ local function buildTabs(parent, isHunter)
     parent.attach = display:checkbox("attachToPlate", "Attach to target nameplate",
         { enabledIf = hunterOnly,
             tooltip = "The rail rides above the target's nameplate, like the ResourceDing dots. "
-                .. "Unchecked keeps the draggable screen position." })
+                .. "It is hidden when that plate is not visible. Unchecked keeps the draggable screen position." })
     parent.plateOffset = display:slider("plateOffset", "Vertical offset (- = above)", -80, 30, 1,
         { enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
             tooltip = "How far the rail sits from the plate's health bar. The same seat as the combo dots: top of the row, -offset under the bar." })
