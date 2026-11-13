@@ -173,6 +173,8 @@ local DEFAULTS = {
     -- Accuracy
     waitFirstTick = "off",
     estimateDuringCast = true,
+    swingKill = false, -- the kill icon also counts one average weapon hit (melee swing, wand or ranged shot)
+    killMargin = 90, -- % of the estimate the kill icon trusts: heals, regen and estimate error eat the rest
     targetOverMouseover = false, -- a same-named mob under the mouse doesn't blank a target cast (_namedEnemyKey)
     -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
     nameplateMode = "markerIcon",
@@ -263,17 +265,26 @@ local protectionSpells = {
     [212295] = true, -- Nether Ward
 }
 local protectionNames = {}
+local bopName
 for id in pairs(protectionSpells) do
     local getName = (C_Spell and C_Spell.GetSpellName) or GetSpellInfo
     if type(getName) == "function" then
         local ok, name = pcall(getName, id)
-        if ok and not isSecret(name) and type(name) == "string" then protectionNames[name] = true end
+        if ok and not isSecret(name) and type(name) == "string" then
+            protectionNames[name] = true
+            if id == 1022 then bopName = name end
+        end
     end
 end
 
 -- Only a positively detected absorb or known protection aura hides the kill icon. Secret/unreadable
 -- state (common on Forever in combat) counts as unshielded: hiding on "unknown" hid it on plain mobs.
-function ns.shielded(unit)
+function ns.shielded(unit, entries)
+    -- Blessing of Protection stops physical damage only: it doesn't shield a mob from magic DoTs.
+    local magic = false
+    for _, entry in ipairs(entries or {}) do
+        if entry.school ~= SCHOOL_MASKS.Physical then magic = true break end
+    end
     if type(UnitGetTotalAbsorbs) == "function" then
         local ok, amount = pcall(UnitGetTotalAbsorbs, unit)
         if ok and not isSecret(amount) and type(amount) == "number" and amount > 0 then return true end
@@ -295,8 +306,10 @@ function ns.shielded(unit)
             if not ok or name == nil then return false end
         end
         -- Unreadable entries are skipped so a readable shield further down still counts.
-        if ok and not isSecret(id) and type(id) == "number" and protectionSpells[id] then return true end
-        if ok and not isSecret(name) and type(name) == "string" and protectionNames[name] then return true end
+        if ok and not isSecret(id) and type(id) == "number" and protectionSpells[id]
+            and not (magic and id == 1022) then return true end
+        if ok and not isSecret(name) and type(name) == "string" and protectionNames[name]
+            and not (magic and name == bopName) then return true end
     end
     return false
 end
@@ -1639,6 +1652,11 @@ local function onUnitCombat(unit, action, flag, amount, school)
         best.normalTicks = best.normalTicks + 1
         saveLearnedTick(best)
     end
+    -- A shield ate (part of) our own tick: readable proof of an absorb even when the aura list is secret.
+    if absorbed then
+        ns._absorbedAt = ns._absorbedAt or {}
+        ns._absorbedAt[key] = now
+    end
     local tickIndex = anchorTick(best, bestIndex, now)
     lastCombatFed[bestName] = true
     if ns.DeathMark then ns.DeathMark.OnTick(key, bestName, amount, now) end
@@ -1804,6 +1822,13 @@ local function housekeep(now)
             if not dot.predictionOnly and not dot.auraObserved and dot.ticksSeen == 0 and dot.missed >= math.max(MISSED_TICKS_BEFORE_DROP, dot.totalTicks) then
                 dots[name] = nil
                 trace("DROP " .. name .. " never ticked (resisted or immune?)")
+            -- Ticked, then went quiet on its known rhythm: dispelled or pushed off by the debuff cap. Its leftover
+            -- ticks would keep the kill icon lit. Physical is left out: hidden-amount bleed ticks don't reset
+            -- `missed` once anchored (onHiddenAmountHit). Proc DoTs keep their own books (ProcDots.lua).
+            elseif not dot.predictionOnly and not dot.auraObserved and not dot.procDot and dot.firstTickAt
+                and dot.school ~= SCHOOL_MASKS.Physical and dot.missed >= MISSED_TICKS_BEFORE_DROP + 1 then
+                dots[name] = nil
+                trace("DROP " .. name .. " stopped ticking (dispelled?)")
             elseif now > dot.expiresAt + TICK_MATCH_WINDOW then
                 dots[name] = nil
                 trace("EXPIRE " .. name)
@@ -2835,7 +2860,7 @@ local function refresh()
         if total <= 0 or (previewState.health or 1) <= 0 then return hideAll() end
         -- UI-4: a dead mock shows "Target died", not a kill skull on a corpse.
         skullBar:SetMinMaxValues(0, math.max(previewState.health, 0.01))
-        skullBar:SetValue(total)
+        skullBar:SetValue(ns.lethalDamage(entries))
         skullWindow:SetShown(db.showSkull)
         setMarkerScale(100)
         local perDot = db.dotColors ~= "single"
@@ -2858,7 +2883,7 @@ local function refresh()
     local perDot = db.dotColors ~= "single"
     local ok, err = pcall(function()
         skullBar:SetMinMaxValues(0, UnitHealth("target"))
-        skullBar:SetValue(damage)
+        skullBar:SetValue(ns.lethalDamage(breakdown))
         if healthBar then
             setMarkerScale(UnitHealthMax("target"))
             setMarkerValue(damage, unitKey("target"), updateSegments(perDot and breakdown or nil))
@@ -2873,7 +2898,7 @@ local function refresh()
         return hideAll()
     end
 
-    skullWindow:SetShown(db.showSkull and not ns.shielded("target"))
+    skullWindow:SetShown(db.showSkull and not ns.shielded("target", breakdown))
     if healthBar then
         label:SetText(perDot and breakdownText(breakdown) or string.format(BIT.L("DoTs: %d"), damage))
         showMarkers()
