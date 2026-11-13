@@ -374,7 +374,7 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
         end
         if w.refresh then w.refresh:SetShown(anyDue and not perDot) end
         w.iconBar:SetMinMaxValues(0, health)
-        w.iconBar:SetValue(total)
+        w.iconBar:SetValue(ns.lethalDamage and ns.lethalDamage(entries, unit ~= nil) or total)
     end)
     if not ok then
         hideWidgets(w)
@@ -387,7 +387,7 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
     -- must hide too, not linger alone on the plate.
     -- A window going hidden -> shown renders one frame with the icon bar's stale/unlaid-out fill (full width),
     -- flashing the icon on every new DoT. Show it transparent first; the next draw (one refresh later) reveals it.
-    if not (db.showMarkers and db.nameplateMode == "markerIcon" and (not unit or not ns.shielded(unit))) then
+    if not (db.showMarkers and db.nameplateMode == "markerIcon" and (not unit or not ns.shielded(unit, entries))) then
         w.iconWindow:Hide()
         w.iconArmed = nil
     elseif w.iconArmed then

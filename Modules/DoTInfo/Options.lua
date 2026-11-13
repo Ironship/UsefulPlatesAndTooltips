@@ -229,7 +229,7 @@ local function updatePreview()
         setVerdict("dead", BIT.L("Target died"), "")
     elseif total <= 0 then
         setVerdict("none", BIT.L("No DoTs on the target"), "")
-    elseif total >= health then
+    elseif total * (tonumber(ns.db and ns.db.killMargin) or 100) / 100 >= health then
         setVerdict("lethal", BIT.L("DoTs kill it"), string.format(BIT.L("%s vs %s"), pct(total), pct(health)))
     else
         setVerdict("survives", string.format(BIT.L("Survives by %s"), pct(health - total)),
@@ -500,6 +500,13 @@ local function buildTabs()
         { tooltip = "Shows an icon at the chosen position when your DoTs on the target will kill it." })
     icon:choice("skullIcon", "Kill icon", lists.icons)
     icon:slider("skullSize", "Icon size", 20, 128, 2)
+    icon:checkbox("swingKill", "Count one weapon hit", { tooltip = "The kill icon also shows when your DoTs plus one "
+        .. "average hit of your best weapon attack (melee swing, wand or ranged shot) would kill. The hit is "
+        .. "the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. "
+        .. "The marker itself still shows only the DoTs." })
+    icon:slider("killMargin", "Kill margin", 50, 100, 5, { suffix = "%", tooltip = "The icon shows only when this "
+        .. "share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the "
+        .. "icon; 100% compares the full estimate. The marker always shows the full estimate." })
     icon:choice("skullPosition", "Icon position", {
         { id = "portrait", label = "Portrait" },
         { id = "left", label = "Left of the health bar" },
