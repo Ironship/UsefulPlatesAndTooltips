@@ -43,6 +43,8 @@ Modules\SpellDamageInfo\Parser.lua
 Modules\SpellDamageInfo\Parser_enUS.lua
 Modules\SpellDamageInfo\Parser_deDE.lua
 Modules\SpellDamageInfo\Parser_ruRU.lua
+Modules\SpellDamageInfo\Parser_frFR.lua
+Modules\SpellDamageInfo\Parser_esES.lua
 Modules\SpellDamageInfo\Estimate.lua
 Modules\SpellDamageInfo\Core.lua
 Modules\SpellDamageInfo\Options.lua
