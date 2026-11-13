@@ -280,10 +280,10 @@ end
 -- Only a positively detected absorb or known protection aura hides the kill icon. Secret/unreadable
 -- state (common on Forever in combat) counts as unshielded: hiding on "unknown" hid it on plain mobs.
 function ns.shielded(unit, entries)
-    -- Blessing of Protection stops physical damage only: it doesn't shield a mob from magic DoTs.
-    local magic = false
+    -- Mixed damage and weapon hits cannot safely count their physical portion through BoP.
+    local physical = not entries or #entries == 0 or (ns.db and ns.db.swingKill)
     for _, entry in ipairs(entries or {}) do
-        if entry.school ~= SCHOOL_MASKS.Physical then magic = true break end
+        if isSecret(entry.school) or type(entry.school) ~= "number" or entry.school % 2 == 1 then physical = true break end
     end
     if type(UnitGetTotalAbsorbs) == "function" then
         local ok, amount = pcall(UnitGetTotalAbsorbs, unit)
@@ -307,9 +307,9 @@ function ns.shielded(unit, entries)
         end
         -- Unreadable entries are skipped so a readable shield further down still counts.
         if ok and not isSecret(id) and type(id) == "number" and protectionSpells[id]
-            and not (magic and id == 1022) then return true end
+            and not (not physical and id == 1022) then return true end
         if ok and not isSecret(name) and type(name) == "string" and protectionNames[name]
-            and not (magic and name == bopName) then return true end
+            and not (not physical and name == bopName) then return true end
     end
     return false
 end
@@ -598,28 +598,12 @@ local function describeReading(ok, value)
     return tostring(value)
 end
 
--- L11-1: what the game's own combo point display is showing, for the client
--- that keeps the number itself secret. Same source ResourceDing reads
--- (ComboFrame + ComboPointN.Highlight alpha), so both modules agree in
--- combat instead of RD seeing 5/5 while DoTInfo logs "unknown".
+-- The client may expose either modern ComboPoints or classic ComboPointN highlights.
 local function displayedComboPoints()
-    local frame = _G and _G.ComboFrame
-    if type(frame) ~= "table" or type(frame.IsShown) ~= "function" then return nil end
-    local ok, shown = pcall(frame.IsShown, frame)
-    if not ok or isSecret(shown) then return nil end
-    if not shown then return 0 end
-    local count = 0
-    for index = 1, 12 do
-        local point = _G["ComboPoint" .. index]
-        local highlight = type(point) == "table" and point.Highlight
-        if type(highlight) ~= "table" or type(highlight.GetAlpha) ~= "function" then break end
-        local okV, visible = pcall(point.IsShown, point)
-        local okA, alpha = pcall(highlight.GetAlpha, highlight)
-        if not okV or not okA or isSecret(visible) or isSecret(alpha) then return nil end
-        if type(alpha) ~= "number" then return nil end
-        if visible and alpha > 0.5 then count = count + 1 end
+    local resource = BIT.modules and BIT.modules.ResourceDing
+    if type(resource) == "table" and type(resource.DisplayedComboPoints) == "function" then
+        return resource.DisplayedComboPoints()
     end
-    return count
 end
 
 -- Returns the best plain reading (or nil) and a description of what each API returned, for the log.
@@ -1484,7 +1468,7 @@ local combatFrameHits = {}
 -- Forever hides amounts, not schools (DoesItDie #26): match timing without learning damage.
 -- ponytail: foreign hits can consume a hidden tick slot, but physical hits must not move the cast's rhythm.
 -- Field, not local: this file is at Lua's 200-local limit.
-function ns.onHiddenAmountHit(key, unit, school)
+function ns.onHiddenAmountHit(key, unit, school, absorbed)
     local dots = dotsByTarget[key]
     local tracked = dots ~= nil
     -- An armed trap needs the hit even where no DoT runs (ProcDots.lua).
@@ -1521,6 +1505,10 @@ function ns.onHiddenAmountHit(key, unit, school)
         if tracked then trace(string.format("HIT (amount hidden) school %d on %s not matched to a DoT", school, unit)) end
         return
     end
+    if absorbed then
+        ns._absorbedAt = ns._absorbedAt or {}
+        ns._absorbedAt[key] = now
+    end
     if school == SCHOOL_MASKS.Physical and best.firstTickAt then return end
     local wasWaiting = isWaiting(best)
     best.ticksSeen = best.ticksSeen + 1
@@ -1556,7 +1544,7 @@ local function onUnitCombat(unit, action, flag, amount, school)
     if action == "WOUND" or absorbed then onTargetHit(key, school) end
     if action ~= "WOUND" and not absorbed then return end
     if isSecret(amount) and not isSecret(school) and type(school) == "number" then
-        return ns.onHiddenAmountHit(key, unit, school)
+        return ns.onHiddenAmountHit(key, unit, school, absorbed)
     end
     if isSecret(amount) or isSecret(school) or type(amount) ~= "number" then return end
     local isCrit = not isSecret(flag) and flag == "CRITICAL"
@@ -1895,10 +1883,11 @@ local function dotBreakdown(key)
     end
     local dots = key and dotsByTarget[key]
     local cast = key and castInProgress and castInProgress.key == key and castInProgress or nil
+    local castVisible = cast and not isWaiting(cast.dot)
     local list = {}
     if not dots and not cast then return list end
     for name, dot in pairs(dots or {}) do
-        if not isWaiting(dot) and not (cast and name == cast.name) then
+        if not isWaiting(dot) and not (castVisible and name == cast.name) then
             if not dot.segmentOrder then
                 dot.segmentOrder = { rank = dot.estimatedClock and 2
                     or ((dot.predictionOnly or (dot.unsure and dot.normalTicks == 0)) and 1 or 0),
@@ -1909,7 +1898,7 @@ local function dotBreakdown(key)
                 refreshDue = refreshDueFor(name, dot) })
         end
     end
-    if cast and not isWaiting(cast.dot) then
+    if castVisible then
         -- `running`: what the DoT this cast would refresh still has to deal. The cast's entry stands in for it
         -- above, so the kill check (KillCheck.lua), which leaves the cast out, counts this instead.
         local refreshed = dots and dots[cast.name]
@@ -3279,6 +3268,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         wipe(dotsByTarget)
+        if ns._absorbedAt then wipe(ns._absorbedAt) end
         if ns.ProcDots then ns.ProcDots.Reset() end
         pendingCast, comboAtSend = nil, nil
         forgetPendingOutcomes()
@@ -3310,6 +3300,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         -- used while mob GUIDs are secret) belonged to the mob it showed before.
         local token = ...
         local old = type(token) == "string" and not isSecret(token) and ("plate:" .. token) or nil
+        if old and ns._absorbedAt then ns._absorbedAt[old] = nil end
         if old and (dotsByTarget[old] or (pendingCast and pendingCast.key == old)
             or (castInProgress and castInProgress.key == old)) then
             trace("PLATE " .. token .. (event == "NAME_PLATE_UNIT_REMOVED" and " removed" or " reused")
@@ -3330,6 +3321,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
             end
         end
         dotsByTarget.target = nil -- only used when the target's GUID is secret
+        if ns._absorbedAt then ns._absorbedAt.target = nil end
         if pendingCast and pendingCast.key == "target" then pendingCast.key = nil end
         resetComboCount() -- combo points belong to the target they were built on
         forgetPendingOutcomes()

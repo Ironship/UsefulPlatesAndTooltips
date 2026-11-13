@@ -124,7 +124,10 @@ local function usable(spell)
     local cd = ask(C_Spell and C_Spell.GetSpellCooldown, spell.id)
     local start, duration
     if type(cd) == "table" then start, duration = cd.startTime, cd.duration
-    else start, duration = ask(GetSpellCooldown, spell.id) end
+    elseif type(GetSpellCooldown) == "function" then
+      local ok, legacyStart, legacyDuration = pcall(GetSpellCooldown, spell.id)
+      if ok then start, duration = legacyStart, legacyDuration end
+    end
     if type(duration) == "number" and not isSecret(duration) and type(start) == "number" and not isSecret(start)
       and start > 0 and duration > 1.5 then
       return false

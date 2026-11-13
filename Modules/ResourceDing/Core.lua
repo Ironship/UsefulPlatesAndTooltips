@@ -229,6 +229,20 @@ end
 local function displayedComboPoints()
   local frame = _G.ComboFrame
   if type(frame) ~= "table" or type(frame.IsShown) ~= "function" then return nil end
+  if type(frame.ComboPoints) == "table" and #frame.ComboPoints > 0 then
+    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+    if type(sdi) == "table" and type(sdi.DisplayedComboPoints) == "function" then
+      return sdi.DisplayedComboPoints()
+    end
+    return nil
+  end
+  local first = _G.ComboPoint1
+  if type(first) ~= "table" or type(first.Highlight) ~= "table"
+      or type(first.Highlight.GetAlpha) ~= "function" then return nil end
+  if type(frame.IsEventRegistered) == "function" then
+    local listening = plainValue(pcall(frame.IsEventRegistered, frame, "PLAYER_TARGET_CHANGED"))
+    if listening == false then return nil end
+  end
   local shown = plainValue(pcall(frame.IsShown, frame))
   if shown == nil then return nil end
   if not shown then return 0 end
@@ -237,17 +251,18 @@ local function displayedComboPoints()
   -- (startComboPointIndex is 2 unless the maximum is 6 or 9), which is how a
   -- count of the first five read four at a full bar on 2026-09-19. A hidden
   -- frame is not lit whatever its alpha says.
-  local count = 0
+  local count, found = 0, false
   for index = 1, 12 do
     local point = _G["ComboPoint" .. index]
     local highlight = type(point) == "table" and point.Highlight
     if type(highlight) ~= "table" or type(highlight.GetAlpha) ~= "function" then break end
+    found = true
     local visible = plainValue(pcall(point.IsShown, point))
     local alpha = plainValue(pcall(highlight.GetAlpha, highlight))
     if visible == nil or type(alpha) ~= "number" then return nil end
     if visible and alpha > 0.5 then count = count + 1 end
   end
-  return count
+  return found and count or nil
 end
 Addon.DisplayedComboPoints = displayedComboPoints
 
