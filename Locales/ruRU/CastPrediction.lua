@@ -183,4 +183,7 @@ BIT.RegisterLocale("ruRU", {
   ["Health bar marker OFF."] = "Маркер полосы здоровья выключен.",
   ["/upt castpred - open the settings; line - toggle the marker; talents - what the talent tree answers; auras - what buffs/debuffs are readable; learned - what the hits taught; census - read the whole talent tree into the saved settings (census clear removes it); reset - forget learned factors; debug - echo the trace log"] =
     "/upt castpred — открыть настройки; line — переключить маркер; talents — ответ дерева талантов; auras — доступные положительные и отрицательные эффекты; learned — вывод данных попаданий; census — сохранить всё дерево талантов в настройках (census clear удаляет его); reset — сбросить накопленные коэффициенты; debug — вывести журнал отладки",
+  ["Show mana cost on your mana bar"] = "Показывать стоимость маны на вашей полосе маны",
+  ["While you cast a spell with a cast time, marks on your own mana bar how much mana it will take. The client takes the mana only when the cast lands."] =
+    "Пока вы произносите заклинание со временем сотворения, на вашей полосе маны отмечается, сколько маны оно потратит. Клиент списывает ману только тогда, когда заклинание срабатывает.",
 })

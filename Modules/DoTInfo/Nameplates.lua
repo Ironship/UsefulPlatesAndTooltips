@@ -374,7 +374,7 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
         end
         if w.refresh then w.refresh:SetShown(anyDue and not perDot) end
         w.iconBar:SetMinMaxValues(0, health)
-        w.iconBar:SetValue(ns.lethalDamage and ns.lethalDamage(entries) or total)
+        w.iconBar:SetValue(ns.lethalDamage and ns.lethalDamage(entries, unit ~= nil) or total)
     end)
     if not ok then
         hideWidgets(w)

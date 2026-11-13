@@ -252,4 +252,11 @@ BIT.RegisterLocale("ruRU", {
   ["(%d-%d shown; scroll for more)"] = "(показано %d–%d; прокрутите, чтобы увидеть остальные)",
   ["1 learned tick size"] = "Изучено 1 значение тика",
   ["%d learned tick sizes"] = "Изучено значений тиков: %d",
+  -- вкладка «Значок убийства»: удар оружием и порог убийства
+  ["Count one weapon hit"] = "Учитывать один удар оружием",
+  ["The kill icon also shows when your DoTs plus one average hit of your best weapon attack (melee swing, wand or ranged shot) would kill. The hit is the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. The marker itself still shows only the DoTs."] =
+    "Значок убийства также показывается, если ваши DoT плюс один средний удар вашей лучшей атаки оружием (удар в ближнем бою, выстрел из жезла или дальнего оружия) убьют цель. Берётся среднее значение с листа персонажа: броня, промахи и критические удары не учитываются, порог убийства применяется. Сама отметка по-прежнему показывает только DoT.",
+  ["Kill margin"] = "Порог убийства",
+  ["The icon shows only when this share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the icon; 100% compares the full estimate. The marker always shows the full estimate."] =
+    "Значок показывается, только если такой доли оценённого урона DoT достаточно для убийства. Уменьшите значение, если цели, которые лечатся или восстанавливают здоровье, переживают значок; 100% сравнивает полную оценку. Отметка всегда показывает полную оценку.",
 })

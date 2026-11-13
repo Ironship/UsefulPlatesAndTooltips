@@ -252,4 +252,11 @@ BIT.RegisterLocale("deDE", {
   ["(%d-%d shown; scroll for more)"] = "(%d-%d angezeigt; scrollt für mehr)",
   ["1 learned tick size"] = "1 gelernte Tickgröße",
   ["%d learned tick sizes"] = "%d gelernte Tickgrößen",
+  -- the Kill icon tab: weapon hit and kill margin
+  ["Count one weapon hit"] = "Einen Waffentreffer mitzählen",
+  ["The kill icon also shows when your DoTs plus one average hit of your best weapon attack (melee swing, wand or ranged shot) would kill. The hit is the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. The marker itself still shows only the DoTs."] =
+    "Das Kill-Symbol erscheint auch, wenn Eure DoTs plus ein durchschnittlicher Treffer Eures besten Waffenangriffs (Nahkampfschlag, Zauberstab- oder Fernkampfschuss) das Ziel töten würden. Der Treffer ist der Durchschnitt aus dem Charakterblatt: Rüstung, Fehlschläge und kritische Treffer werden nicht gezählt, und die Kill-Marge gilt. Die Markierung selbst zeigt weiterhin nur die DoTs.",
+  ["Kill margin"] = "Kill-Marge",
+  ["The icon shows only when this share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the icon; 100% compares the full estimate. The marker always shows the full estimate."] =
+    "Das Symbol erscheint nur, wenn dieser Anteil des geschätzten DoT-Schadens zum Töten reicht. Senkt den Wert, wenn Gegner, die sich heilen oder regenerieren, das Symbol überleben; bei 100% zählt die volle Schätzung. Die Markierung zeigt immer die volle Schätzung.",
 })

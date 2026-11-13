@@ -12,8 +12,10 @@ local ns = BIT.Module("DoTInfo")
 
 local ABSORB_SECONDS = 5
 
--- The damage the kill icon is judged on. `entries` is the DoT breakdown (Core.lua dotBreakdown).
-function ns.lethalDamage(entries)
+-- The damage the kill icon is judged on. `entries` is the DoT breakdown (Core.lua dotBreakdown). The weapon hit is
+-- an absolute amount, so it is added only where the health is a real one (`withSwing`): the options preview
+-- counts in percent of health and would be lit by it at once.
+function ns.lethalDamage(entries, withSwing)
     local sum = 0
     for _, entry in ipairs(entries) do
         if not entry.provisional then sum = sum + entry.damage end
@@ -21,7 +23,7 @@ function ns.lethalDamage(entries)
     local db = ns.db
     local margin = math.max(0, math.min(db and tonumber(db.killMargin) or 100, 100)) / 100
     local swing = 0
-    if db and db.swingKill and sum > 0 then
+    if withSwing and db and db.swingKill and sum > 0 then
         local sdi = BIT.modules.SpellDamageInfo
         if type(sdi) == "table" and type(sdi.SwingAverage) == "function" then
             local ok, value = pcall(sdi.SwingAverage)

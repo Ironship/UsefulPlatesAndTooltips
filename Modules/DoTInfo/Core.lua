@@ -2883,7 +2883,7 @@ local function refresh()
     local perDot = db.dotColors ~= "single"
     local ok, err = pcall(function()
         skullBar:SetMinMaxValues(0, UnitHealth("target"))
-        skullBar:SetValue(ns.lethalDamage(breakdown))
+        skullBar:SetValue(ns.lethalDamage(breakdown, true))
         if healthBar then
             setMarkerScale(UnitHealthMax("target"))
             setMarkerValue(damage, unitKey("target"), updateSegments(perDot and breakdown or nil))
