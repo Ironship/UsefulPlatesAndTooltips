@@ -233,6 +233,9 @@ local function buildMarkerTab(parent)
     local y = section(parent, 0, "FRAMES")
     y = place(checkRow(parent, "Show on target frame", "showTargetFrame",
         "Show the prediction on the Blizzard or configured target frame."), y)
+    y = place(checkRow(parent, "Show mana cost on your mana bar", "showManaCost",
+        "While you cast a spell with a cast time, marks on your own mana bar how much mana it will take. The client "
+        .. "takes the mana only when the cast lands."), y)
     y = place(checkRow(parent, "Show on focus frame", "showFocusFrame",
         "Also show the prediction on the focus frame when it represents the cast's target."), y)
     y = place(checkRow(parent, "Show on party frames", "showPartyFrames",
