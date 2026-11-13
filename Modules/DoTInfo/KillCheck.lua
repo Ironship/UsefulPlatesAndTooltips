@@ -18,7 +18,8 @@ local ABSORB_SECONDS = 5
 function ns.lethalDamage(entries, withSwing)
     local sum = 0
     for _, entry in ipairs(entries) do
-        if not entry.provisional then sum = sum + entry.damage end
+        -- A cast in progress is left out, but the DoT it would refresh is still ticking (entry.running).
+        if not entry.provisional then sum = sum + entry.damage else sum = sum + (entry.running or 0) end
     end
     local db = ns.db
     local margin = math.max(0, math.min(db and tonumber(db.killMargin) or 100, 100)) / 100
