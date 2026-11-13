@@ -27,7 +27,7 @@
 -- LANGUAGE PACKS
 -- This file is the engine and holds no wording of any language. The wordings live in packs,
 -- Parser_enUS.lua ("en", the base language: an unknown code falls back to it),
--- Parser_deDE.lua ("de"), Parser_ruRU.lua ("ru"), Parser_frFR.lua ("fr") and Parser_esES.lua ("es"), each listed after this file in both TOCs and each calling
+-- Parser_deDE.lua ("de"), Parser_ruRU.lua ("ru"), Parser_frFR.lua ("fr"), Parser_esES.lua ("es"), Parser_ptBR.lua ("pt"), Parser_zhCN.lua ("zh", zhCN and zhTW) and Parser_koKR.lua ("ko"), each listed after this file in both TOCs and each calling
 -- Parser.RegisterPack(code, pack). A pack is only asked to read texts of its own language.
 -- The kinds of wording that say WHAT a text is (a per-point table, weapon damage, a seal, who a
 -- heal reaches, a tick tail) are asked of every pack, because Forever mixes the languages.
@@ -35,7 +35,7 @@
 -- To add a language (Italian, say):
 --   1. /sdi dump all on a client of that language; the unread spells in the dump show the wordings
 --   2. copy Parser_frFR.lua (or Parser_deDE.lua) to Parser_itIT.lua, register it as "it" and translate its wordings
---   3. list the file in both TOCs after Parser_esES.lua; add the client locale to PARSER_LANGS
+--   3. list the file in both TOCs after Parser_koKR.lua; add the client locale to PARSER_LANGS
 --      (SpellDamageInfo/Locale.lua) and, if it is missing there, its "Use:" label to USE_PREFIXES
 --      (SpellDamageInfo/Core.lua)
 -- UTF-8 unit words are read without splitting their bytes; each pack supplies its own case folding.

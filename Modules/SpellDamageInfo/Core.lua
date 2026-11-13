@@ -865,15 +865,15 @@ local itemTextMemo = {} -- [itemID] = the use line, or "" when a built tooltip h
 -- language is not read yet stays without a number instead of guessing.
 local USE_PREFIXES = {
   "Use:", "use:", "Benutzen:", "benutzen:", "Utiliser :", "Utiliser:", "utiliser :", "utiliser:", "Utiliser\194\160:", "utiliser\194\160:",
-  "Uso:", "uso:", "Usar:", "usar:", "Usa:", "usa:",
+  "Uso:", "uso:", "사용:", "사용 효과:", "使用:", "使用：", "Usar:", "usar:", "Usa:", "usa:",
   "\208\152\209\129\208\191\208\190\208\187\209\140\208\183\208\190\208\178\208\176\208\189\208\184\208\181:",
   "\208\184\209\129\208\191\208\190\208\187\209\140\208\183\208\190\208\178\208\176\208\189\208\184\208\181:",
 }
 -- A trailing cooldown clause is the item's cooldown, not a duration its amount ticks over:
--- "(2 Min Cooldown)" (en), "(2 Min. Abklingzeit)" (de), "(2 min de recharge)" (fr), "(2 min de reutilización)" (es). ParseItemHeal would read the wording
+-- "(2 Min Cooldown)" (en), "(2 Min. Abklingzeit)" (de), "(2 min de recharge)" (fr), "(2 min de reutilización)" (es), "(2 min de recarga)" (pt). ParseItemHeal would read the wording
 -- as over-time for it. Stripped in every language whose wordings the parser reads.
 local COOLDOWN_WORDS = { "Cooldown", "cooldown", "Abklingzeit", "abklingzeit",
-  "Восстановление", "восстановление", "de recharge", "de reutilización" }
+  "Восстановление", "восстановление", "de recharge", "de reutilización", "de recarga", "대기시간", "冷却" }
 
 local function stripCooldownClause(t)
   for _, word in ipairs(COOLDOWN_WORDS) do
