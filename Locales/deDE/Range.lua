@@ -6,6 +6,9 @@ local _, BIT = ...
 BIT.RegisterLocale("deDE", {
   -- the live preview and its TRY IT block
   ["Simulate: out of range"] = "Außer Reichweite simulieren",
+  ["Simulate: no nameplate"] = "Ohne Namensplakette simulieren",
+  ["Preview the target without a visible nameplate."] = "Das Ziel ohne sichtbare Namensplakette in der Vorschau anzeigen.",
+  ["No nameplate - marker hidden"] = "Keine Namensplakette - Markierung verborgen",
   ["The preview only: the red X while it is checked, the green checkmark while it is not."] =
     "Nur für die Vorschau: das rote X, solange das Feld angehakt ist, sonst das grüne Häkchen.",
   ["In range - the green checkmark"] = "In Reichweite - das grüne Häkchen",

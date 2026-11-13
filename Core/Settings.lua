@@ -712,7 +712,7 @@ local function buildPage(name)
   local tab = BIT.tabs[name] or {}
   local page = CreateFrame("Frame", nil, window)
   page:SetPoint("TOPLEFT", MARGIN, -headerBottom())
-  page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN)
+  page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + (window.gamepadPadding or 0))
   page:Hide()
   page.name = name
 
@@ -914,6 +914,7 @@ local function createWindow()
         pad.Key("PADLSHOULDER"), pad.Key("PADRSHOULDER"))) or "")
       hint:SetWordWrap(true)
       local padding = enabled and math.max(32, hint:GetStringHeight() + 8) or 0
+      window.gamepadPadding = padding
       window.fit(padding)
       for _, page in pairs(pages) do page:SetPoint("BOTTOMRIGHT", -MARGIN, MARGIN + padding) end
     end
