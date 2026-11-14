@@ -71,6 +71,10 @@ local function rewrite(t)
   t = gsub(t, "[\228-\233][\128-\191][\128-\191]", T2S)
   t = gsub(t, "机率", "几率")
   t = gsub(t, "生命力", "生命值")
+  -- Taiwan's words: "圣骑士生命值上限的生命值" (Lay on Hands), "每秒将12点生命值转移给施法者的宠物, 最多持续10秒" (Health Funnel)
+  t = gsub(t, "生命值上限", "最大生命值")
+  t = gsub(t, "转移给施法者的宠物", "宠物分配")
+  t = gsub(t, "最多持续", "持续")
   t = gsub(t, "启动", "激活")
   t = gsub(t, "，", ", ")
   t = gsub(t, "。", ". ")
@@ -95,6 +99,10 @@ local function rewrite(t)
   -- "150%的武器伤害" -> "150% 武器伤害": a particle is more than one byte, so a pattern cannot make it optional
   t = gsub(t, "的武器伤害", "武器伤害")
   t = gsub(t, "的普通伤害", "普通伤害")
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  t = gsub(t, ", 目标身上的每层[^%.,]-额外附加 " .. NUM .. " ?%% 武器伤害", "")
+  t = gsub(t, ", 且目标身上每有一层[^%.,]-外加 " .. NUM .. " ?%% 武器伤害", "")
   return (gsub(t, " +", " "))
 end
 
@@ -207,9 +215,13 @@ local function weaponZH(t)
   local p, a, b, school
   -- Windfury Weapon and Totem: "获得额外的2次攻击，且这些攻击的近战攻击强度提高104点"
   a, b = match(t, "额外的 (" .. NUM .. ") 次攻击[^%d]-攻击强度提高 (" .. NUM .. ") 点")
+  -- Taiwan: "使你额外造成2次攻击，这些攻击获得额外104点近战攻击强度"
+  if not a then a, b = match(t, "额外造成 (" .. NUM .. ") 次攻击[^%d]-获得额外 (" .. NUM .. ") 点近战攻击强度") end
   if a then return { kind = "extra", attacks = num(a), amount = num(b) } end
   -- Seal of Command: "有一定几率对目标造成与攻击伤害的70%等量的神圣伤害"
   p, school = match(t, "几率[^%d]-(" .. NUM .. ") ?%% ?等量的(......)伤害")
+  -- Taiwan: "有一定几率对目标造成与武器伤害70%的等量神圣伤害"
+  if not p then p, school = match(t, "几率[^%d]-武器伤害 (" .. NUM .. ") ?%% 的等量(......)伤害") end
   if p then return { kind = "weapon", pct = num(p), bonus = 0, school = schoolCode(school) } end
   if find(t, "几率", 1, true) then return nil end
   -- Flametongue, Seal of Righteousness, Seal of Fury: "额外造成14点神圣伤害", "额外造成X至Y点火焰伤害"
@@ -231,6 +243,8 @@ local function weaponZH(t)
   if p then return { kind = "weapon", pct = num(p), bonus = num(a), bonusMax = num(b) } end
   p, a = match(t, "(" .. NUM .. ") ?%% ?武器伤害[^%d]-(" .. NUM .. ") 点")
   if not p then p, a = match(t, "(" .. NUM .. ") ?%% ?普通伤害[^%d]-(" .. NUM .. ") 点") end
+  -- Taiwan's Primal Bite: "造成100%普通伤害外加42，并产生大量威胁值"
+  if not p then p, a = match(t, "(" .. NUM .. ") ?%% ?普通伤害外加 (" .. NUM .. ")[ ,]") end
   if not p then p, a = match(t, "武器伤害的 (" .. NUM .. ") ?%%[^%d]-(" .. NUM .. ") 点") end
   if p then return { kind = "weapon", pct = num(p), bonus = num(a) } end
   -- Bloodthirst, Shuriken Toss: "造成相当于攻击强度45%外加30点的伤害"
@@ -242,6 +256,12 @@ local function weaponZH(t)
   -- "造成150%的武器伤害", "造成武器伤害外加5点伤害", "造成近战武器伤害，外加5点伤害", "造成普通武器伤害再加上3点额外伤害"
   p = match(t, "造成 (" .. NUM .. ") ?%% ?武器伤害")
   if p then return { kind = "weapon", pct = num(p), bonus = 0 } end
+  -- Hammer of the Righteous: "造成相当于主手武器每秒伤害3倍的神圣伤害"
+  a, school = match(t, "主手武器每秒伤害 (" .. NUM .. ") 倍的(......)伤害")
+  if a then return { kind = "dps", times = num(a), school = schoolCode(school) or "physical" } end
+  -- Sniper Shot: "造成远程伤害外加320点伤害": the ranged weapon's hit plus the amount
+  a = match(t, "造成远程伤害外加 (" .. NUM .. ") 点")
+  if a then return { kind = "weapon", pct = 100, bonus = num(a), ranged = true } end
   a = match(t, "造成[^%d]-武器伤害[^%d]-(" .. NUM .. ") 点")
   if a then return { kind = "weapon", pct = 100, bonus = num(a) } end
   if find(t, "造成武器伤害", 1, true) then return { kind = "weapon", pct = 100, bonus = 0 } end
@@ -251,9 +271,10 @@ local function weaponZH(t)
   a = match(t, "远程伤害提高 (" .. NUM .. ") 点")
   if a then return { kind = "next", bonus = num(a), ranged = true } end
   -- Strength of Earth, Grace of Air
-  a = match(t, "力量提高 (" .. NUM .. ") 点")
+  -- (Taiwan writes "力量提高7，持续5分钟" without the 点)
+  a = match(t, "力量提高 (" .. NUM .. ") 点") or match(t, "力量提高 (" .. NUM .. ")[ ,]")
   if a then return { kind = "stat", stat = "str", amount = num(a) } end
-  a = match(t, "敏捷提高 (" .. NUM .. ") 点")
+  a = match(t, "敏捷提高 (" .. NUM .. ") 点") or match(t, "敏捷提高 (" .. NUM .. ")[ ,]")
   if a then return { kind = "stat", stat = "agi", amount = num(a) } end
   return nil
 end
@@ -304,9 +325,18 @@ local function special(t)
   -- Consecration: "对进入该区域的敌人在8秒内造成24点神圣伤害。最先进入该区域的4个敌人还会在8秒内额外受到56点伤害"
   dur, n, school, first, extra = match(t, "在 (" .. NUM .. ") 秒 内造成 (" .. NUM .. ") 点(......)伤害%. ?最先进入该区域的 (" .. NUM
     .. ") 个敌人还会在 " .. NUM .. " 秒 内额外受到 (" .. NUM .. ") 点伤害")
+  -- Taiwan: "在8秒内对进入该区域的所有敌人造成24点神圣伤害。前4个进入该区域的敌人在8秒内额外受到56点伤害"
+  if not n then
+    dur, n, school, first, extra = match(t, "在 (" .. NUM .. ") 秒 内对进入该区域的所有敌人造成 (" .. NUM .. ") 点(......)伤害%. ?前 (" .. NUM
+      .. ") 个进入该区域的敌人在 " .. NUM .. " 秒 内额外受到 (" .. NUM .. ") 点伤害")
+  end
   if n then
     return { dot = { total = num(n) + num(extra), duration = num(dur) }, school = schoolCode(school), first = num(first) }
   end
+  -- Dark Sacrifice: "在15秒内吞噬自身的440点生命值，以恢复431点法力值", Taiwan: "在15秒内牺牲自身440点生命值，以获得431点法力"
+  dur, n, m = match(t, "在 (" .. NUM .. ") 秒 内吞噬自身的 (" .. NUM .. ") 点生命值, 以恢复 (" .. NUM .. ") 点法力")
+  if not n then dur, n, m = match(t, "在 (" .. NUM .. ") 秒 内牺牲自身 (" .. NUM .. ") 点生命值, 以获得 (" .. NUM .. ") 点法力") end
+  if n then return { healthCost = num(n), manaGain = num(m), healthCostDuration = num(dur) } end
   -- Seal of Light, per trigger: "每次近战攻击都有一定几率回复39点生命值"
   n = match(t, "每次近战攻击都有一定几率回复 (" .. NUM .. ") 点生命值")
   if n then return { heal = D(n) } end
@@ -325,7 +355,7 @@ end
 local function procChance(t)
   -- "每次击中敌人都有20%的几率", "每次主手命中都有20%的几率": a hit, not any chance in the text
   local p = match(t, "每次[^%.,]-命中都有 (" .. NUM .. ") ?%% 的几率") or match(t, "每次击中敌人都有 (" .. NUM .. ") ?%% 的几率")
-    or match(t, "每次近战攻击都有 (" .. NUM .. ") ?%% 的几率")
+    or match(t, "每次近战攻击都有 (" .. NUM .. ") ?%% 的几率") or match(t, "每次命中敌人时都有 (" .. NUM .. ") ?%% 的几率")
   if p then return num(p) end
   if find(t, "一定几率", 1, true) then return true end
   return nil

@@ -103,6 +103,10 @@ local function rewrite(t)
   t = gsub(t, ", puis (" .. NUM .. ") suppl" .. E .. "mentaires en ", ", puis %1 points de " .. DEGATS .. " suppl" .. E .. "mentaires en ")
   t = gsub(t, "entre (" .. NUM .. ") et (" .. NUM .. ") ", "%1 " .. A .. " %2 ")
   t = gsub(t, "([ :,]) *de (" .. NUM .. ") " .. A .. " (" .. NUM .. ")", "%1 %2 " .. A .. " %3")
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  t = gsub(t, ", plus " .. NUM .. " ?%% des " .. DEGATS .. " d'arme par application[^%.]*", "")
+  t = gsub(t, " plus " .. NUM .. " ?%% des " .. DEGATS .. " d'arme par application[^%.]*", "")
   return (gsub(t, " +", " "))
 end
 
@@ -328,6 +332,12 @@ local function weaponFR(t)
   -- dégâts de l'arme": the number right after the verb, so a stacking "plus 10 % des dégâts de l'arme par ..." is not it
   p = match(t, "inflig[a-z]* " .. W .. "* ?(" .. NUM .. ") ?%% des " .. WEAPON)
   if p then return { kind = "weapon", pct = num(p), bonus = 0 } end
+  -- Hammer of the Righteous: "dégâts du sacré équivalant à 3 fois les dégâts par seconde de votre arme en main droite"
+  a = match(t, E .. "quivalant " .. A .. " (" .. NUM .. ") fois les " .. DEGATS .. " par seconde de votre arme")
+  if a then return { kind = "dps", times = num(a), school = find(t, "du sacr" .. E, 1, true) and "holy" or "physical" } end
+  -- Sniper Shot: "inflige les dégâts de l'arme à distance plus 320": the ranged weapon's hit plus the amount
+  a = match(t, "inflig[a-z]* les " .. WEAPON .. " " .. A .. " distance plus (" .. NUM .. ")")
+  if a then return { kind = "weapon", pct = 100, bonus = num(a), ranged = true } end
   -- "inflige les dégâts de l'arme plus 32", "inflige 3 points de dégâts en plus des dégâts normaux de votre arme"
   a = match(t, "inflig[a-z]* les " .. WEAPON .. " plus (" .. NUM .. ")")
     or match(t, "inflig[a-z]* les points de " .. WEAPON .. " plus (" .. NUM .. ")")
@@ -381,6 +391,11 @@ local function special(t)
     or find(t, "points de vie " .. E .. "gal aux points de vie maximum du paladin", 1, true) then
     return { healMaxHealth = true }
   end
+  -- Dark Sacrifice: "Vous d\195\169vorez 400 points de vie pendant 15 sec afin de r\195\169cup\195\169rer 427 points de mana."
+  local dur
+  n, dur, m = match(t, "vous d" .. E .. "vorez (" .. NUM .. ") points de vie pendant (" .. NUM .. ") sec afin de r" .. E .. "cup" .. E
+    .. "rer (" .. NUM .. ") points de mana")
+  if n then return { healthCost = num(n), manaGain = num(m), healthCostDuration = num(dur) } end
   -- Life Tap: "Convertit 48 points de vie en 48 points de mana."
   n, m = match(t, "convertit (" .. NUM .. ") points de vie en (" .. NUM .. ") points de mana")
   if n then return { healthCost = num(n), manaGain = num(m) } end

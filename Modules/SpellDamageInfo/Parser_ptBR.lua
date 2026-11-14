@@ -4,11 +4,15 @@
 -- The wordings of WoW: Forever's Portuguese spell descriptions: "causa 15 para 23 de dano de Fogo", "ao longo de
 -- 4 s", "a cada 2 s", "1 ponto: 57 de dano ao longo de 12 s", the decimal comma. What a pack is, and how to add one,
 -- is in Parser.lua (LANGUAGE PACKS).
--- WRITTEN FROM WOWHEAD'S FOREVER TOOLTIPS (nether.wowhead.com/forever/tooltip/spell/<id>?locale=pt), NOT from a /sdi dump
--- of a Portuguese client: the wording of the French and Spanish pages matched the game's own texts, the numbers and the
--- range word ("15 para 23" here, "14 a 23" in the Spanish game) did not always, so the range words "para", "a" and
--- "at\195\169" are all read. It has not been compared with a Portuguese client yet. A wording the pack does not know stays
--- unread: it never guesses.
+-- WRITTEN FROM WOWHEAD'S FOREVER TOOLTIPS (nether.wowhead.com/forever/tooltip/spell/<id>?locale=pt): the wording of the
+-- French and Spanish pages matched the game's own texts, the numbers and the range word ("15 para 23" here, "14 a 23" in
+-- the Spanish game) did not always, so the range words "para", "a" and "at\195\169" are all read.
+-- CHECKED AGAINST A REAL /sdi dump all OF A PORTUGUESE CLIENT (build 1.60.1.70938, 1697 spells, the same ids as the French
+-- and Spanish dumps) and corrected where the game words it differently: "causando 19 a 23 de dano", "Curando 200 a cada
+-- 1 s por 2 s", "uma cura de 298 na pr\195\179xima vez", ", depois mais 39 de dano ... ao longo de 12 s", "Converte 241 pontos de vida em
+-- 241 pontos de mana", "Cada acerto causa de 14 a 46 a mais de dano de Fogo", the school names "de Fogo M\195\173stico", "de Gelo
+-- M\195\161gico", "de Sombra G\195\169lida", "de Chama Sombria". 1144 of the 1697 are read (French: 1144), with the tick-only readings of Parser.lua. Not seen in a running game
+-- yet. A wording the pack does not know stays unread: it never guesses.
 -- Pure Lua 5.1, no game API.
 
 local _, BIT = ...
@@ -26,9 +30,13 @@ local DANO = "dano"
 local WEAPON = "dano da arma"
 local FEITICO = "feiti" .. C .. "o"
 
--- School words after "dano", longest first. "dano de Fogo", "de Sombra", "Sagrado", "Arcano", "Físico".
+-- School words after "dano", longest first. "dano de Fogo", "de Sombra", "Sagrado", "Arcano", "Físico". The game's own
+-- (not Wowhead's) names of the mixed schools: "de Fogo Místico", "de Gelo Mágico", "de Sombra Gélida", "de Chama Sombria",
+-- "de Fogofrio".
 local SCHOOLS = {
-  { "de fogofrio", "frostfire" }, { "de fogofr" .. I .. "o", "frostfire" }, { "de chamasombria", "shadowflame" },
+  { "de fogofrio", "frostfire" }, { "de fogofr" .. I .. "o", "frostfire" }, { "de chama sombria", "shadowflame" },
+  { "de chamasombria", "shadowflame" }, { "de fogo m" .. I .. "stico", "spellfire" }, { "de gelo m" .. A .. "gico", "spellfrost" },
+  { "de sombra g" .. E .. "lida", "shadowfrost" },
   { "de fogo", "fire" }, { "de gelo", "frost" }, { "de natureza", "nature" }, { "de sombra", "shadow" },
   { "sagrado", "holy" }, { "arcano", "arcane" }, { "f" .. I .. "sico", "physical" }, { "de sangramento", "physical" },
   { "de caos", "chaos" }, { "quim" .. E .. "rico", "chimeral" },
@@ -109,6 +117,12 @@ local function rewrite(t)
   -- reductions: "reduzindo em 56 o poder de ataque", "Reduz em 4 o dano F\195\173sico causado ao alvo" already say "em"
   -- a stun inside a damage clause: "atordoa o alvo por 2 s e causa 114 de dano ao longo de 18 s"
   t = gsub(t, "atordoa o alvo por " .. NUM .. " sec", "atordoa o alvo")
+  -- Shockwave: "atordoando e causando 30 de dano a todos os inimigos em uma \195\161rea c\195\180nica de 10 m \195\160 frente do lan\195\167ador por 4 s": the
+  -- 4 s is the stun, not a damage over time
+  t = gsub(t, "(atordoando e causando [^%.]-) por " .. NUM .. " sec", "%1")
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  t = gsub(t, ", mais " .. NUM .. " ?%% do " .. WEAPON .. " por aplica[^%.]*", "")
   return (gsub(t, " +", " "))
 end
 
@@ -173,6 +187,10 @@ local function healAmountOK(_, after)
   -- "Concede 179 a 191 de cura ao alvo", and an amount with nothing but a time after it ("Curando 134 a cada 1 s por 2 s")
   if match(s, "^de cura%f[^a-z\128-\255]") then return true end
   if match(s, "^[%. #]*$") or match(s, "^ao longo") or match(s, "^por ") then return true end
+  -- the interval and the duration are already taken out of the clause: "Curando 126 # por #" (Penance's ticks)
+  if match(s, "^# +por ") then return true end
+  -- Prayer of Mending: "concede ao alvo uma cura de 298 na pr\195\179xima vez que ele receber dano"
+  if match(s, "^na pr" .. O .. "xima vez") then return true end
   return false
 end
 
@@ -259,6 +277,9 @@ local function weaponPT(t)
   -- Windfury Weapon and Totem: "chance de conceder a voc\195\170 2 ataques corpo a corpo extras com mais 104 de poder de ataque"
   a, b = match(t, "(" .. NUM .. ") ataques? corpo a corpo extras? com mais (" .. NUM .. ") de poder de ataque")
   if not a then a, b = match(t, "(" .. NUM .. ") ataques? extras? com mais (" .. NUM .. ") de poder de ataque") end
+  -- the game's own wording of Windfury Weapon: "chance de conceder a voc\195\170 2 ataques extras com 249 de poder de ataque corpo a
+  -- corpo extra"
+  if not a then a, b = match(t, "(" .. NUM .. ") ataques? extras? com (" .. NUM .. ") de poder de ataque corpo a corpo extra") end
   if a then return { kind = "extra", attacks = num(a), amount = num(b) } end
   -- Mutilate: "causando 90% do dano da arma mais 40 com cada arma"
   p, a = match(t, "(" .. NUM .. ") ?%% do " .. WEAPON .. " mais (" .. NUM .. ") com cada arma")
@@ -268,13 +289,18 @@ local function weaponPT(t)
   if p then return { kind = "weapon", pct = num(p), bonus = 0, school = schoolOfDamage(school) } end
   if find(t, "chance", 1, true) or find(t, "com cada arma", 1, true) then return nil end
   -- Flametongue, Seal of Righteousness: "Cada acerto causa de 3 a 13 a mais de dano de Fogo com base na velocidade da arma"
+  -- (the game: "Cada acerto causa de 14 a 46 a mais de dano de Fogo com base na velocidade da arma", Seal of Righteousness:
+  -- "fazendo com que cada ataque corpo a corpo cause de 2 a 9 de dano Sagrado adicional"; "de 14 a 46" is "14 a 46" by now)
   local lo, hi
-  lo, hi, school = match(t, "cada acerto [^%.]-caus[ae] de (" .. NUM .. ") a (" .. NUM .. ") a mais de " .. DANO .. " (" .. W .. "-) com base na velocidade")
-  if not lo then
-    lo, hi, school = match(t, "cada acerto [^%.]-caus[ae] (" .. NUM .. ") a (" .. NUM .. ") de " .. DANO .. " (" .. W .. "-) adicional")
-  end
-  if not lo then
-    lo, hi, school = match(t, "cada acerto [^%.]-caus[ae] (" .. NUM .. ") a (" .. NUM .. ") de " .. DANO .. " (" .. W .. "-) com base na velocidade")
+  for _, each in ipairs({ "cada acerto ", "cada ataque " }) do
+    lo, hi, school = match(t, each .. "[^%.]-caus[ae] (" .. NUM .. ") a (" .. NUM .. ") a mais de " .. DANO .. " (" .. W .. "-) com base na velocidade")
+    if not lo then
+      lo, hi, school = match(t, each .. "[^%.]-caus[ae] (" .. NUM .. ") a (" .. NUM .. ") de " .. DANO .. " (" .. W .. "-) adicional")
+    end
+    if not lo then
+      lo, hi, school = match(t, each .. "[^%.]-caus[ae] (" .. NUM .. ") a (" .. NUM .. ") de " .. DANO .. " (" .. W .. "-) com base na velocidade")
+    end
+    if lo then break end
   end
   if lo then
     return { kind = "perhit", min = num(lo), max = num(hi), school = schoolOfDamage(school),
@@ -305,6 +331,12 @@ local function weaponPT(t)
   a = match(t, "causa[a-z]* [a-z ]-" .. WEAPON .. " mais (" .. NUM .. ")")
     or match(t, "causa (" .. NUM .. ") de " .. DANO .. " somado ao " .. WEAPON)
   if a then return { kind = "weapon", pct = 100, bonus = num(a) } end
+  -- Hammer of the Righteous: "causando dano Sagrado a cada um equivalente a 3 vezes o dano por segundo da sua arma da m\195\163o principal"
+  a = match(t, "equivalente a (" .. NUM .. ") vezes o " .. DANO .. " por segundo da sua arma da m" .. AT .. "o principal")
+  if a then return { kind = "dps", times = num(a), school = find(t, "dano sagrado", 1, true) and "holy" or "physical" } end
+  -- Sniper Shot: "causa dano de longo alcance mais 320": the ranged weapon's hit plus the amount
+  a = match(t, "causa[a-z]* dano de longo alcance mais (" .. NUM .. ")")
+  if a then return { kind = "weapon", pct = 100, bonus = num(a), ranged = true } end
   -- Whirlwind: "causando o dano da arma a cada inimigo"
   if find(t, "causando [a-z ]-" .. WEAPON .. " a cada") then return { kind = "weapon", pct = 100, bonus = 0 } end
   -- the next swing, or a shot, gets more: "aumenta em 11 o dano corpo a corpo", "Aumenta em 18 o dano do pr\195\179ximo ataque", "aumenta em
@@ -319,8 +351,9 @@ local function weaponPT(t)
   a, p = match(t, "aumentando em (" .. NUM .. ") o poder de ataque corpo a corpo%. +tamb" .. E .. "m aumenta em (" .. NUM .. ") ?%% a velocidade de ataque")
   if a then return { kind = "ap", amount = num(a), faster = num(p) } end
   -- Strength of Earth, Grace of Air: "aumenta em 30 a For\195\167a dos integrantes do grupo"
+  -- (not Horn of Lordaeron's "aumenta em 6 a For\195\167a e a Agilidade": the Strength alone is not what it gives)
   a = match(t, "aumenta em (" .. NUM .. ") a for" .. C .. "a ")
-  if a then return { kind = "stat", stat = "str", amount = num(a) } end
+  if a and not find(t, "for" .. C .. "a e a agilidade", 1, true) then return { kind = "stat", stat = "str", amount = num(a) } end
   a = match(t, "aumenta em (" .. NUM .. ") a agilidade ")
   if a then return { kind = "stat", stat = "agi", amount = num(a) } end
   return nil
@@ -376,6 +409,12 @@ local function special(t)
   -- Healing Stream Totem: "que cura 5 pontos de vida a cada 2 s dos integrantes do grupo em um raio de 30 m"
   n, m = match(t, "cura (" .. NUM .. ") pontos de vida a cada (" .. NUM .. ") sec dos integrantes do grupo")
   if n then return { heal = D(n), every = num(m) } end
+  -- ... and its other wording: "para curar integrantes do grupo em um raio de 30 m por 11 a cada 2 segundos"
+  n, m = match(t, "curar integrantes do grupo [^%.]-por (" .. NUM .. ") a cada (" .. NUM .. ") sec")
+  if n then return { heal = D(n), every = num(m) } end
+  -- Life Tap: "Converte 241 pontos de vida em 241 pontos de mana para voc\195\170"
+  n, m = match(t, "converte (" .. NUM .. ") pontos de vida em (" .. NUM .. ") pontos de mana")
+  if n then return { healthCost = num(n), manaGain = num(m) } end
   -- Retribution Aura: "Causa 5 de dano Sagrado a qualquer criatura que atingir um integrante do grupo"
   n, school = match(t, "causa (" .. NUM .. ") de " .. DANO .. " (" .. W .. "-) a qualquer criatura que atingir um integrante do grupo")
   if n then return { direct = D(n), school = schoolOfDamage(school), perStrike = true } end
@@ -394,6 +433,10 @@ local function special(t)
   local every
   n, every, dur = match(t, "regenera (" .. NUM .. ") pontos de vida de todos os integrantes [^%.]-a cada (" .. NUM .. ") sec por (" .. NUM .. ") sec")
   if n then return { hot = { total = num(n) * floor(num(dur) / num(every) + 0.5), duration = num(dur) } } end
+  -- Dark Sacrifice: "Canibaliza 400 dos seus pr\195\179prios pontos de vida ao longo de 15 s para ganhar 431 de mana"
+  n, dur, m = match(t, "canibaliza (" .. NUM .. ") dos seus pr" .. O .. "prios pontos de vida ao longo de (" .. NUM .. ") sec para ganhar ("
+    .. NUM .. ") de mana")
+  if n then return { healthCost = num(n), manaGain = num(m), healthCostDuration = num(dur) } end
   -- Seal of Light, per trigger: "chance de restaurar 39 pontos de vida"
   n = match(t, "chance de restaurar (" .. NUM .. ") pontos de vida")
   if n then return { heal = D(n) } end
@@ -410,12 +453,15 @@ end
 
 -- The chance per hit: its percent, true where the text names a chance without a figure, or nil.
 local function procChance(t)
-  local p = match(t, "cada acerto tem (" .. NUM .. ") ?%% de chance")
+  -- "Cada acerto tem 20% de chance", "Cada acerto com a m\195\163o principal tem 20% de chance de conceder ao atacante 1 ataque extra"
+  local p = match(t, "cada acerto [^%.]-tem (" .. NUM .. ") ?%% de chance")
   if p then return num(p) end
-  for _, chance in ipairs({ "chance de causar", "chance de conceder", "chance de envenenar", "chance de restaurar",
-    "chance de curar", "tenha chance de" }) do
+  -- (no "chance de conceder": Drain Soul's "t\195\170m chance de conceder a voc\195\170 um Estilha\195\167o de Alma" is no weapon proc)
+  for _, chance in ipairs({ "chance de causar", "chance de envenenar", "chance de restaurar", "chance de curar",
+    "tenha chance de", "ataques t" .. EC .. "m chance de conceder" }) do
     if find(t, chance, 1, true) then return true end
   end
+  if find(t, "cada acerto [^%.]-tem chance") then return true end
   return nil
 end
 
@@ -438,7 +484,8 @@ Parser.RegisterPack("pt", {
   pointsMarker = "pontos?",
   healWords = { " cura ", " curar ", " curando ", " curado ", " de cura", " restaura ", " restaurarem ", " regenera ", " recupera ",
     " recuperam " },
-  clauseSeparators = { ", e ", " e ", " ou ", " mas " },
+  -- ", depois mais 39 de dano de Natureza ao longo de 12 s" (Sunfire), ", mais um adicional de 41 de dano ..." (Shadowflame)
+  clauseSeparators = { ", depois mais ", ", mais um adicional de ", ", e ", " e ", " ou ", " mas " },
   reduceVerbs = REDUCE_VERBS,
   enemyWords = { "alvo", "inimigo", "agressor" },
   selfWords = { " voc" .. EC, " seu ", " sua ", " seus ", "recebido" },

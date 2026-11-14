@@ -76,6 +76,9 @@ local function rewrite(t)
   for _, verb in ipairs({ "verursacht", "zuf\195\188gt" }) do
     t = gsub(t, "zwischen (" .. NUM .. ") und (" .. NUM .. ") (%S*schaden) " .. verb, "%1 bis %2 %3 " .. verb)
   end
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  t = gsub(t, " und pro existierender anwendung [^%.]-" .. NUM .. "%% waffenschaden", "")
   return t
 end
 
@@ -410,6 +413,14 @@ local function weaponDE(t)
   -- Forever's Mongoose Bite: "in Höhe des Nahkampfwaffenschadens plus 15"
   a = match(t, "waffenschadens? plus (" .. NUM .. ")")
   if a then return { kind = "weapon", pct = 100, bonus = num(a) } end
+  -- "Rüstung zerreißen verursacht zusätzlich 150% Waffenschaden", "Verursacht 135% Waffenschaden, erneuert ...", "fügt ihm 100%
+  -- Waffenschaden zu": the number right after the verb (a stacking "plus 10% Waffenschaden pro Stapel" is not it)
+  p = match(t, "verursacht [a-z\128-\255 ]-(" .. NUM .. ")%% waffenschaden")
+    or match(t, "f" .. UE .. "gt [a-z\128-\255 ]-(" .. NUM .. ")%% waffenschaden [a-z ]-zu")
+  if p then return { kind = "weapon", pct = num(p), bonus = 0 } end
+  -- Sniper Shot: "der Distanzschaden plus 320 zufügt": the ranged weapon's hit plus the amount
+  a = match(t, "distanzschaden plus (" .. NUM .. ")")
+  if a then return { kind = "weapon", pct = 100, bonus = num(a), ranged = true } end
   a = match(t, "waffenschaden sowie (" .. NUM .. ") zus" .. AE .. "tzlichen schaden")
   if a then return { kind = "weapon", pct = 100, bonus = num(a) } end
   a = match(t, "zus" .. AE .. "tzlich zu eurem normalen waffenschaden noch (" .. NUM .. ")")

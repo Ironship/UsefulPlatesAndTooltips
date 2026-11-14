@@ -37,7 +37,10 @@ end
 -- Living Bomb: "After 12 sec or when the spell is dispelled, the target explodes dealing 26 ...":
 -- the 12 sec is the timer before the explosion, not a duration of the 26
 local function rewrite(t)
-  return (gsub(t, "after " .. NUM .. " sec or when [^,%.]+, ", ""))
+  t = gsub(t, "after " .. NUM .. " sec or when [^,%.]+, ", "")
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  return (gsub(t, " plus " .. NUM .. "%% weapon damage per existing application[^%.]*", ""))
 end
 
 -- Penance: "Healing for 126 every 1 sec. for 2 sec."
@@ -263,6 +266,13 @@ local function weaponEN(t)
   if p then return { kind = "weapon", pct = num(p), bonus = 0 } end
   a = match(t, "weapon damage plus (" .. NUM .. ")")
   if a then return { kind = "weapon", pct = 100, bonus = num(a) } end
+  -- "Sunder Armor also deals 150% weapon damage, increased by ...", "You deal 135% weapon damage, refreshing ...", "Viciously
+  -- slash an enemy for 100% weapon damage": the number right after the verb (a stacking "plus 10% weapon damage per ..." is not it)
+  p = match(t, "deals? (" .. NUM .. ")%% weapon damage") or match(t, " for (" .. NUM .. ")%% weapon damage")
+  if p then return { kind = "weapon", pct = num(p), bonus = 0 } end
+  -- Sniper Shot: "deals ranged damage plus 320": the ranged weapon's hit plus the amount
+  a = match(t, "ranged damage plus (" .. NUM .. ")")
+  if a then return { kind = "weapon", pct = 100, bonus = num(a), ranged = true } end
   a = match(t, "causes (" .. NUM .. ") damage in addition to your normal weapon damage")
   if a then return { kind = "weapon", pct = 100, bonus = num(a) } end
   if find(t, "causing weapon damage", 1, true) then return { kind = "weapon", pct = 100, bonus = 0 } end

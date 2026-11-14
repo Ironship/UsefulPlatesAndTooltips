@@ -39,10 +39,21 @@ local function rewrite(t)
   t = gsub(t, "–", "-")
   t = gsub(t, "(" .. NUM .. ") *%- *(" .. NUM .. ")", "%1 до %2")
   t = gsub(t, "ед%.", "")
+  -- the client's plural markup, left in a dump as text: "еще 1 l4атаку:атаки:атак; с повышенной на 95 силой атаки"
+  t = gsub(t, "[l|]4[^:;]*:([^:;]*):[^;]*;", "%1")
   t = gsub(t, "теряет (" .. NUM .. ") и дополнительно ", "теряет %1 здоровья и дополнительно ")
   t = gsub(t, "восстанавливает вам и союзнику ", "восстанавливает союзнику и заклинателю ")
   t = gsub(t, "(" .. NUM .. ") ч%f[^a-z\128-\255]", "%1 час")
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  t = gsub(t, " и еще " .. NUM .. " ?%% урона от оружия за каждый эффект[^%.]*", "")
   return (gsub(t, " +", " "))
+end
+
+-- Forever leaves some spells in English on a Russian client ("Wounds the target causing them to bleed for 119 damage over 21 сек.")
+local function toEnglish(text)
+  text = gsub(text, "([0-9]) сек%.?", "%1 sec")
+  return (gsub(text, "([0-9]) мин%.?", "%1 min"))
 end
 
 local function prepareSentences(t)
@@ -123,6 +134,9 @@ local function attackPower(t)
   if not U.hasAny(t, { "повыш", "увелич", "усилив" }) then return nil end
   local strength = match(t, "повышает силу участников.-на (" .. NUM .. ")")
   if strength then return { kind = "stat", stat = "str", amount = tonumber(strength) } end
+  -- Grace of Air Totem: "повышает ловкость участников группы или рейда в радиусе 30 м на 49"
+  local agility = match(t, "повышает ловкость участников.-на (" .. NUM .. ")")
+  if agility then return { kind = "stat", stat = "agi", amount = tonumber(agility) } end
   if U.hasAny(t, { "силу атаки", "сила атаки" }) then
     local amount = match(t, "силу атаки.-на (" .. NUM .. ")")
       or match(t, "сила атаки.-на (" .. NUM .. ")")
@@ -136,8 +150,15 @@ end
 
 local function weapon(t)
   local pct, bonus, hi
+  -- Hammer of the Righteous: "нанося урон от светлой магии, равный урону в секунду от оружия в правой руке, умноженному на 3"
+  pct = match(t, "равный урону в секунду от оружия в правой руке, умноженному на (" .. NUM .. ")")
+  if pct then return { kind = "dps", times = tonumber(pct), school = find(t, "светлой магии", 1, true) and "holy" or "physical" } end
   local attacks, amount = match(t, "еще (" .. NUM .. ") атаки с увеличенной на (" .. NUM .. ") силой атаки")
+  if not attacks then attacks, amount = match(t, "еще (" .. NUM .. ") атаки с повышенной на (" .. NUM .. ") силой атаки") end
   if attacks then return { kind = "extra", attacks = tonumber(attacks), amount = tonumber(amount) } end
+  -- Sniper Shot: "наносящий урон в дальнем бою +320": the ranged weapon's hit plus the amount
+  bonus = match(t, "урон в дальнем бою %+ ?(" .. NUM .. ")")
+  if bonus then return { kind = "weapon", pct = 100, bonus = tonumber(bonus), ranged = true } end
   bonus = match(t, "наносящий (" .. NUM .. ") дополнительного урона в дальнем бою")
   if bonus then return { kind = "next", bonus = tonumber(bonus), ranged = true } end
   if find(t, "каждым оружием", 1, true) then
@@ -178,6 +199,9 @@ local function weapon(t)
 end
 
 local function special(t)
+  -- Dark Sacrifice: "Вы расходуете 400 здоровья в течение 15 сек., чтобы восполнить 428 маны"
+  local hcost, hsec, hmana = match(t, "вы расходуете (" .. NUM .. ") здоровья в течение (" .. NUM .. ") сек%.?, чтобы восполнить (" .. NUM .. ") маны")
+  if hcost then return { healthCost = tonumber(hcost), manaGain = tonumber(hmana), healthCostDuration = tonumber(hsec) } end
   local absorb = match(t, "поглощающий (" .. NUM .. ") урона")
     or match(t, "поглощает (" .. NUM .. ") [^0-9]-урона")
     or match(t, "поглотить (" .. NUM .. ") урона")
@@ -209,6 +233,8 @@ local function special(t)
   if total and first then return { dot = { total = tonumber(total) + tonumber(extra), duration = tonumber(seconds) },
     school = "holy", first = tonumber(first) } end
   local amount = match(t, "атаки ближнего боя могут восстановить (" .. NUM .. ") здоровья")
+    -- Seal of Light's other wording: "способным исцелять паладина на 94 при некоторых атаках ближнего боя"
+    or match(t, "исцелять паладина на (" .. NUM .. ") при некоторых атаках")
   if amount then return { heal = U.D(amount) } end
   local seconds
   amount, seconds = match(t, "для восстановления (" .. NUM .. ") здоровья в течение (" .. NUM .. ") сек")
@@ -292,7 +318,7 @@ end
 Parser.RegisterPack("ru", {
   rangeWord = "до", damageWord = "урона", weaponWord = "от оружия",
   pointsMarker = "прием[^ :]*",
-  healWords = { "исцел", "излеч", "восполня", "восстанавл", "восстановить" },
+  healWords = { "исцел", "излеч", "восполня", "восстанавл", "восстановить", "восстановит " },
   clauseSeparators = { " и ", ", а ", " или ", ", а затем ", ", а также " },
   reduceVerbs = { "сниж", "уменьш" }, enemyWords = { "цел", "противник" },
   selfWords = { "получаем", "вам", "вас" }, increaseWord = "увелич", byWord = "на ",
@@ -313,7 +339,9 @@ Parser.RegisterPack("ru", {
     target = { "исцеление цели", "исцеление дружественной цели", "исцеляет дружественную цель", "исцеляет цель",
       "излечение цели", "излечивает одну цель", "восполняет союзнику", "восстанавливает союзнику", "восстанавливает цели" },
   },
-  lower = lower, detect = function(t) return find(t, "[\208\209][\128-\191]") end, detectAlways = true,
+  lower = lower,
+  -- Russian text has a good many Cyrillic letters; an English description with only the unit "сек" in it (Forever's Mangle) has three
+  detect = function(t) local _, n = gsub(t, "[\208\209][\128-\191]", "") return n >= 6 end, detectAlways = true, toEnglish = toEnglish,
   normaliseNumbers = normaliseNumbers, rewrite = rewrite, prepareSentences = prepareSentences,
   takeLasts = takeLasts, takeInterval = takeInterval, classifyAfter = classifyAfter,
   healAmountOK = healAmountOK, ignoredClause = ignoredClause, perPointTable = perPointTable,

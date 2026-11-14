@@ -443,6 +443,9 @@ function Parser.Parse(text, lang)
     found = true
     return true
   end
+  -- "Deals 21 Fire damage every 3 sec." with no duration anywhere in the text: not a damage over time (nothing says how long),
+  -- but one amount per interval. Parse still answers nil for it; the amount comes back as the third value (see ParseSpecial).
+  local tick
 
   for _, sentence in ipairs(splitSentences(t, pack)) do
     local clauses = {}
@@ -473,7 +476,11 @@ function Parser.Parse(text, lang)
       end
     end
     for _, cl in ipairs(clauses) do
-      if #cl.amounts > 0 then
+      local a1 = cl.amounts[1]
+      if a1 and cl.interval and #cl.amounts == 1 and #cl.durations == 0 and not lasts and not lastsAmbiguous and not tick and not found
+        and (a1.kind == "damage" or a1.kind == "heal") then
+        tick = { kind = a1.kind, min = a1.min, max = a1.max, school = a1.school, every = cl.interval }
+      elseif #cl.amounts > 0 then
         local periodic, duration, ticks
         if cl.interval then
           duration = (#cl.durations == 1 and cl.durations[1]) or (#cl.durations == 0 and lasts) or nil
@@ -528,6 +535,11 @@ function Parser.Parse(text, lang)
     end
   end
 
+  if tick then
+    -- any other amount in the text and the reading would be a guess
+    if found or hp5 then return nil, "interval-without-duration" end
+    return nil, "interval-without-duration", tick
+  end
   if hp5 then result.hp5 = hp5 end
   if not found and not hp5 then return nil, "no-amount" end
   return result
@@ -896,6 +908,8 @@ end
 --   perAttack = true     a totem's attack (Searing Totem), perBlock = true (Holy Shield),
 --   perStrike = true     damage to whatever strikes the party (Retribution Aura),
 --   every = s            a totem's pulse (Healing Stream Totem), perRage = n (Execute)
+--   tickOnly = true      with every: one amount per interval and no duration in the text ("Deals 21 Fire damage every 3 sec"),
+--                        read by ParseSpecial from Parse's third return value; shown as written, no bonus added
 -- Each pattern is one family's own wording, from the fixtures, in the pack's language.
 function Parser.ParseSpecial(text, lang)
   if type(text) ~= "string" or text == "" then return nil end
@@ -904,7 +918,21 @@ function Parser.ParseSpecial(text, lang)
   local t
   t, lang = prepare(text, lang)
   t = withoutJudgement(t, lang)
-  return packs[lang].special(t)
+  local special = packs[lang].special(t)
+  if special then return special end
+  -- one amount per interval and no duration ("Causa 21 de dano de Fogo a cada 3 s", a pulse): shown as that amount, every N sec
+  local _, _, tick = Parser.Parse(text, lang)
+  if tick then
+    local s = { every = tick.every, tickOnly = true }
+    if tick.kind == "heal" then
+      s.heal = { min = tick.min, max = tick.max }
+    else
+      s.direct = { min = tick.min, max = tick.max }
+      s.school = tick.school
+    end
+    return s
+  end
+  return nil
 end
 
 ---------------------------------------------------------------------------------------------

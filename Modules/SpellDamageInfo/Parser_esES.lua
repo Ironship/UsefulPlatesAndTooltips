@@ -83,6 +83,12 @@ end
 -- daño" -> "2 a 9 p de daño".
 local function rewrite(t)
   t = gsub(t, "%f[%a]p%.", "p")
+  -- Black Arrow (Forever's own wording): "causa un daño de Sombras de 150 p. y absorbe más de 30 s p. de su maná de 150" is "150 damage
+  -- and drains 150 mana over 30 sec"
+  t = gsub(t, DANO .. " de sombras de (" .. NUM .. ") p y absorbe m" .. A .. "s de (" .. NUM .. ") sec p de su " .. MANA .. " de ([0-9]+)",
+    "%1 p de " .. DANO .. " de las sombras y drena %3 p de " .. MANA .. " durante %2 sec")
+  -- Divine Favor's sibling: "por debajo del 50% de salud durante 131 a 167 y elimina Alma debilitada" is the heal, 131 to 167
+  t = gsub(t, "de salud durante (" .. NUM .. ") a (" .. NUM .. ") y ", "de salud, restaurando %1 a %2 p de salud y ")
   -- the Judgement phrase of every seal: "Desatar / Liberar / Al soltar la energía de este sello"
   for _, verb in ipairs({ "liberar", "soltar", "al soltar", "desata", "libera", "suelta" }) do
     t = gsub(t, verb .. " la energ" .. I .. "a de este sello", "desatar la energ" .. I .. "a de este sello")
@@ -121,6 +127,9 @@ local function rewrite(t)
   t = gsub(t, "(" .. NUM .. ") p a (" .. NUM .. ") p", "%1 a %2 p")
   t = gsub(t, "([0-9]) a([0-9])", "%1 a %2")
   t = gsub(t, "([ :,]) *de (" .. NUM .. ") a (" .. NUM .. ")", "%1 %2 a %3")
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  t = gsub(t, " m" .. A .. "s un " .. NUM .. " ?%% de " .. WEAPON .. " por cada aplicaci[^%.]*", "")
   return (gsub(t, " +", " "))
 end
 
@@ -311,6 +320,13 @@ local function weaponES(t)
   -- "infliges un 135% de daño de arma", "también inflige un 150% de daño de arma", "le infliges un 100% de daño de arma"
   p = match(t, "inflig[a-z\128-\255]* " .. W .. "-(" .. NUM .. ") ?%% de " .. WEAPON)
   if p then return { kind = "weapon", pct = num(p), bonus = 0 } end
+  -- Hammer of the Righteous: "inflige una cantidad de da\195\177o Sagrado igual a 3 veces el da\195\177o por segundo de tu arma de la mano derecha"
+  a = match(t, "igual a (" .. NUM .. ") veces el " .. DANO .. " por segundo de tu arma de la mano derecha")
+  if a then return { kind = "dps", times = num(a), school = find(t, DANO .. " sagrado", 1, true) and "holy" or "physical" } end
+  -- Sniper Shot: "inflige daño a distancia más 320 p. de daño", rewritten to "daño de arma a distancia más": the ranged weapon's hit
+  -- plus the amount
+  a = match(t, "inflig[a-z\128-\255]* " .. WEAPON .. " a distancia m" .. A .. "s (" .. NUM .. ")")
+  if a then return { kind = "weapon", pct = 100, bonus = num(a), ranged = true } end
   -- Heroic Strike's relatives: "inflige tu daño de arma más 5 p. de daño al objetivo", "causando daño de arma más 32 p.",
   -- "inflige daño de arma cuerpo a cuerpo más 5 p.", "causa 3 p. de daño aparte del daño de arma"
   a = match(t, "inflig[a-z\128-\255]* [a-z ]-" .. WEAPON .. " m" .. A .. "s (" .. NUM .. ")")
@@ -411,6 +427,9 @@ local function special(t)
   local every
   n, every, dur = match(t, "regenera (" .. NUM .. ") p a todos los miembros del grupo [^%.]-cada (" .. NUM .. ") sec durante (" .. NUM .. ") sec")
   if n then return { hot = { total = num(n) * floor(num(dur) / num(every) + 0.5), duration = num(dur) } } end
+  -- Dark Sacrifice: "Canibalizas 400 p. de tu propia salud durante 15 s para obtener 428 p. de man\195\161"
+  n, dur, m = match(t, "canibalizas (" .. NUM .. ") p de tu propia salud durante (" .. NUM .. ") sec para obtener (" .. NUM .. ") p de " .. MANA)
+  if n then return { healthCost = num(n), manaGain = num(m), healthCostDuration = num(dur) } end
   -- Seal of Light, per trigger: "la posibilidad de curar 39 p. al paladín"
   n = match(t, "posibilidad de curar (" .. NUM .. ") p al palad" .. I .. "n")
   if n then return { heal = D(n) } end

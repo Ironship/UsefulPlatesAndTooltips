@@ -60,6 +60,9 @@ local function rewrite(t)
   t = gsub(t, "([을를]) (" .. NUM .. ") 만큼 감소", "%1 감소량 %2 만큼 감소")
   -- Health Funnel: "12의 생명력을 시전자의 소환수에게 이전합니다" gives the pet health the caster pays, no heal
   t = gsub(t, "(" .. NUM .. ") 의 생명력을 시전자의 소환수에게", "%1 의 생명력 배정 소환수에게")
+  -- Lacerate: the stacking tail ("plus 10% weapon damage per existing application") is no part of the first application's damage:
+  -- the base is what the text names, and the weapon word would veto the whole reading
+  t = gsub(t, ", 추가로 대상에게 걸린 [^%.]-하나당 무기 공격력의 " .. NUM .. " ?%% 에 해당하는 피해를 입힙니다", "")
   return (gsub(t, " +", " "))
 end
 
@@ -105,7 +108,9 @@ local function healAmountOK(before, after)
   if find(before, "마나", 1, true) then return false end
   local s = stripFillers(after, { "의 " })
   if sub(s, 1, 9) == "생명력" or sub(s, 1, 6) == "치유" then return true end
-  if match(after, "^ *만큼") then return find(before, "생명력", 1, true) ~= nil or find(before, "를 $") ~= nil end
+  -- "아군 대상을 296에서 353만큼 치유합니다", "대상과 대상의 파티를 7초에 걸쳐 336만큼 치유합니다": the verb says it is health
+  if match(after, "^ *만큼 치유") or match(after, "^ *만큼 회복") then return true end
+  if match(after, "^ *만큼") then return find(before, "생명력", 1, true) ~= nil or find(before, "[을를] $") ~= nil end
   return false
 end
 
@@ -149,6 +154,8 @@ local function attackPowerIn(sentence)
   if hasAny(sentence, REDUCE_VERBS) or find(sentence, "확률", 1, true) then return nil end
   if find(sentence, "[^0-9]1 점 *:") then return nil end
   local a = match(sentence, "전투력[^%d]-(" .. NUM .. ") 만큼 증가")
+    -- the bear forms and Lion's Heart name other stats too: "방어도가 180%만큼, 전투력이 120만큼, 생명력이 560만큼 증가합니다"
+    or match(sentence, "전투력[^%d]-(" .. NUM .. ") 만큼,")
   if not a then return nil end
   return { kind = "ap", amount = num(a), ranged = find(sentence, "원거리", 1, true) ~= nil,
     plusAgility = find(sentence, "민첩성에 추가로", 1, true) ~= nil }
@@ -191,13 +198,36 @@ local function weaponKO(t)
   if not p then p, a = match(t, "일반 공격력의 (" .. NUM .. ") ?%% 에 해당하는 피해와 (" .. NUM .. ") 의 추가") end
   if not p then p, a = match(t, "공격력의 (" .. NUM .. ") ?%% 에 추가로 (" .. NUM .. ") 의") end
   if p then return { kind = "weapon", pct = num(p), bonus = num(a) } end
+  -- Primal Bite: "일반 공격력의 100%에 해당하는 피해에 추가로 42의 입히고"
+  p, a = match(t, "일반 공격력의 (" .. NUM .. ") ?%% 에 해당하는 피해에 추가로 (" .. NUM .. ") 의")
+  if p then return { kind = "weapon", pct = num(p), bonus = num(a) } end
+  -- Devastate, Chimera Shot, Saber Slash: "무기 공격력의 150%에 해당하는 추가 피해를", "무기 공격력의 135%에 해당하는 피해를 입힌 후" (not
+  -- Lacerate's "중첩 하나당 무기 공격력의 10%에 해당하는 피해": that is the stacks' share)
+  if not find(t, "하나당 무기 공격력", 1, true) then
+    p = match(t, "무기 공격력의 (" .. NUM .. ") ?%% 에 해당하는 추가 피해") or match(t, "무기 공격력의 (" .. NUM .. ") ?%% 에 해당하는 피해를")
+    if p then return { kind = "weapon", pct = num(p), bonus = 0 } end
+  end
   -- Bloodthirst, Shuriken Toss: "전투력의 45%에 해당하는 피해와 30의 추가 피해를 입힙니다"
   p, a = match(t, "전투력의 (" .. NUM .. ") ?%% 에 해당하는 피해와 (" .. NUM .. ") 의 추가")
   if not p then p = match(t, "전투력의 (" .. NUM .. ") ?%% 에 해당하는 피해") end
   if p then return { kind = "appct", pct = num(p), bonus = num(a) or 0 } end
   -- "무기 공격력에 5의 추가 피해를 입힙니다", "무기 공격력에 추가로 32의 피해를", "근접 무기 공격력에 추가로 5의 피해를"
+  -- Mortal Strike: "무기 공격력에 추가로 85만큼의 피해를", Slam's relative: "무기 공격력에 해당하는 피해와 16의 추가 피해를"
   a = match(t, "무기 공격력에 추가로 (" .. NUM .. ") 의 피해") or match(t, "무기 공격력에 (" .. NUM .. ") 의 추가 피해")
+    or match(t, "무기 공격력에 추가로 (" .. NUM .. ") 만큼의 피해") or match(t, "무기 공격력에 해당하는 피해와 (" .. NUM .. ") 의 추가 피해")
   if a then return { kind = "weapon", pct = 100, bonus = num(a) } end
+  -- Sniper Shot: "원거리 공격력에 추가로 320만큼 피해를 입히고": the ranged weapon's hit plus the amount
+  a = match(t, "원거리 공격력에 추가로 (" .. NUM .. ") 만큼 피해")
+  if a then return { kind = "weapon", pct = 100, bonus = num(a), ranged = true } end
+  -- Aimed Shot: "적을 정확하게 조준하여 40의 추가 원거리 피해를 입힙니다"
+  a = match(t, "(" .. NUM .. ") 의 추가 원거리 피해")
+  if a then return { kind = "next", bonus = num(a), ranged = true } end
+  -- Seal of the Crusader: "근접 전투력이 60만큼, 근접 공격 속도가 40%만큼 증가합니다"
+  a, p = match(t, "근접 전투력이 (" .. NUM .. ") 만큼, 근접 공격 속도가 (" .. NUM .. ") ?%% 만큼 증가")
+  if a then return { kind = "ap", amount = num(a), faster = num(p) } end
+  -- Hammer of the Righteous: "주무기 초당 공격력의 3배에 해당하는 신성 피해를 입힙니다"
+  a, school = match(t, "주무기 초당 공격력의 (" .. NUM .. ") 배에 해당하는 (%S+) 피해")
+  if a then return { kind = "dps", times = num(a), school = schoolCode(school) or "physical" } end
   -- Whirlwind: "두 근접 무기 모두의 공격력에 해당하는 피해를 입힙니다"
   if find(t, "무기 모두의 공격력에 해당하는 피해", 1, true) then return { kind = "weapon", pct = 100, bonus = 0 } end
   -- Strength of Earth, Grace of Air: "힘을 7만큼 증가시킵니다"
@@ -242,6 +272,9 @@ local function special(t)
   if n then
     return { dot = { total = num(n) + num(extra), duration = num(dur) }, school = schoolCode(school), first = num(first) }
   end
+  -- Dark Sacrifice: "15초에 걸쳐 자신의 생명력을 440만큼 포식해 431의 마나를 회복합니다"
+  dur, n, m = match(t, "(" .. NUM .. ") 초에 걸쳐 자신의 생명력을 (" .. NUM .. ") 만큼 포식해 (" .. NUM .. ") 의 마나를 회복")
+  if n then return { healthCost = num(n), manaGain = num(m), healthCostDuration = num(dur) } end
   -- Seal of Light, per trigger: "일정 확률로 성기사의 생명력을 39만큼 회복시킵니다"
   n = match(t, "일정 확률로 성기사의 생명력을 (" .. NUM .. ") 만큼 회복")
   if n then return { heal = D(n) } end
