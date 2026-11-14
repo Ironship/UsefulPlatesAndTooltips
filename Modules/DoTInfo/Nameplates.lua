@@ -118,26 +118,31 @@ local function fitMarker(w)
     local ownOK, ownScale = pcall(w.marker.GetEffectiveScale, w.marker)
     if ok and barOK and ownOK and positiveGeometry(width) and positiveGeometry(height)
         and positiveGeometry(barScale) and positiveGeometry(ownScale) then
-        width, height = width * barScale / ownScale, height * barScale / ownScale
+        -- the visible bar, where it is smaller than the HealthBar frame (Blizzard's Camelot frames; 0, 0 anywhere else)
+        local top, bottom = 0, 0
+        if BIT.Plate.BarInset then top, bottom = BIT.Plate.BarInset(bar) end
+        local ratio = barScale / ownScale
+        width, height = width * ratio, (height - top - bottom) * ratio
+        local offset = -top * ratio
         if positiveGeometry(width) and positiveGeometry(height) then
-            if w.geometryBar ~= bar or w.geometryWidth ~= width or w.geometryHeight ~= height then
+            if w.geometryBar ~= bar or w.geometryWidth ~= width or w.geometryHeight ~= height or w.geometryOffset ~= offset then
                 w.marker:ClearAllPoints()
-                w.marker:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, 0)
+                w.marker:SetPoint("TOPLEFT", bar, "TOPLEFT", 0, offset)
                 w.marker:SetSize(width, height)
-                w.geometryBar, w.geometryWidth, w.geometryHeight = bar, width, height
+                w.geometryBar, w.geometryWidth, w.geometryHeight, w.geometryOffset = bar, width, height, offset
             end
             return
         end
     end
     -- Hidden layout values stay in native anchors, never in arithmetic or a guessed size.
-    w.geometryBar, w.geometryWidth, w.geometryHeight = nil, nil, nil
+    w.geometryBar, w.geometryWidth, w.geometryHeight, w.geometryOffset = nil, nil, nil, nil
     w.marker:ClearAllPoints()
     w.marker:SetAllPoints(bar)
 end
 
 local function createWidgets(plate, healthBar)
     local host = BIT.Plate.WidgetHost(plate)
-    local w = { healthBar = healthBar, host = host, plate = plate }
+    local w = { healthBar = healthBar, host = host, markerHost = host, plate = plate }
 
     -- Marker: filled from the bar's left edge to the remaining DoT damage, on the mob's (secret) health scale.
     w.marker = invisibleBar(host)
@@ -198,6 +203,8 @@ local function createWidgets(plate, healthBar)
     w.iconBar:SetPoint("RIGHT", w.iconWindow, "RIGHT")
     w.icon = w.iconBar:CreateTexture(nil, "OVERLAY")
     w.icon:SetPoint("RIGHT", w.iconBar:GetStatusBarTexture(), "RIGHT")
+    -- the weapon icon beside the skull's logic: lit by the DoTs plus one swing (SwingIcon.lua)
+    w.swing = ns.SwingIcon and ns.SwingIcon.New(w.iconWindow, w.iconBar) or nil
 
     widgetsByPlate[plate] = w
     return w
@@ -229,7 +236,7 @@ end
 local STYLE_KEYS = {
     "plateFillTexture", "plateFillColor", "plateFillOpacity", "plateDotColors", "plateOutlineStyle",
     "plateDashLength", "plateOutlineThickness", "plateOutlineColor", "plateOutlineOpacity", "plateIcon",
-    "nameplateIconSize", "nameplateIconPosition", "plateIconOffsetX", "plateIconOffsetY", "plateFillDirection",
+    "nameplateIconSize", "nameplateIconPosition", "plateIconOffsetX", "plateIconOffsetY", "plateFillDirection", "swingKill",
 }
 
 -- Pushes the look settings onto one plate's widgets when any of them changed since the last time.
@@ -317,6 +324,7 @@ local function applyStyle(w, db)
     w.iconBar:SetSize(ICON_BAR_LENGTH, size)
     w.icon:SetSize(size, size)
     w.icon:SetTexture(ns.findById(lists.icons, db.plateIcon).path)
+    if w.swing then ns.SwingIcon.Style(w.swing, size, db.swingKill) end
     w.iconWindow:ClearAllPoints()
     local x, y = db.plateIconOffsetX, db.plateIconOffsetY
     if db.nameplateIconPosition == "left" then
@@ -374,7 +382,8 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
         end
         if w.refresh then w.refresh:SetShown(anyDue and not perDot) end
         w.iconBar:SetMinMaxValues(0, health)
-        w.iconBar:SetValue(ns.lethalDamage and ns.lethalDamage(entries, unit ~= nil) or total)
+        w.iconBar:SetValue(ns.lethalDamage and ns.lethalDamage(entries, false) or total)
+        if w.swing then ns.SwingIcon.Draw(w.swing, health, ns.lethalDamage and ns.lethalDamage(entries, unit ~= nil) or total) end
     end)
     if not ok then
         hideWidgets(w)
@@ -400,15 +409,27 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
     return true
 end
 
-local function widgetsFor(plate, healthBar)
+-- hangOn: a frame the marker should hang on instead of the widget host (the focus frame's bar, see Focus.lua). A marker
+-- hung on the screen was never drawn on the unit frames of the Forever client; one on its bar is. The unit frames'
+-- bars cannot be reparented to in combat, so the move waits for the end of it.
+local function widgetsFor(plate, healthBar, hangOn)
     local w = widgetsByPlate[plate]
     if w then
         local host = BIT.Plate.WidgetHost(plate)
         if w.host ~= host then
             w.host = host
-            w.marker:SetParent(host)
             w.iconWindow:SetParent(host)
         end
+        local want = hangOn or host
+        if w.markerHost ~= want then
+            -- only a bar of a unit frame is off limits in combat: a plate's host is moved to whenever it changes, as before
+            local restricted = hangOn ~= nil or w.hungOn ~= nil
+            if not (restricted and type(InCombatLockdown) == "function" and InCombatLockdown()) then
+                w.marker:SetParent(want)
+                w.markerHost, w.hungOn = want, hangOn
+            end
+        end
+        if hangOn and BIT.OwnOverlays then BIT.OwnOverlays[w.marker] = true end
         if w.healthBar == healthBar then
             fitMarker(w)
             return w
@@ -539,6 +560,7 @@ driver:SetScript("OnUpdate", function(self, elapsed)
         ns.print("Nameplate display error (logged): " .. tostring(err))
     end
 end)
+if BIT.Perf then BIT.Perf.Watch(driver, "OnUpdate", "DoTInfo.plates") end
 
 local function testBar(i)
     if not testBars[i] then

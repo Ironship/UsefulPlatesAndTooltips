@@ -50,6 +50,28 @@ local function pushButton(parent, text, width, onClick)
     return BIT.UI.SkinButton(button)
 end
 
+-- What SpellDamageInfo recorded of the player's casts (Blizzard's damage meter, read after each fight): per spell the
+-- average damage or healing of a cast over the last 100 casts, beside the description's own figure. A DoT or HoT counts
+-- everything it did within the fights; healing is what the meter counts. { key, spellID, name, perTick = per cast,
+-- tooltipPerTick = the description's figure, casts, healing, color } sorted by casts.
+local DAMAGE_COLOR, HEAL_COLOR = { 1, 0.82, 0.2 }, { 0.4, 1, 0.4 }
+local function castList()
+    local list = {}
+    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+    if type(sdi) ~= "table" or type(sdi.History) ~= "table" then return list end
+    for _, row in ipairs(sdi.History.List()) do
+        local healing = row.healing > row.damage
+        local entry = { key = row.id, spellID = row.id, name = row.name, casts = row.casts, healing = healing,
+            perTick = healing and row.healing or row.damage, color = healing and HEAL_COLOR or DAMAGE_COLOR }
+        if type(sdi.DescriptionTotals) == "function" then
+            local ok, damage, heal = pcall(sdi.DescriptionTotals, row.id)
+            if ok and damage then entry.tooltipPerTick = (healing and heal or damage) > 0 and (healing and heal or damage) or nil end
+        end
+        list[#list + 1] = entry
+    end
+    return list
+end
+
 local function showTooltip(row)
     local entry = row.entry
     if not entry then return end
@@ -58,6 +80,19 @@ local function showTooltip(row)
     if not shown then GameTooltip:SetText(entry.name or string.format(BIT.L("Spell %d"), entry.spellID), 1, 1, 1) end
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine("DoTInfo", 1, 0.82, 0)
+    if entry.casts then
+        GameTooltip:AddDoubleLine(BIT.L(entry.healing and "Healing per cast" or "Damage per cast"), formatTick(entry.perTick),
+            0.8, 0.8, 0.8, 1, 1, 1)
+        if entry.tooltipPerTick then
+            GameTooltip:AddDoubleLine(BIT.L("Tooltip, one cast"), formatTick(entry.tooltipPerTick), 0.8, 0.8, 0.8, 1, 1, 1)
+        end
+        GameTooltip:AddDoubleLine(BIT.L("Casts recorded"), string.format("%d", entry.casts), 0.8, 0.8, 0.8, 1, 1, 1)
+        GameTooltip:AddLine(BIT.L("The average of your last 100 casts: misses, resists and crits are in it, a DoT or HoT counts "
+            .. "what it did while you were in combat, and healing is what the damage meter counts."), 0.6, 0.6, 0.6, true)
+        GameTooltip:AddLine(BIT.L("Shift-click to link it in chat."), 0.5, 0.8, 1)
+        GameTooltip:Show()
+        return
+    end
     if entry.comboPoints then
         GameTooltip:AddDoubleLine(BIT.L("Combo points"), entry.comboPoints, 0.8, 0.8, 0.8, 1, 1, 1)
     end
@@ -123,14 +158,21 @@ local function createRow(parent, index)
     forgetHighlight:SetColorTexture(1, 0.3, 0.3, 0.25)
     forget:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(BIT.L("Forget this tick size"), 1, 1, 1)
-        GameTooltip:AddLine(BIT.L("The next cast starts from the tooltip again and learns it anew."), nil, nil, nil, true)
+        local casts = viewer and viewer.mode == "casts"
+        GameTooltip:SetText(BIT.L(casts and "Forget this spell's casts" or "Forget this tick size"), 1, 1, 1)
+        GameTooltip:AddLine(BIT.L(casts and "Its recorded casts are deleted; the next fights start them again."
+            or "The next cast starts from the tooltip again and learns it anew."), nil, nil, nil, true)
         GameTooltip:Show()
     end)
     forget:SetScript("OnLeave", function() GameTooltip:Hide() end)
     forget:SetScript("OnClick", function()
         if not row.entry then return end
-        ns.forgetLearnedTick(row.entry.key)
+        if row.entry.casts then
+            local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+            if sdi and sdi.History then sdi.History.Forget(row.entry.spellID) end
+        else
+            ns.forgetLearnedTick(row.entry.key)
+        end
         viewer:Refresh()
     end)
 
@@ -173,7 +215,11 @@ local function fillRow(row, entry)
         row.cells.bonus:SetText("-")
         row.cells.bonus:SetTextColor(0.7, 0.7, 0.7)
     end
-    row.cells.total:SetText(entry.ticks and formatTick(entry.perTick * entry.ticks) or "-")
+    if entry.casts then
+        row.cells.total:SetText(string.format("%d", entry.casts))
+    else
+        row.cells.total:SetText(entry.ticks and formatTick(entry.perTick * entry.ticks) or "-")
+    end
     row:Show()
 end
 
@@ -193,15 +239,23 @@ local function createViewer()
     BIT.UI.Backdrop(frame, 0.06, 0.97)
 
     -- Escape closes it, without adding to Blizzard's UISpecialFrames: the key goes to this frame while it's shown
-    -- and passes on to the game otherwise.
-    frame:EnableKeyboard(true)
-    frame:SetPropagateKeyboardInput(true)
+    -- and passes on to the game otherwise. SetPropagateKeyboardInput is a protected function in combat (calling it
+    -- there was an ADDON_ACTION_BLOCKED on every key pressed while the window was open in a fight), so it is only
+    -- touched out of combat; in combat the window takes no keys at all, which cannot swallow a binding.
+    local function inCombat() return InCombatLockdown and InCombatLockdown() end
+    local function takeKeys(self)
+        if inCombat() then
+            self:EnableKeyboard(false)
+        else
+            self:EnableKeyboard(true)
+            self:SetPropagateKeyboardInput(true)
+        end
+    end
+    takeKeys(frame)
     frame:SetScript("OnKeyDown", function(self, key)
-        if key == "ESCAPE" and not (InCombatLockdown and InCombatLockdown()) then
+        if key == "ESCAPE" and not inCombat() then
             self:SetPropagateKeyboardInput(false)
             self:Hide()
-        else
-            self:SetPropagateKeyboardInput(true)
         end
     end)
 
@@ -227,8 +281,10 @@ local function createViewer()
 
     local headers = { spell = BIT.L("Spell"), combo = BIT.L("Combo"), learned = BIT.L("Per tick"),
         tooltip = BIT.L("Tooltip"), bonus = BIT.L("Bonus"), total = BIT.L("Total") }
+    frame.headers = {}
     for column, text in pairs(headers) do
         local header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        frame.headers[column] = header
         header:SetPoint("BOTTOMLEFT", list, "TOPLEFT", COLUMNS[column][1], 4)
         header:SetWidth(COLUMNS[column][2])
         header:SetJustifyH(column == "spell" and "LEFT" or column == "combo" and "CENTER" or "RIGHT")
@@ -254,9 +310,39 @@ local function createViewer()
     end)
     forgetAll:SetPoint("BOTTOMRIGHT", -12, 12)
 
+    frame.mode = "ticks" -- or "casts": what SpellDamageInfo recorded of every spell's casts
+    local toggle = pushButton(frame, "Show casts and heals", 170, function()
+        frame.mode = frame.mode == "casts" and "ticks" or "casts"
+        frame.offset = 0
+        frame:Refresh()
+    end)
+    toggle:SetPoint("RIGHT", forgetAll, "LEFT", -8, 0)
+    frame.toggle = toggle
+    forgetAll:SetScript("OnClick", function()
+        if frame.mode == "casts" then
+            local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+            if sdi and sdi.History then sdi.History.Clear() end
+        else
+            ns.resetLearnedTicks()
+        end
+        frame:Refresh()
+    end)
+
     frame.offset = 0
     function frame:Refresh()
-        local entries = ns.learnedTickList()
+        local casts = self.mode == "casts"
+        local entries = casts and castList() or ns.learnedTickList()
+        self.headers.combo:SetText(casts and "" or headers.combo)
+        self.headers.learned:SetText(BIT.L(casts and "Per cast" or "Per tick"))
+        self.headers.total:SetText(BIT.L(casts and "Casts" or "Total"))
+        intro:SetText(BIT.L(casts and "What your casts of each spell really did, averaged over the last 100: damage and healing "
+            .. "from Blizzard's damage meter, read after each fight. Bonus is how much more yours do than the tooltip says. "
+            .. "Hover a spell for details, shift-click to link it." or "What each DoT really ticks for, learned from your casts and used instead of its tooltip. "
+            .. "Tooltips leave out spell power and attack power: Bonus is how much more yours do. "
+            .. "Hover a spell for details, shift-click to link it."))
+        empty:SetText(BIT.L(casts and "Nothing recorded yet. Casts are recorded after each fight, once the damage meter can be read."
+            or "Nothing learned yet. Tick sizes are learned as your DoTs tick on your targets."))
+        toggle:SetText(BIT.L(casts and "Show DoT ticks" or "Show casts and heals"))
         local maxOffset = math.max(0, #entries - VISIBLE_ROWS)
         self.offset = math.max(0, math.min(self.offset, maxOffset))
         for i, row in ipairs(self.rows) do
@@ -266,8 +352,8 @@ local function createViewer()
         empty:SetShown(#entries == 0)
         local scrolled = maxOffset > 0 and "  " .. string.format(BIT.L("(%d-%d shown; scroll for more)"),
             self.offset + 1, math.min(#entries, self.offset + VISIBLE_ROWS)) or ""
-        local counted = #entries == 1 and BIT.L("1 learned tick size")
-            or string.format(BIT.L("%d learned tick sizes"), #entries)
+        local counted = casts and string.format(BIT.L("%d spells recorded"), #entries)
+            or (#entries == 1 and BIT.L("1 learned tick size") or string.format(BIT.L("%d learned tick sizes"), #entries))
         count:SetText(counted .. scrolled)
         forgetAll:SetEnabled(#entries > 0)
     end
@@ -285,7 +371,7 @@ local function createViewer()
     end)
     frame:SetScript("OnShow", function(self)
         sinceRefresh = 0
-        self:SetPropagateKeyboardInput(true) -- Escape turned it off when it closed the window
+        takeKeys(self) -- Escape turned propagation off when it closed the window; and a fight may have begun since
         self:Refresh()
     end)
     return frame

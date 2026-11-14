@@ -220,6 +220,8 @@ BIT.RegisterLocale("ruRU", {
     "/dotinfo skull — показать значок убийства на 5 секунд, чтобы проверить его положение",
   ["/dotinfo plates - check what the addon can reach on visible nameplates (logged)"] =
     "/dotinfo plates — проверить доступные элементы видимых табличек (результат записывается в журнал)",
+  ["/dotinfo marker - report where the damage marker is (also logged); marker screen | marker bar choose what it hangs on"] =
+    "/dotinfo marker — показать, где находится маркер урона (также пишется в журнал); marker screen | marker bar — на чём он закреплён",
   ["/dotinfo debug - toggle echoing the trace log (casts, ticks, estimates) to chat"] =
     "/dotinfo debug — включить/выключить вывод журнала событий (применения, тики, оценки) в чат",
   ["/dotinfo ticks - show the learned tick sizes"] = "/dotinfo ticks — показать изученные значения тиков",
@@ -254,9 +256,38 @@ BIT.RegisterLocale("ruRU", {
   ["%d learned tick sizes"] = "Изучено значений тиков: %d",
   -- вкладка «Значок убийства»: удар оружием и порог убийства
   ["Count one weapon hit"] = "Учитывать один удар оружием",
-  ["The kill icon also shows when your DoTs plus one average hit of your best weapon attack (melee swing, wand or ranged shot) would kill. The hit is the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. The marker itself still shows only the DoTs."] =
-    "Значок убийства также показывается, если ваши DoT плюс один средний удар вашей лучшей атаки оружием (удар в ближнем бою, выстрел из жезла или дальнего оружия) убьют цель. Берётся среднее значение с листа персонажа: броня, промахи и критические удары не учитываются, порог убийства применяется. Сама отметка по-прежнему показывает только DoT.",
+  ["A weapon icon shows when your DoTs plus one average hit of your best weapon attack (melee swing, wand or ranged shot) would kill; the kill icon itself still means the DoTs alone are enough. The hit is the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. The marker itself still shows only the DoTs."] =
+    "Значок оружия появляется, если ваши DoT плюс один средний удар вашей лучшей атаки оружием (удар в ближнем бою, выстрел из жезла или дальнего оружия) убьют цель; значок убийства по-прежнему означает, что хватит одних DoT. Берётся среднее значение с листа персонажа: броня, промахи и критические удары не учитываются, порог убийства применяется. Сама отметка по-прежнему показывает только DoT.",
   ["Kill margin"] = "Порог убийства",
   ["The icon shows only when this share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the icon; 100% compares the full estimate. The marker always shows the full estimate."] =
     "Значок показывается, только если такой доли оценённого урона DoT достаточно для убийства. Уменьшите значение, если цели, которые лечатся или восстанавливают здоровье, переживают значок; 100% сравнивает полную оценку. Отметка всегда показывает полную оценку.",
+  -- the recorded casts view of the learned sizes window
+  ["Show casts and heals"] =
+    "Показать применения и исцеление",
+  ["Show DoT ticks"] =
+    "Показать тики DoT",
+  ["Per cast"] =
+    "За применение",
+  ["Casts"] =
+    "Применения",
+  ["%d spells recorded"] =
+    "Записано заклинаний: %d",
+  ["Nothing recorded yet. Casts are recorded after each fight, once the damage meter can be read."] =
+    "Пока ничего не записано. Применения записываются после каждого боя, когда счётчик урона можно прочитать.",
+  ["What your casts of each spell really did, averaged over the last 100: damage and healing from Blizzard's damage meter, read after each fight. Bonus is how much more yours do than the tooltip says. Hover a spell for details, shift-click to link it."] =
+    "Что ваши применения каждого заклинания дали на самом деле, в среднем за последние 100: урон и исцеление из счётчика урона Blizzard, прочитанные после каждого боя. Бонус показывает, на сколько больше у вас, чем в подсказке. Наведите на заклинание для подробностей, Shift-щелчок вставляет ссылку.",
+  ["Healing per cast"] =
+    "Исцеление за применение",
+  ["Damage per cast"] =
+    "Урон за применение",
+  ["Tooltip, one cast"] =
+    "Подсказка, одно применение",
+  ["Casts recorded"] =
+    "Записано применений",
+  ["The average of your last 100 casts: misses, resists and crits are in it, a DoT or HoT counts what it did while you were in combat, and healing is what the damage meter counts."] =
+    "Среднее по вашим последним 100 применениям: промахи, сопротивления и критические удары учтены, DoT и HoT считаются по тому, что они сделали за время боя, а исцеление — это то, что считает счётчик урона.",
+  ["Forget this spell's casts"] =
+    "Забыть применения этого заклинания",
+  ["Its recorded casts are deleted; the next fights start them again."] =
+    "Записанные применения удаляются; следующие бои начнут запись заново.",
 })

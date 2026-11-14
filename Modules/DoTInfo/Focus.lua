@@ -62,6 +62,7 @@ local layerCheckedAt, layerBar, topStrata, topLevel = -math.huge, nil, nil, nil
 local function topLayer(root)
     local bestStrata, bestLevel = "BACKGROUND", 0
     local function visit(frame, depth)
+        if BIT.OwnOverlays and BIT.OwnOverlays[frame] then return end -- our own mark on the bar is not the frame's art
         if depth > 0 then
             -- hidden only when the client says so: an unreadable or secret answer counts as shown
             local okShown, shown = pcall(frame.IsShown, frame)
@@ -136,7 +137,8 @@ local function refresh()
     if type(bar) ~= "table" or not shown(bar) then return hide() end
     local entries, total = ns.dotBreakdownForUnit("focus")
     if total <= 0 then return hide() end
-    widgets = ns.barMarker.widgetsFor(host, bar)
+    -- the marker hangs on the focus bar itself (as on the target frame, see Core.lua applyMarkerParent)
+    widgets = ns.barMarker.widgetsFor(host, bar, ns.db.markerParent ~= "screen" and bar or nil)
     widgets.pinned = true
     ns.barMarker.draw(widgets, entries, total, UnitHealthMax("focus"), UnitHealth("focus"), focusLook, false, "focus")
     updateLayering(widgets, bar, GetTime())
@@ -161,3 +163,4 @@ driver:SetScript("OnUpdate", function(self, elapsed)
         end
     end
 end)
+if BIT.Perf then BIT.Perf.Watch(driver, "OnUpdate", "DoTInfo.focus") end

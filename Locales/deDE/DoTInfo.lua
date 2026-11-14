@@ -220,6 +220,8 @@ BIT.RegisterLocale("deDE", {
     "/dotinfo skull - zeigt das Kill-Symbol 5 Sekunden lang, um seine Position zu prüfen",
   ["/dotinfo plates - check what the addon can reach on visible nameplates (logged)"] =
     "/dotinfo plates - prüft, was das Addon auf sichtbaren Namensplaketten erreichen kann (wird protokolliert)",
+  ["/dotinfo marker - report where the damage marker is (also logged); marker screen | marker bar choose what it hangs on"] =
+    "/dotinfo marker - meldet, wo die Schadensmarkierung liegt (wird auch protokolliert); marker screen | marker bar wählt, woran sie hängt",
   ["/dotinfo debug - toggle echoing the trace log (casts, ticks, estimates) to chat"] =
     "/dotinfo debug - schaltet die Ausgabe des Ablaufprotokolls (Zauber, Ticks, Schätzungen) im Chat ein/aus",
   ["/dotinfo ticks - show the learned tick sizes"] = "/dotinfo ticks - zeigt die gelernten Tickgrößen",
@@ -254,9 +256,38 @@ BIT.RegisterLocale("deDE", {
   ["%d learned tick sizes"] = "%d gelernte Tickgrößen",
   -- the Kill icon tab: weapon hit and kill margin
   ["Count one weapon hit"] = "Einen Waffentreffer mitzählen",
-  ["The kill icon also shows when your DoTs plus one average hit of your best weapon attack (melee swing, wand or ranged shot) would kill. The hit is the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. The marker itself still shows only the DoTs."] =
-    "Das Kill-Symbol erscheint auch, wenn Eure DoTs plus ein durchschnittlicher Treffer Eures besten Waffenangriffs (Nahkampfschlag, Zauberstab- oder Fernkampfschuss) das Ziel töten würden. Der Treffer ist der Durchschnitt aus dem Charakterblatt: Rüstung, Fehlschläge und kritische Treffer werden nicht gezählt, und die Kill-Marge gilt. Die Markierung selbst zeigt weiterhin nur die DoTs.",
+  ["A weapon icon shows when your DoTs plus one average hit of your best weapon attack (melee swing, wand or ranged shot) would kill; the kill icon itself still means the DoTs alone are enough. The hit is the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. The marker itself still shows only the DoTs."] =
+    "Ein Waffensymbol erscheint, wenn Eure DoTs plus ein durchschnittlicher Treffer Eures besten Waffenangriffs (Nahkampfschlag, Zauberstab- oder Fernkampfschuss) das Ziel töten würden; das Kill-Symbol bedeutet weiterhin, dass die DoTs allein genügen. Der Treffer ist der Durchschnitt aus dem Charakterblatt: Rüstung, Fehlschläge und kritische Treffer werden nicht gezählt, und die Kill-Marge gilt. Die Markierung selbst zeigt weiterhin nur die DoTs.",
   ["Kill margin"] = "Kill-Marge",
   ["The icon shows only when this share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the icon; 100% compares the full estimate. The marker always shows the full estimate."] =
     "Das Symbol erscheint nur, wenn dieser Anteil des geschätzten DoT-Schadens zum Töten reicht. Senkt den Wert, wenn Gegner, die sich heilen oder regenerieren, das Symbol überleben; bei 100% zählt die volle Schätzung. Die Markierung zeigt immer die volle Schätzung.",
+  -- the recorded casts view of the learned sizes window
+  ["Show casts and heals"] =
+    "Zauber und Heilung zeigen",
+  ["Show DoT ticks"] =
+    "DoT-Ticks zeigen",
+  ["Per cast"] =
+    "Pro Zauber",
+  ["Casts"] =
+    "Zauber",
+  ["%d spells recorded"] =
+    "%d Zauber aufgezeichnet",
+  ["Nothing recorded yet. Casts are recorded after each fight, once the damage meter can be read."] =
+    "Noch nichts aufgezeichnet. Zauber werden nach jedem Kampf aufgezeichnet, sobald der Schadensmesser lesbar ist.",
+  ["What your casts of each spell really did, averaged over the last 100: damage and healing from Blizzard's damage meter, read after each fight. Bonus is how much more yours do than the tooltip says. Hover a spell for details, shift-click to link it."] =
+    "Was Eure Zauber jeder Art wirklich bewirkt haben, gemittelt über die letzten 100: Schaden und Heilung aus Blizzards Schadensmesser, nach jedem Kampf gelesen. Bonus ist, wie viel mehr Eure bewirken als der Tooltip angibt. Zauber anfahren für Details, Umschalt-Klick verlinkt ihn.",
+  ["Healing per cast"] =
+    "Heilung pro Zauber",
+  ["Damage per cast"] =
+    "Schaden pro Zauber",
+  ["Tooltip, one cast"] =
+    "Tooltip, ein Zauber",
+  ["Casts recorded"] =
+    "Aufgezeichnete Zauber",
+  ["The average of your last 100 casts: misses, resists and crits are in it, a DoT or HoT counts what it did while you were in combat, and healing is what the damage meter counts."] =
+    "Der Durchschnitt Eurer letzten 100 Zauber: Fehlschläge, Widerstände und kritische Treffer sind enthalten, ein DoT oder HoT zählt, was er im Kampf bewirkt hat, und Heilung ist das, was der Schadensmesser zählt.",
+  ["Forget this spell's casts"] =
+    "Die Zauber dieses Zaubers vergessen",
+  ["Its recorded casts are deleted; the next fights start them again."] =
+    "Seine aufgezeichneten Zauber werden gelöscht; die nächsten Kämpfe beginnen sie neu.",
 })
