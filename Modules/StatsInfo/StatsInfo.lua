@@ -2046,9 +2046,9 @@ local function hookTooltips()
   end
   if type(TooltipDataProcessor) == "table" and type(TooltipDataProcessor.AddTooltipPostCall) == "function"
     and Enum and Enum.TooltipDataType then
-    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, add)
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, (BIT.Perf and BIT.Perf.Wrap("StatsInfo.itemTooltip", add) or add))
   elseif GameTooltip and type(GameTooltip.HookScript) == "function" then
-    GameTooltip:HookScript("OnTooltipSetItem", add)
+    GameTooltip:HookScript("OnTooltipSetItem", (BIT.Perf and BIT.Perf.Wrap("StatsInfo.itemTooltip", add) or add))
     -- trackedTooltip accepts ItemRefTooltip (chat links); the legacy branch must hook it too,
     -- or clicked links get no block on a client without TooltipDataProcessor.
     if type(ItemRefTooltip) == "table" and type(ItemRefTooltip.HookScript) == "function" then

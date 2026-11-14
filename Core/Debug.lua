@@ -46,6 +46,11 @@ local SECTIONS = {
     { "/upt rangecheck", "Print the range reading for your target." },
     { "/upt hunterprobe", "Print the hunter range ladder's readings." },
   } },
+  { title = "Performance", rows = {
+    { "/upt perf", "Print which parts of the addon used the most CPU time this session." },
+    { "/upt perf slow", "Print the slowest single calls, with the memory each allocated." },
+    { "/upt perf reset", "Start the counters over." },
+  } },
   { title = "Frames and API", rows = {
     { "/upt frame", "Print which unit frames the markers are drawn on." },
     { "/upt api", "Print the addon API version and its parts." },

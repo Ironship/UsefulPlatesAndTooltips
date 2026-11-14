@@ -40,8 +40,8 @@ local DEFAULTS = {
   raid = true,        -- raid frames
   nameplates = true,  -- every accessible nameplate
   overlayAlpha = 0.5, -- Juicy: half-opacity stripes, opposite to DoT damage
-  showNumber = false,       -- the remaining absorb as a number on the player, target and focus bars
-  numberPosition = "right", -- where on the bar: "left", "center" or "right"
+  showNumber = true,        -- the remaining absorb as a number on the player, target and focus bars
+  numberPosition = "left",  -- where on the bar: "left", "center" or "right"
   numberSize = 10,          -- its font size
   fillTexture = "stripes", -- the fill art the overlay wears (FILL_TEXTURES below)
 }
@@ -750,6 +750,13 @@ end
 
 local UNIT_EVENTS = { UNIT_ABSORB_AMOUNT_CHANGED = true, UNIT_HEALTH = true, UNIT_MAXHEALTH = true }
 
+-- A unit event of a watched unit used to run the whole updateAll at once (every nameplate, every group frame): in a
+-- fight the target's and the player's health change several times a second, so the full pass ran dozens of times a
+-- second. The event now only marks the bars dirty; the driver's next frame at least EVENT_GAP after the last pass runs
+-- it, so the bars still follow within a tenth of a second and the pass is at most ten times a second.
+local EVENT_GAP = 0.1
+local dirty = false
+
 local function onEvent(_, event, arg1)
   if event == "PLAYER_LOGIN" then
     attachCompactHooks()
@@ -766,9 +773,11 @@ local function onEvent(_, event, arg1)
       end
     end
     if cleared then return end
-  elseif UNIT_EVENTS[event] and not isUnitWatched(arg1) then
+  elseif UNIT_EVENTS[event] then
     -- the unit events arrive unfiltered (see start()): one about a unit nobody draws on
-    -- never wakes a refresh (arg1 is the event's own unit)
+    -- never wakes a refresh (arg1 is the event's own unit); one about a watched unit
+    -- is coalesced (EVENT_GAP above)
+    if isUnitWatched(arg1) then dirty = true end
     return
   end
   updateAll()
@@ -796,12 +805,15 @@ local function start()
   local since = 0
   driver:SetScript("OnUpdate", function(_, elapsed)
     since = since + elapsed
-    if since < UPDATE_INTERVAL then return end
+    if since < UPDATE_INTERVAL and not (dirty and since >= EVENT_GAP) then return end
     since = 0
+    dirty = false
     attachCompactHooks()
     updateAll()
   end)
   driver:Show()
+  if BIT.Perf then BIT.Perf.Watch(driver, "OnEvent", "ShieldsInfo") end
+  if BIT.Perf then BIT.Perf.Watch(driver, "OnUpdate", "ShieldsInfo") end
 end
 
 local function prepareShieldSettings()
@@ -811,6 +823,13 @@ local function prepareShieldSettings()
   local hasRaidSwitch = type(saved) == "table" and type(saved.raid) == "boolean"
   settings = BIT.Settings("ShieldsInfo", DEFAULTS)
   if not hasRaidSwitch and type(previousGroupSwitch) == "boolean" then settings.raid = previousGroupSwitch end
+  -- Defaults changed in 0.9.128: the absorb number is on, at the left end of the bar. A saved value that is still what the
+  -- old defaults gave follows them once.
+  if (settings.defaultsRev or 0) < 1 then
+    if settings.showNumber == false then settings.showNumber = true end
+    if settings.numberPosition == "right" then settings.numberPosition = "left" end
+    settings.defaultsRev = 1
+  end
   M.settings = settings
 end
 if BIT.RegisterWaker then BIT.RegisterWaker("ShieldsInfo", prepareShieldSettings) end

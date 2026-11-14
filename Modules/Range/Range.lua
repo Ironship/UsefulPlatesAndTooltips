@@ -315,6 +315,8 @@ local function start()
     update()
   end)
   driver:SetShown(ask(UnitExists, "target") == true)
+  if BIT.Perf then BIT.Perf.Watch(driver, "OnEvent", "Range") end
+  if BIT.Perf then BIT.Perf.Watch(driver, "OnUpdate", "Range") end
 end
 
 ---------------------------------------------------------------------------------------------
