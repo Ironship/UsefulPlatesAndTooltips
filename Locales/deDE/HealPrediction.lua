@@ -40,11 +40,20 @@ BIT.RegisterLocale("deDE", {
   ["A second band behind yours for the part of the client's total that is not yours. Where the client cannot tell healers apart the band simply stays hidden."] =
     "Ein zweites Band hinter Eurem für den Teil der Gesamtsumme des Clients, der nicht von Euch stammt. Wo der Client Heiler nicht unterscheiden kann, bleibt das Band einfach verborgen.",
   ["My heals over time"] = "Meine Heilung über Zeit",
-  ["Rejuvenation, Renew, Regrowth and Riptide are not part of the client's projection. After you cast one, the amount its description promises is drawn after your direct heal for the next few seconds of the effect. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on readable buff recipients or its known primary cast target, not guessed party recipients. Channels, pet heals and triggered heals are not treated as target HoTs. Readable own buffs recover existing effects and removals; when aura data is hidden, the last known expiry is used."] =
-    "Rejuvenation, Renew, Regrowth und Riptide sind nicht Teil der Projektion des Clients. Nachdem Ihr einen davon gewirkt habt, wird die Menge, die seine Beschreibung verspricht, für die nächsten Sekunden des Effekts nach Eurer direkten Heilung eingezeichnet. Wird ein anderer Rang aufgefrischt, ersetzt er die alte Schätzung. Wild Growth nutzt eine lineare Schätzung für Empfänger mit lesbarem Stärkungszauber oder für sein bekanntes primäres Wirkziel, nicht für geratene Gruppenempfänger. Kanalisierungen, Begleiterheilungen und ausgelöste Heilungen werden nicht als HoTs auf dem Ziel behandelt. Lesbare eigene Stärkungszauber erfassen bereits laufende Effekte und Entfernungen nachträglich; sind die Auradaten verborgen, wird der zuletzt bekannte Ablaufzeitpunkt verwendet.",
+  ["Rejuvenation, Renew, Regrowth and Riptide are not part of the client's projection. After you cast one, the amount its description promises is drawn after your direct heal for the whole remaining effect, or only for the horizon below when that is switched off. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on readable buff recipients or its known primary cast target, not guessed party recipients. Channels, pet heals and triggered heals are not treated as target HoTs. Readable own buffs recover existing effects and removals; when aura data is hidden, the last known expiry is used."] =
+    "Rejuvenation, Renew, Regrowth und Riptide sind nicht Teil der Projektion des Clients. Nachdem Ihr einen davon gewirkt habt, wird die Menge, die seine Beschreibung verspricht, nach Eurer direkten Heilung für den gesamten Resteffekt eingezeichnet, oder nur für die Vorausschau unten, wenn diese ausgeschaltet ist. Wird ein anderer Rang aufgefrischt, ersetzt er die alte Schätzung. Wild Growth nutzt eine lineare Schätzung für Empfänger mit lesbarem Stärkungszauber oder für sein bekanntes primäres Wirkziel, nicht für geratene Gruppenempfänger. Kanalisierungen, Begleiterheilungen und ausgelöste Heilungen werden nicht als HoTs auf dem Ziel behandelt. Lesbare eigene Stärkungszauber erfassen bereits laufende Effekte und Entfernungen nachträglich; sind die Auradaten verborgen, wird der zuletzt bekannte Ablaufzeitpunkt verwendet.",
+  ["Whole remaining effect"] = "Gesamter Resteffekt",
+  ["Draw all the healing each of your heals over time still has to do, to its end, instead of only its next few seconds. A fresh Rejuvenation shows its full total, which runs down as the ticks land. The number shows the same total."] =
+    "Zeichnet die gesamte Heilung, die jede Eurer Heilungen über Zeit noch wirken wird, bis zu ihrem Ende, statt nur ihrer nächsten Sekunden. Eine frische Verjüngung zeigt ihre volle Summe, die mit jedem Tick abnimmt. Die Zahl zeigt dieselbe Summe.",
+  ["Food on my frame"] = "Essen auf meinem Fenster",
+  ["While you eat, the health the food still has to give is drawn on your own health bar, like a heal over time (food is an item's effect, not a heal you cast). A potion works at once and has nothing to show."] =
+    "Während Ihr esst, wird die Gesundheit, die das Essen noch gibt, auf Eurer eigenen Gesundheitsleiste wie eine Heilung über Zeit eingezeichnet (Essen ist der Effekt eines Gegenstands, keine gewirkte Heilung). Ein Trank wirkt sofort und hat nichts zu zeigen.",
+  ["Drinks on my mana bar"] = "Getränke auf meiner Manaleiste",
+  ["While you drink, the mana the drink still has to give is drawn on your own mana bar, from the end of your current mana."] =
+    "Während Ihr trinkt, wird das Mana, das das Getränk noch gibt, auf Eurer eigenen Manaleiste eingezeichnet, ab dem Ende Eures aktuellen Manas.",
   ["Heal over time horizon"] = "Vorausschau: Heilung über Zeit",
-  ["How many seconds of each heal over time are drawn ahead."] =
-    "Wie viele Sekunden jeder Heilung über Zeit im Voraus eingezeichnet werden.",
+  ["How many seconds of each heal over time are drawn ahead. Used only when Whole remaining effect is off."] =
+    "Wie viele Sekunden jeder Heilung über Zeit im Voraus eingezeichnet werden. Wird nur verwendet, wenn Gesamter Resteffekt ausgeschaltet ist.",
 
   -- the segment
   ["THE SEGMENT"] = "DAS SEGMENT",
@@ -61,8 +70,8 @@ BIT.RegisterLocale("deDE", {
   ["How tall the segment is against the health bar; the top edge is the anchor."] =
     "Wie hoch das Segment im Verhältnis zur Gesundheitsleiste ist; die Oberkante ist der Anker.",
   ["Show a number"] = "Zahl zeigen",
-  ["A small ~ number for the direct heal plus your HoT horizon at the segment's right end, when the amounts are readable."] =
-    "Eine kleine ~-Zahl für die direkte Heilung plus Eure HoT-Vorausschau am rechten Ende des Segments, wenn die Mengen lesbar sind.",
+  ["A small ~ number for the direct heal plus your heals over time at the segment's right end, when the amounts are readable."] =
+    "Eine kleine ~-Zahl für die direkte Heilung plus Eure Heilung über Zeit am rechten Ende des Segments, wenn die Mengen lesbar sind.",
 
   -- diagnostics
   ["DIAGNOSTICS"] = "DIAGNOSE",

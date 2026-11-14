@@ -44,19 +44,27 @@ local function place(row, y, height)
     return BIT.UI.PlaceRow(row, y, row.standard and row:GetHeight() or height or ROW_HEIGHT)
 end
 
+-- A setting as the rows show it: a key the saved settings lack yet (a new option) shows its default, which is also what
+-- the module acts on, instead of an unchecked box next to a feature that is running.
+local function value(key)
+    local v = db()[key]
+    if v == nil and ns._defaults then v = ns._defaults()[key] end
+    return v
+end
+
 local function checkRow(parent, labelText, key, tooltip)
     note(key)
-    return BIT.Looks.Rows.Check(parent, labelText, function() return db()[key] end, function(value)
+    return BIT.Looks.Rows.Check(parent, labelText, function() return value(key) end, function(value)
         db()[key] = value
         changed()
     end, { tooltip = tooltip, settings = db })
 end
 
-local function sliderRow(parent, labelText, key, min, max, step, format, tooltip)
+local function sliderRow(parent, labelText, key, min, max, step, format, tooltip, enabledIf)
     note(key)
-    local opts = { tooltip = tooltip, settings = db }
+    local opts = { tooltip = tooltip, settings = db, enabledIf = enabledIf }
     if type(format) == "function" then opts.display = format elseif key:find("Opacity$") or key == "heightPercent" then opts.suffix = "%" end
-    return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value)
+    return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return value(key) end, function(value)
         db()[key] = value
         changed()
     end, opts)
@@ -64,7 +72,7 @@ end
 
 local function choiceRow(parent, labelText, key, list, tooltip)
     note(key)
-    return BIT.Looks.Rows.Choice(parent, labelText, list, function() return db()[key] end, function(id)
+    return BIT.Looks.Rows.Choice(parent, labelText, list, function() return value(key) end, function(id)
         db()[key] = id
         changed()
     end, { tooltip = tooltip, settings = db })
@@ -115,14 +123,24 @@ local function buildSettings(parent)
         .. "cannot tell healers apart the band simply stays hidden."), y)
     y = place(checkRow(parent, "My heals over time", "showHots",
         "Rejuvenation, Renew, Regrowth and Riptide are not part of the client's projection. After you cast one, "
-        .. "the amount its description promises is drawn after your direct heal for the next few seconds of "
-        .. "the effect. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on "
+        .. "the amount its description promises is drawn after your direct heal for the whole remaining effect, "
+        .. "or only for the horizon below when that is switched off. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on "
         .. "readable buff recipients or its known primary cast target, not guessed party recipients. Channels, pet heals and triggered heals are "
         .. "not treated as target HoTs. Readable own buffs recover existing effects and removals; "
         .. "when aura data is hidden, the last known expiry is used."), y)
+    y = place(checkRow(parent, "Whole remaining effect", "hotWhole",
+        "Draw all the healing each of your heals over time still has to do, to its end, instead of only its next "
+        .. "few seconds. A fresh Rejuvenation shows its full total, which runs down as the ticks land. The number shows the same total."), y)
+    y = place(checkRow(parent, "Food on my frame", "showFood",
+        "While you eat, the health the food still has to give is drawn on your own health bar, like a heal over time "
+        .. "(food is an item's effect, not a heal you cast). A potion works at once and has nothing to show."), y)
+    y = place(checkRow(parent, "Drinks on my mana bar", "showDrink",
+        "While you drink, the mana the drink still has to give is drawn on your own mana bar, from the end of your "
+        .. "current mana."), y)
     y = place(sliderRow(parent, "Heal over time horizon", "hotHorizon", 1, 15, 1,
         function(value) return math.floor(value + 0.5) .. " s" end,
-        "How many seconds of each heal over time are drawn ahead."), y, 40)
+        "How many seconds of each heal over time are drawn ahead. Used only when Whole remaining effect is off.",
+        function(settings) return settings.hotWhole == false end), y, 40)
     y = section(parent, y, "THE SEGMENT")
     y = place(choiceRow(parent, "Fill style", "fillTexture", BIT.Looks.Textures(),
         "The fill of the incoming-heal segment: patterns, glass and bevel shadings, Blizzard's bar textures and every "
@@ -139,7 +157,7 @@ local function buildSettings(parent)
     y = place(sliderRow(parent, "Height", "heightPercent", 15, 100, 5, nil,
         "How tall the segment is against the health bar; the top edge is the anchor."), y, 40)
     y = place(checkRow(parent, "Show a number", "showText",
-        "A small ~ number for the direct heal plus your HoT horizon at the segment's right end, "
+        "A small ~ number for the direct heal plus your heals over time at the segment's right end, "
         .. "when the amounts are readable."), y)
     y = section(parent, y, "DIAGNOSTICS")
     y = place(buttonRow(parent, "What the client says", "Print", function()
@@ -187,7 +205,7 @@ local function buildPreview(pane)
     local function redraw()
         mock.bar:SetValue(state.health)
         if mock.healthPercent then mock.healthPercent:SetText(string.format("%d%%", state.health)) end
-        local horizon = tonumber(db().hotHorizon) or 4
+        local horizon = ns.HotHorizon and ns.HotHorizon() or tonumber(db().hotHorizon) or 4
         local hot = sampleHotTotal * math.min(horizon, sampleHotDuration) / sampleHotDuration
         ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, hot)
     end

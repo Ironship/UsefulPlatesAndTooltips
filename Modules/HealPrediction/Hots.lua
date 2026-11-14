@@ -84,12 +84,43 @@ local function spellData()
     return module
 end
 
-local function estimate(spellID)
+local function plainPositive(v)
+    return not isSecret(v) and type(v) == "number" and v > 0 and v < math.huge and v == v
+end
+
+-- Food and drink: the effect of an item the player uses ("Restores 59 health over 18 sec. Must remain seated while eating.")
+-- is no spell that heals a target, but it does run for the player like a heal over time: health (food) and mana (drink) still
+-- to come over the rest of the aura. SpellDamageInfo reads such a text (ComputeConsumable); an instant potion has no over-time
+-- part and gives nothing here. Returns { total, duration, mana, manaDuration, consumable }, family, true; the player's own.
+local function consumable(module, spellID)
+    if type(module.ComputeConsumable) ~= "function" then return end
+    local ok, view, name = pcall(module.ComputeConsumable, spellID)
+    if not ok or type(view) ~= "table" then return end
+    local entry = { consumable = true }
+    local hot, mana = view.hot, view.manaOverTime
+    if type(hot) == "table" and plainPositive(hot.total) and plainPositive(hot.duration) then
+        entry.total, entry.duration = hot.total, hot.duration
+    end
+    if type(mana) == "table" and plainPositive(mana.total) and plainPositive(mana.duration) then
+        entry.mana, entry.manaDuration = mana.total, mana.duration
+        entry.duration = entry.duration or mana.duration
+    end
+    if not entry.total and not entry.mana then return end
+    local family = (not isSecret(name) and type(name) == "string" and name ~= "") and name or spellID
+    return entry, family, true
+end
+
+-- allowSelf: the player's own buffs and casts, where a consumable's effect counts too. Returns the estimate, its family and
+-- whether it is such an effect.
+local function estimate(spellID, allowSelf)
     local module = spellData()
     if not module then return end
     local ok, hot, family = pcall(module.ComputeHot, spellID)
     if not ok then report("HoT estimate failed for spell " .. spellID .. ": " .. tostring(hot)) return end
-    if type(hot) ~= "table" then return end
+    if type(hot) ~= "table" then
+        if allowSelf then return consumable(module, spellID) end
+        return
+    end
     if isSecret(hot.total) or isSecret(hot.duration) then return end
     local total, duration = tonumber(hot.total), tonumber(hot.duration)
     if not total or not duration or total <= 0 or duration <= 0
@@ -125,7 +156,7 @@ local function auraHots(unit)
         local id, source = aura.spellId, aura.sourceUnit
         if isSecret(id) or isSecret(source) then return end
         if type(id) == "number" and (source == "player" or ask(UnitIsUnit, source, "player") == true) then
-            local hot, family = estimate(id)
+            local hot, family = estimate(id, unit == "player")
             if hot then
                 local duration, expires = aura.duration, aura.expirationTime
                 if isSecret(duration) or isSecret(expires) then return end
@@ -184,9 +215,14 @@ local function token(castGUID, spellID)
     if not isSecret(spellID) and type(spellID) == "number" then return spellID end
 end
 
+-- Whether anything of ours is drawn at all: heals over time, food, drink.
+local function anyOn(db)
+    return db.showHots ~= false or db.showFood ~= false or db.showDrink ~= false
+end
+
 function Hots.OnSent(targetName, castGUID, spellID)
     local db = settings()
-    if ns.off or not db or db.showHots == false then return end
+    if ns.off or not db or not anyOn(db) then return end
     local key = token(castGUID, spellID)
     if not key then return end
     local now = GetTime()
@@ -210,19 +246,23 @@ function Hots.OnSucceeded(castGUID, spellID)
     local entry = key and sent[key]
     if key then sent[key] = nil end
     local db = settings()
-    if ns.off or not db or db.showHots == false or isSecret(spellID) or type(spellID) ~= "number" then return end
-    if not entry or entry.ambiguous or GetTime() - entry.at > MAX_PENDING_SECONDS then
+    if ns.off or not db or not anyOn(db) or isSecret(spellID) or type(spellID) ~= "number" then return end
+    local hot, family, own = estimate(spellID, true)
+    if hot and own then
+        -- an item's effect is the player's own, whoever is selected
+        local ownKey, ownName = unitIdentity("player")
+        entry = { key = ownKey, name = ownName, at = GetTime() }
+    elseif not entry or entry.ambiguous or GetTime() - entry.at > MAX_PENDING_SECONDS then
         lastCast = spellID .. ": no matching SENT (key " .. tostring(key) .. ")"
         return
     end
-    local hot, family = estimate(spellID)
     if not hot then lastCast = spellID .. ": not a HoT / no estimate" return end
     if not entry.key then
         lastCast = spellID .. ": recipient unavailable"
         report("HoT recipient unavailable or ambiguous for spell " .. spellID)
         return
     end
-    lastCast = spellID .. ": " .. string.format("%.0f", hot.total) .. " on " .. tostring(entry.key)
+    lastCast = spellID .. ": " .. string.format("%.0f", hot.total or hot.mana or 0) .. " on " .. tostring(entry.key)
     local list = active[entry.key] or (entry.name and active[entry.name]) or {}
     active[entry.key] = list
     hot.expiresAt = GetTime() + hot.duration
@@ -230,11 +270,8 @@ function Hots.OnSucceeded(castGUID, spellID)
     if entry.name then active[entry.name] = list end
 end
 
--- The healing still to come from your own heals over time on this unit's frame, over the next
--- `horizon` seconds of each effect; nil when there is none.
-function Hots.AmountFor(unit, horizon)
-    local db = settings()
-    if ns.off or not db or db.showHots == false then return nil end
+-- The unit's running effects, from its readable own buffs, else the last known ones; nil when there are none.
+local function listFor(unit)
     if unit ~= "player" and ask(UnitIsUnit, unit, "player") == true then unit = "player" end
     if unit ~= "player" and ask(UnitCanAssist, "player", unit) ~= true then return nil end
     local key, name = unitIdentity(unit)
@@ -245,6 +282,18 @@ function Hots.AmountFor(unit, horizon)
     else
         list = (key and active[key]) or (name and active[name])
     end
+    return list, unit
+end
+
+-- The healing still to come from your own heals over time on this unit's frame, over the next
+-- `horizon` seconds of each effect (math.huge: all that is left of it, so a fresh Rejuvenation is
+-- its whole total and the figure runs down as the ticks land); nil when there is none. On the player's
+-- own frame food counts too (an effect of an item you use, Hots' consumable), as its own setting.
+function Hots.AmountFor(unit, horizon)
+    local db = settings()
+    if ns.off or not db or not anyOn(db) then return nil end
+    local list
+    list, unit = listFor(unit)
     if not list then return nil end
     horizon = tonumber(horizon) or 4
     local now, sum = GetTime(), 0
@@ -252,13 +301,33 @@ function Hots.AmountFor(unit, horizon)
         local left = hot.expiresAt - now
         if left <= 0 then
             list[family] = nil
-        else
-            sum = sum + hot.total * math.min(left, horizon) / hot.duration
+        elseif hot.total then
+            local shown = hot.consumable and db.showFood ~= false or (not hot.consumable and db.showHots ~= false)
+            if shown then sum = sum + hot.total * math.min(left, horizon) / hot.duration end
         end
     end
     if next(list) == nil then
         for alias, value in pairs(active) do
             if value == list then active[alias] = nil end
+        end
+    end
+    if sum <= 0 then return nil end
+    return sum
+end
+
+-- The mana a drink still has to give on the player's mana bar, over the next `horizon` seconds of it; nil when there is none.
+function Hots.ManaFor(unit, horizon)
+    local db = settings()
+    if ns.off or not db or db.showDrink == false then return nil end
+    local list
+    list, unit = listFor(unit)
+    if unit ~= "player" or not list then return nil end
+    horizon = tonumber(horizon) or 4
+    local now, sum = GetTime(), 0
+    for _, hot in pairs(list) do
+        local left = hot.expiresAt - now
+        if left > 0 and hot.mana and hot.manaDuration then
+            sum = sum + hot.mana * math.min(left, horizon) / hot.manaDuration
         end
     end
     if sum <= 0 then return nil end
@@ -312,7 +381,7 @@ function Hots.Debug(unit)
     lines[#lines + 1] = "last sent: " .. lastSent
     lines[#lines + 1] = "at SENT " .. lastSentIdentity
     lines[#lines + 1] = "now " .. debugIdentity(unit)
-    lines[#lines + 1] = "AmountFor: " .. s(Hots.AmountFor(unit, db and db.hotHorizon))
+    lines[#lines + 1] = "AmountFor: " .. s(Hots.AmountFor(unit, ns.HotHorizon and ns.HotHorizon() or (db and db.hotHorizon)))
     return lines
 end
 
@@ -344,3 +413,4 @@ frame:SetScript("OnEvent", function(_, event, unit, arg2, arg3, arg4)
         if key then sent[key] = nil end
     end
 end)
+if BIT.Perf then BIT.Perf.Watch(frame, "OnEvent", "HealPrediction.Hots") end

@@ -40,11 +40,20 @@ BIT.RegisterLocale("ruRU", {
   ["A second band behind yours for the part of the client's total that is not yours. Where the client cannot tell healers apart the band simply stays hidden."] =
     "Вторая полоса за вашей показывает часть общего исцеления клиента, полученную не от вас. Если клиент не различает целителей, эта полоса скрыта.",
   ["My heals over time"] = "Моё периодическое исцеление",
-  ["Rejuvenation, Renew, Regrowth and Riptide are not part of the client's projection. After you cast one, the amount its description promises is drawn after your direct heal for the next few seconds of the effect. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on readable buff recipients or its known primary cast target, not guessed party recipients. Channels, pet heals and triggered heals are not treated as target HoTs. Readable own buffs recover existing effects and removals; when aura data is hidden, the last known expiry is used."] =
-    "Омоложение, Обновление, Быстрое восстановление и Прилив не входят в прогноз клиента. После применения одного из них указанное в описании исцеление отображается вслед за прямым исцелением в течение следующих секунд действия эффекта. При обновлении эффекта другим рангом старая оценка заменяется. Для буйного роста линейная оценка строится по видимым получателям положительного эффекта или известной основной цели заклинания, а не по предполагаемым участникам группы. Направленные заклинания, исцеление питомцев и срабатывающие эффекты не считаются периодическим исцелением цели. Доступные собственные положительные эффекты позволяют восстановить текущие эффекты и их снятие; если данные аур скрыты, используется последнее известное время окончания.",
+  ["Rejuvenation, Renew, Regrowth and Riptide are not part of the client's projection. After you cast one, the amount its description promises is drawn after your direct heal for the whole remaining effect, or only for the horizon below when that is switched off. Refreshing another rank replaces the old estimate. Wild Growth uses a linear estimate on readable buff recipients or its known primary cast target, not guessed party recipients. Channels, pet heals and triggered heals are not treated as target HoTs. Readable own buffs recover existing effects and removals; when aura data is hidden, the last known expiry is used."] =
+    "Омоложение, Обновление, Быстрое восстановление и Прилив не входят в прогноз клиента. После применения одного из них указанное в описании исцеление отображается вслед за прямым исцелением на весь оставшийся эффект или, если эта настройка выключена, только на горизонт ниже. При обновлении эффекта другим рангом старая оценка заменяется. Для буйного роста линейная оценка строится по видимым получателям положительного эффекта или известной основной цели заклинания, а не по предполагаемым участникам группы. Направленные заклинания, исцеление питомцев и срабатывающие эффекты не считаются периодическим исцелением цели. Доступные собственные положительные эффекты позволяют восстановить текущие эффекты и их снятие; если данные аур скрыты, используется последнее известное время окончания.",
+  ["Whole remaining effect"] = "Весь оставшийся эффект",
+  ["Draw all the healing each of your heals over time still has to do, to its end, instead of only its next few seconds. A fresh Rejuvenation shows its full total, which runs down as the ticks land. The number shows the same total."] =
+    "Показывать всё исцеление, которое ещё принесёт каждый ваш периодический эффект, до самого конца, а не только ближайшие секунды. Свежее Омоложение показывает полную сумму, которая убывает с каждым тиком. Число показывает ту же сумму.",
+  ["Food on my frame"] = "Еда на моей рамке",
+  ["While you eat, the health the food still has to give is drawn on your own health bar, like a heal over time (food is an item's effect, not a heal you cast). A potion works at once and has nothing to show."] =
+    "Пока вы едите, здоровье, которое ещё даст еда, отображается на вашей полосе здоровья как периодическое исцеление (еда — эффект предмета, а не применённое исцеление). Зелье действует сразу, показывать нечего.",
+  ["Drinks on my mana bar"] = "Напитки на моей полосе маны",
+  ["While you drink, the mana the drink still has to give is drawn on your own mana bar, from the end of your current mana."] =
+    "Пока вы пьёте, мана, которую ещё даст напиток, отображается на вашей полосе маны, начиная от конца текущей маны.",
   ["Heal over time horizon"] = "Горизонт периодического исцеления",
-  ["How many seconds of each heal over time are drawn ahead."] =
-    "На сколько секунд вперёд отображать каждый периодический эффект исцеления.",
+  ["How many seconds of each heal over time are drawn ahead. Used only when Whole remaining effect is off."] =
+    "На сколько секунд вперёд отображать каждый периодический эффект исцеления. Используется только при выключенной настройке «Весь оставшийся эффект».",
 
   -- сегмент
   ["THE SEGMENT"] = "СЕГМЕНТ",
@@ -61,8 +70,8 @@ BIT.RegisterLocale("ruRU", {
   ["How tall the segment is against the health bar; the top edge is the anchor."] =
     "Высота сегмента относительно полосы здоровья; точка привязки — верхний край.",
   ["Show a number"] = "Показывать число",
-  ["A small ~ number for the direct heal plus your HoT horizon at the segment's right end, when the amounts are readable."] =
-    "Небольшое число с символом ~ у правого края сегмента показывает прямое исцеление и периодическое исцеление за выбранный период, если эти значения доступны.",
+  ["A small ~ number for the direct heal plus your heals over time at the segment's right end, when the amounts are readable."] =
+    "Небольшое число с символом ~ у правого края сегмента показывает прямое и периодическое исцеление, если эти значения доступны.",
 
   -- диагностика
   ["DIAGNOSTICS"] = "ДИАГНОСТИКА",

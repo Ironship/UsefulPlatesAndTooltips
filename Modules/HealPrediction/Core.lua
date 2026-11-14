@@ -35,7 +35,10 @@ local DEFAULTS = {
     showHots = true,    -- your own heals over time, which the client's projection leaves out
     hotColor = "gold",
     hotOpacity = 40,
-    hotHorizon = 4,     -- seconds of each heal over time drawn ahead
+    hotWhole = true,    -- draw the whole healing a heal over time still has to do (not only the next hotHorizon seconds)
+    hotHorizon = 4,     -- seconds of each heal over time drawn ahead, when hotWhole is off
+    showFood = true,    -- the health the food you are eating still has to give, as one more heal over time on your frame
+    showDrink = true,   -- the mana the drink you are drinking still has to give, on your mana bar
     heightPercent = 45, -- the segment's share of the bar's height, anchored to the top edge
     showText = false,   -- a small number at the segment's right end ("~120")
     debug = false,
@@ -83,6 +86,14 @@ local function ask(fn, ...)
     local ok, a, b = pcall(fn, ...)
     if not ok then return nil end
     return a, b
+end
+
+-- How far ahead each of your heals over time is drawn: the whole healing it still has to do (its description's
+-- total, running down as the ticks land), or, with "Whole remaining effect" off, only the next hotHorizon seconds.
+-- The horizon used to be the only mode (4 s by default), which drew about one tick of a 12 s Rejuvenation.
+function ns.HotHorizon()
+    if not settings or settings.hotWhole ~= false then return math.huge end
+    return tonumber(settings.hotHorizon) or 4
 end
 
 local function colorOf(id, opacityPercent)
@@ -323,7 +334,7 @@ local function updateBar(unit, healthBar, enabled)
         and everyone <= incoming then
         everyone = nil
     end
-    local hot = ns.Hots and ns.Hots.AmountFor(unit, db().hotHorizon) or nil
+    local hot = ns.Hots and ns.Hots.AmountFor(unit, ns.HotHorizon()) or nil
     if plainZero and everyone == nil and hot == nil then hideOverlay(o) return end
     local maxHealth = ask(UnitHealthMax, unit)
     if maxHealth == nil then hideOverlay(o) return end
@@ -478,6 +489,72 @@ local function groupBars()
     return out
 end
 
+---------------------------------------------------------------------------------------------
+-- The mana a drink still has to give, on the player's mana bar
+---------------------------------------------------------------------------------------------
+
+-- The segment starts at the end of the current mana and runs on to what the drink will have restored, like the heal segment
+-- on the health bar. It is a StatusBar anchored to the mana bar's fill (the maximum may be secret in combat; a StatusBar
+-- takes it), clipped to the mana bar. Frames: ElvUI, EllesmereUI, then Blizzard's mana bar (as CastPrediction's mana cost).
+local manaOverlay -- { clip, bar, host }
+
+local function usableBar(bar)
+    return type(bar) == "table" and ask(bar.IsForbidden, bar) ~= true and ask(bar.IsVisible, bar) == true
+        and ask(bar.GetObjectType, bar) == "StatusBar"
+end
+
+local function playerManaBar()
+    local elv = type(_G.ElvUI) == "table" and _G.ElvUF_Player
+    if type(elv) == "table" and usableBar(elv.Power) then return elv.Power end
+    local eui = _G.EllesmereUIUnitFrames_Player
+    if type(eui) == "table" and usableBar(eui.Power) then return eui.Power end
+    local frame = _G.PlayerFrame
+    local content = type(frame) == "table" and frame.PlayerFrameContent
+    local main = type(content) == "table" and content.PlayerFrameContentMain
+    local area = type(main) == "table" and main.ManaBarArea
+    local bar = type(area) == "table" and area.ManaBar
+    if usableBar(bar) then return bar end
+    if usableBar(_G.PlayerFrameManaBar) then return _G.PlayerFrameManaBar end
+end
+
+local function hideMana()
+    if manaOverlay then manaOverlay.clip:Hide() end
+end
+
+local function updateMana()
+    local amount = settings and settings.player ~= false and settings.showDrink ~= false and ns.Hots
+        and ns.Hots.ManaFor("player", ns.HotHorizon()) or nil
+    local host = amount and playerManaBar() or nil
+    local fill = host and ask(host.GetStatusBarTexture, host) or nil
+    if not fill then return hideMana() end
+    if not manaOverlay then
+        local clip = CreateFrame("Frame", nil, host)
+        clip:SetClipsChildren(true)
+        local bar = CreateFrame("StatusBar", nil, clip)
+        bar:SetStatusBarTexture(WHITE)
+        manaOverlay = { clip = clip, bar = bar }
+    end
+    local o = manaOverlay
+    if o.host ~= host then
+        o.clip:SetParent(host)
+        o.clip:ClearAllPoints()
+        o.clip:SetAllPoints(host)
+        o.host = host
+    end
+    o.clip:SetFrameLevel(host:GetFrameLevel() + 2)
+    local width = ask(host.GetWidth, host)
+    local ok = pcall(function()
+        o.bar:SetStatusBarColor(0.3, 0.6, 1, math.max(0.5, (tonumber(settings.hotOpacity) or 40) / 100))
+        o.bar:ClearAllPoints()
+        o.bar:SetPoint("TOPLEFT", fill, "TOPRIGHT")
+        o.bar:SetPoint("BOTTOMLEFT", fill, "BOTTOMRIGHT")
+        o.bar:SetWidth(type(width) == "number" and width > 0 and width or 100)
+        o.bar:SetMinMaxValues(0, UnitPowerMax("player", 0))
+        o.bar:SetValue(amount)
+    end)
+    o.clip:SetShown(ok)
+end
+
 local function updateAll()
     if not settings then return end
     local seen = {}
@@ -500,6 +577,11 @@ local function updateAll()
     -- Replaced primary bars and departed group bars must both leave the display.
     for healthBar, o in pairs(overlays) do
         if not seen[healthBar] then hideOverlay(o) end
+    end
+    local okMana, errMana = pcall(updateMana)
+    if not okMana then
+        hideMana()
+        trace("ERROR in mana update: " .. tostring(errMana))
     end
 end
 ns.UpdateAll = updateAll
@@ -560,6 +642,8 @@ frame:SetScript("OnUpdate", function(self, elapsed)
         print("Update error (logged once): " .. tostring(err))
     end
 end)
+if BIT.Perf then BIT.Perf.Watch(frame, "OnEvent", "HealPrediction") end
+if BIT.Perf then BIT.Perf.Watch(frame, "OnUpdate", "HealPrediction") end
 
 ---------------------------------------------------------------------------------------------
 -- The probe: what the client answers right now
@@ -611,6 +695,11 @@ if BIT.RegisterCommand then
         if not bars[unit] then print("/upt healdebug player|target|focus|targettarget") return end
         if not ns.Hots then print("Hots module not loaded") return end
         for _, text in ipairs(ns.Hots.Debug(unit)) do print(text) end
+        -- what the client itself projects for the unit (a HoT's next tick may be in it) and what the bar can show
+        print(string.format("%s: client incoming own %s, all %s; health %s / %s; horizon used %s", unit,
+            probeValue(readIncoming(unit, false)), probeValue(readIncoming(unit, true)),
+            probeValue(ask(UnitHealth, unit)), probeValue(ask(UnitHealthMax, unit)),
+            tostring(ns.HotHorizon())))
         local bar = bars[unit]()
         local o = type(bar) == "table" and overlays[bar] or nil
         local function safe(value)
@@ -620,6 +709,11 @@ if BIT.RegisterCommand then
         local function shown(f) local ok, v = pcall(f.IsShown, f) return ok and safe(v) or "?" end
         print(string.format("%s bar=%s width=%s overlay=%s enabled=%s", unit, tostring(bar),
             type(bar) == "table" and safe(ask(bar.GetWidth, bar)) or "-", o and "yes" or "no", tostring(settings and settings[unit])))
+        if o and o.label then
+            local okText, text = pcall(o.label.GetText, o.label)
+            print("number label: shown=" .. shown(o.label) .. " text=" .. (okText and safe(text) or "?")
+                .. " (Show a number: " .. tostring(settings and settings.showText) .. ")")
+        end
         if o and o.hot then
             local ok, v = pcall(o.hot.bar.GetValue, o.hot.bar)
             local okW, w = pcall(o.hot.clip.GetWidth, o.hot.clip)
