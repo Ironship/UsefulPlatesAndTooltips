@@ -20,7 +20,7 @@ local ns = BIT.Module and BIT.Module("SpellDamageInfo") or BIT
 local L, Estimate = ns.L, ns.Estimate
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 660, 460
+local WINDOW_WIDTH, WINDOW_HEIGHT = 660, 700
 local HEADER_HEIGHT = 46
 local PREVIEW_WIDTH = 250
 local ROW_HEIGHT = BIT.Looks.ROW_HEIGHT
@@ -66,6 +66,9 @@ local SAMPLES = {
     view = { heal = { min = 600, max = 600 } } },
   { name = "OPT_SAMPLE_11", icon = "Interface\\Icons\\INV_Drink_07", hotkey = "-",
     view = { manaOverTime = { total = 835, duration = 24 } } },
+  -- a spell the parser cannot read: the average of its last casts (History.lua), marked with ~
+  { name = "OPT_SAMPLE_12", icon = "Interface\\Icons\\Spell_Shadow_ShadowBolt", hotkey = "=",
+    view = { history = { casts = 40 }, direct = { min = 412, max = 412, added = 0 } } },
 }
 
 local window
@@ -311,13 +314,30 @@ local function buildSettings(area)
   place("reduction", checkbox(area, "reduction", L.OPT_REDUCTION, { tooltip = L.OPT_REDUCTION_TIP }))
   place("weapon", checkbox(area, "weapon", L.OPT_WEAPON, { tooltip = L.OPT_WEAPON_TIP, retailNote = true, enabledIf = notRetail }))
   y = y + 8
+  -- which kinds of number the buttons show (the weapon and the red reduction numbers have their own boxes above)
+  place("showDamage", checkbox(area, "showDamage", L.OPT_SHOW_DAMAGE, { tooltip = L.OPT_SHOW_DAMAGE_TIP, enabledIf = numbersShown }))
+  place("showDot", checkbox(area, "showDot", L.OPT_SHOW_DOT, { tooltip = L.OPT_SHOW_DOT_TIP, enabledIf = numbersShown }))
+  place("showHeal", checkbox(area, "showHeal", L.OPT_SHOW_HEAL, { tooltip = L.OPT_SHOW_HEAL_TIP, enabledIf = numbersShown }))
+  place("showHot", checkbox(area, "showHot", L.OPT_SHOW_HOT, { tooltip = L.OPT_SHOW_HOT_TIP, enabledIf = numbersShown }))
+  place("showMana", checkbox(area, "showMana", L.OPT_SHOW_MANA, { tooltip = L.OPT_SHOW_MANA_TIP, enabledIf = numbersShown }))
+  place("showAbsorb", checkbox(area, "showAbsorb", L.OPT_SHOW_ABSORB, { tooltip = L.OPT_SHOW_ABSORB_TIP, enabledIf = numbersShown }))
+  y = y + 8
+  place("useHistory", checkbox(area, "useHistory", L.OPT_HISTORY, { tooltip = L.OPT_HISTORY_TIP }))
+  local forget = BIT.Looks.Rows.Button(area, L.OPT_HISTORY_ROW, L.OPT_HISTORY_CLEAR, function()
+    if ns.History then ns.History.Clear() end
+    ns.Refresh()
+    say(L.HISTORY_CLEARED)
+  end, rowOpts(L.OPT_HISTORY_ROW, { tooltip = L.OPT_HISTORY_CLEAR_TIP }))
+  localizedText(forget.widget, "OPT_HISTORY_CLEAR")
+  place("historyClear", forget)
+  y = y + 8
   place("interfaceLang", choice(area, "interfaceLang", L.OPT_LANGUAGE, {
     { id = "auto", label = L.LANG_AUTO },
     { id = "en", label = L.LANG_EN },
     { id = "de", label = L.LANG_DE },
     { id = "ru", label = L.LANG_RU },
   }, { tooltip = L.OPT_LANGUAGE_TIP }))
-  return rows
+  return rows, y
 end
 
 -- The preview and the settings, in window: the addon's own window, below its title bar, or
@@ -334,14 +354,17 @@ local function buildContent(top)
   area:SetPoint("TOPLEFT", pane, "TOPRIGHT", 10, 0)
   area:SetPoint("BOTTOMRIGHT", -10, 10)
   setBackdrop(area, 0.09)
-  window.rows = buildSettings(area)
+  local endY
+  window.rows, endY = buildSettings(area)
 
   window.reset = pushButton(area, L.OPT_RESET, 170, function()
     ns.ResetSettings()
     changed()
     say(L.OPT_RESET_DONE)
   end)
-  window.reset:SetPoint("BOTTOMRIGHT", -10, 10)
+  -- Under the last row, wherever it ended (a long label wraps and makes its row taller, more so in another language): a
+  -- button fixed to the bottom of the area lay over the last rows once the page had grown.
+  window.reset:SetPoint("TOPRIGHT", area, "TOPRIGHT", -10, -(12 + endY + 10))
 
   window:SetScript("OnShow", changed)
   window:SetScript("OnHide", closeMenu)

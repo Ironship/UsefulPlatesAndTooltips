@@ -23,7 +23,20 @@ local DEFAULTS = {
   interfaceLang = "auto",  -- interface language: "auto", "en", "de", "ru"
   weapon = true,        -- potential damage of weapon abilities and attack power spells, in blue
   talents = true,       -- add the percent your talents give a spell (Forever's descriptions leave talents out)
+  -- which kinds of number the buttons show (weapon and reduction above are two more); all on by default
+  showDamage = true,    -- the damage of one cast (what the spell is predicted to do)
+  showDot = true,       -- damage over time
+  showHeal = true,      -- healing
+  showHot = true,       -- healing over time
+  showMana = true,      -- mana a consumable or Life Tap gives
+  showAbsorb = true,    -- the shield a spell puts up
+  useHistory = true,    -- a spell the parser cannot read shows the average of your last 100 casts of it (History.lua)
 }
+-- The kinds of number that can be switched off (filterView), and every on/off setting (validSetting, loadSettings).
+local SHOW_KEYS = { "showDamage", "showDot", "showHeal", "showHot", "showMana", "showAbsorb" }
+local BOOLEAN_KEYS = { estimate = true, tooltip = true, reduction = true, weapon = true, talents = true, useHistory = true,
+  skipUtilityBars = true, showDamage = true, showDot = true, showHeal = true, showHot = true, showMana = true,
+  showAbsorb = true }
 local BUTTON_MODES = { total = true, direct = true, off = true }
 local POSITIONS = { bottom = true, center = true, top = true }
 local SIDE_POSITIONS = { opposite = true, bottom = true, top = true }
@@ -52,6 +65,7 @@ local parsedCache = {}
 
 local function clearCache()
   for k in pairs(parsedCache) do parsedCache[k] = nil end
+  if ns._clearConsumables then ns._clearConsumables() end
 end
 
 local function getDescription(spellID)
@@ -94,50 +108,84 @@ local function requestItemLoad(itemID)
   end
 end
 
--- A spell's parsed description, read again when its text has changed, looked at no more than every
--- RECHECK seconds a spell. A text can change with no event saying so: after Resurrection Sickness only a
+-- A spell's parsed description, read again when its text has changed, looked at about every
+-- RECHECK seconds a spell (between half of it and one and a half times, see nextCheck). A text can change with no event saying so: after Resurrection Sickness only a
 -- /reload brought the numbers back, and the one thing a /reload renews that nothing else did is this
 -- cache. (That the sickness is in the text is not proven: no sick description has been read.) A text
 -- that cannot be read now leaves the last one in use.
 local RECHECK = 2
--- A refresh of the bars reads at most PARSE_BUDGET changed texts (on Retail a buff can change every
--- one at once, and each read costs about a millisecond); the rest keep their last reading and the
--- next refresh reads them. parseBudget is nil outside a refresh, so a tooltip is never held back.
-local PARSE_BUDGET = 10
+-- A refresh of the bars spends at most PARSE_BUDGET milliseconds on reading texts (each read costs about a
+-- millisecond: on Retail a buff can change every one at once, and after a talent change or a loading screen the
+-- cache is empty and every button's spell needs its first reading). A text over budget keeps its last reading, a spell
+-- never read yet shows nothing for the moment, and the next refresh goes on from there. This used to count only the
+-- changed texts of spells already read, ten a refresh, so a cleared cache was read in one go: a hitch of tens of
+-- milliseconds. parseBudget is nil outside a refresh, so a tooltip is never held back.
+local PARSE_BUDGET = 4
+local clock = type(debugprofilestop) == "function" and debugprofilestop or nil -- without it a read counts as a millisecond
 local parseBudget, parseDeferred = nil, false
 local function textClock()
   local ok, t = pcall(GetTime)
   return ok and type(t) == "number" and t or 0
 end
+-- When a spell's text is looked at next, as the cache keeps it (entry.due). The due times lie on a grid of RECHECK
+-- seconds, shifted by a share (0 to 1) that depends on the spell, and are at least half a RECHECK away: so the spells of
+-- a bar come due in different refreshes however the refreshes fall (they were all stamped alike and came due together,
+-- every RECHECK seconds the descriptions of the whole bar were asked for in one refresh). After a long pause every
+-- text is overdue at once, once; the grid spreads them out again.
+local function nextCheck(spellID)
+  local phase = RECHECK * ((spellID % 20) / 20)
+  local k = math.ceil((textClock() + RECHECK * 0.5 - phase) / RECHECK)
+  return k * RECHECK + phase
+end
+-- Attacks whose description names no number because the hit is the weapon's own: Attack (the melee swing), Auto Shot, Shoot
+-- with a wand / bow / gun / crossbow, Throw. Read as "100% of the weapon hit", from the character sheet like every weapon
+-- ability (the ranged ones from the ranged slot, the wand and thrown weapons included). The ids are Forever's own
+-- (DB2 SpellName, build 1.60.1): Attack 6603 and 88163, Auto Shot 75 and 413446, Shoot (wand) 5019, Shoot Bow 2480, Shoot Gun
+-- 7918, Shoot Crossbow 7919, Throw 2764.
+local function plainWeaponAttack(ranged)
+  return { show = "weapon", healing = {}, weapon = { kind = "weapon", pct = 100, bonus = 0, ranged = ranged or nil } }
+end
+local PLAIN_WEAPON_ATTACKS = {
+  [6603] = plainWeaponAttack(), [88163] = plainWeaponAttack(),
+  [75] = plainWeaponAttack(true), [413446] = plainWeaponAttack(true), [5019] = plainWeaponAttack(true),
+  [2480] = plainWeaponAttack(true), [7918] = plainWeaponAttack(true), [7919] = plainWeaponAttack(true),
+  [2764] = plainWeaponAttack(true),
+}
+
 local function getEntry(spellID)
   if isSecret(spellID) or type(spellID) ~= "number" then return nil end
+  if PLAIN_WEAPON_ATTACKS[spellID] then return PLAIN_WEAPON_ATTACKS[spellID] end
   if ns.IsRetail and ns.IsRetail() and C_Spell and type(C_Spell.GetOverrideSpell) == "function" then
     local ok, override = pcall(C_Spell.GetOverrideSpell, spellID)
     if not ok or isSecret(override) then return nil end
     if type(override) == "number" and override > 0 then spellID = override end
   end
   local entry = parsedCache[spellID]
-  if entry and entry.checked and textClock() - entry.checked < RECHECK then return entry end
+  if entry and entry.due and textClock() < entry.due then return entry end
+  -- over budget: nothing is looked at until the next refresh (a text is not even asked for)
+  if parseBudget and parseBudget <= 0 then
+    parseDeferred = true
+    return entry
+  end
+  local t0 = BIT.Perf and BIT.Perf.Begin()
   local text = getDescription(spellID)
+  if BIT.Perf then BIT.Perf.End("SpellDamageInfo.description", t0) end
   if entry and (text == nil or text == entry.text) then
-    entry.checked = textClock()
+    entry.due = nextCheck(spellID)
     return entry
   end
   if not text then -- not loaded yet; SPELL_TEXT_UPDATE will ask again
     requestLoad(spellID)
     return nil
   end
-  if entry and parseBudget then
-    if parseBudget <= 0 then
-      parseDeferred = true
-      return entry
-    end
-    parseBudget = parseBudget - 1
-  end
   -- Parser.Read runs every reader and decides what is shown; see there.
+  local started = parseBudget and clock and clock()
+  local t1 = BIT.Perf and BIT.Perf.Begin()
   entry = Parser.Read(text, ns.DescriptionLang(), ns.IsRetail and ns.IsRetail())
+  if BIT.Perf then BIT.Perf.End("SpellDamageInfo.parse", t1) end
+  if parseBudget then parseBudget = parseBudget - (started and (clock() - started) or 1) end
   entry.text = text
-  entry.checked = textClock()
+  entry.due = nextCheck(spellID)
   parsedCache[spellID] = entry
   return entry
 end
@@ -430,6 +478,11 @@ function ns.SwingAverage()
   return best > 0 and best or nil
 end
 
+-- Whether SwingAverage's best hit is a ranged one (DoTInfo's weapon icon takes the picture of Auto Shot or Shoot then).
+function ns.SwingIsRanged()
+  return (weaponStats.ranged or 0) > (weaponStats.melee or 0)
+end
+
 -- The target's attack speed, for what a lower attack power takes off each of its hits: Classic's
 -- rule, 14 attack power are 1 damage for each second of weapon speed (the rule WeaponView uses for
 -- the player's own weapon). UnitAttackSpeed can be secret in combat (SecretWhenUnitStatsRestricted):
@@ -659,7 +712,8 @@ end
 -- does. noBonus: a chance effect; the cast time rule would give it a share of spell power it does
 -- not get, so without the tables' share for what it triggers it shows the description's number.
 local function withEstimate(parsed, spellID, pet, castTime, noBonus)
-  if pet or not db.estimate or isRetail() then return applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet) end
+  -- (a tick without a duration is the description's own figure: no spell power added to a number of unknown share)
+  if pet or not db.estimate or isRetail() or parsed.tickOnly then return applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet) end
   local coef = spellCoefficients(spellID)
   if coef == false or (noBonus and not coef) then return applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet) end
   if parsed.hits and not coef then return applyTalents(Estimate.Apply(parsed, nil, nil, nil), spellID, pet) end
@@ -815,6 +869,43 @@ function ns.Compute(spellID, pet)
   -- a chance effect: the number is what one trigger does
   if view and proc then view.proc = proc end
   return view
+end
+
+-- ns.Compute, and for a spell the parser cannot read (its description loads but nothing in it is understood: another game
+-- language, a wording the packs do not know) the average of your last casts of it (History.lua), marked as such. For the
+-- buttons and the tooltip only: the plates and the kill markers keep asking ns.Compute for what the description says.
+function ns.ComputeOrAverage(spellID, pet)
+  local view = ns.Compute(spellID, pet)
+  if view or pet or not db.useHistory or not ns.History then return view end
+  local entry = getEntry(spellID)
+  if not entry or entry.show ~= nil then return nil end
+  return ns.History.View(spellID)
+end
+
+-- The damage of the part of a spell that lands at once, as its description states it (no spell power added): the average of
+-- its range, 0 when the spell has none, nil when the text is not read as plain damage. DoTInfo's tick learning takes it off
+-- the damage meter's total for the spell (MeterLearning.lua).
+function ns.UpfrontDamage(spellID)
+  local entry = getEntry(spellID)
+  local parsed = entry and entry.show == "parsed" and entry.parsed
+  if not parsed then return nil end
+  if parsed.direct then return (parsed.direct.min + parsed.direct.max) / 2 end
+  return 0
+end
+
+-- What a spell's description says one cast does in all (no spell power added): damage (the direct part and the damage over
+-- time) and healing (the heal and the heal over time); nil when the text is not read as plain numbers. DoTInfo's list of
+-- recorded casts puts it beside what the casts really did.
+function ns.DescriptionTotals(spellID)
+  local entry = getEntry(spellID)
+  local parsed = entry and entry.show == "parsed" and entry.parsed
+  if not parsed then return nil end
+  local damage, heal = 0, 0
+  if parsed.direct then damage = damage + (parsed.direct.min + parsed.direct.max) / 2 end
+  if parsed.dot then damage = damage + parsed.dot.total end
+  if parsed.heal then heal = heal + (parsed.heal.min + parsed.heal.max) / 2 end
+  if parsed.hot then heal = heal + parsed.hot.total end
+  return damage, heal
 end
 
 -- HealPrediction consumes this independently of action-button options or the module's event loop.
@@ -977,6 +1068,62 @@ end
 -- item's own "Use:" line; when neither is readable yet nothing is guessed -- the
 -- item's data and the spell's text are asked for and the button is painted again
 -- on GET_ITEM_INFO_RECEIVED / SPELL_TEXT_UPDATE.
+-- The view of a consumable's parsed use text (Parser.ParseItemHeal): its healing, its mana, over time or at once.
+local function consumableView(parsed)
+  if parsed.healPercent then
+    return ns._percentMana(percentHealView(parsed), parsed)
+  end
+  if parsed.manaPercent then return ns._percentMana(nil, parsed) end
+  local view
+  if parsed.heal then
+    view = view or {}
+    view.heal = { min = parsed.heal.min, max = parsed.heal.max, added = 0 }
+  end
+  if parsed.hot then
+    view = view or {}
+    view.hot = { total = parsed.hot.total, duration = parsed.hot.duration, added = 0 }
+  end
+  if parsed.mana then
+    view = view or {}
+    view.mana = { min = parsed.mana.min, max = parsed.mana.max, added = 0 }
+  end
+  if parsed.manaOverTime then
+    view = view or {}
+    view.manaOverTime = { total = parsed.manaOverTime.total, duration = parsed.manaOverTime.duration }
+  end
+  return view
+end
+
+-- What the effect spell of a consumable does as the player's own buff or cast: food ("Restores 59 health over 18 sec. Must
+-- remain seated while eating."), a drink (mana over time), a bandage's, a potion's ("Restores 70 to 90 health."): the view
+-- ComputeItem makes of the item, read from the spell's own description, which is what the aura on the player carries. nil
+-- when the text states no such amount. HealPrediction draws food and drinks while they run (Hots.lua). Remembered for
+-- CONSUMABLE_MEMO seconds a spell: it is asked about for every buff the player has, several times a second.
+local consumableMemo = {}
+local CONSUMABLE_MEMO = 30
+function ns._clearConsumables() consumableMemo = {} end
+function ns.ComputeConsumable(spellID)
+  if isSecret(spellID) or type(spellID) ~= "number" then return nil end
+  local now = textClock()
+  local memo = consumableMemo[spellID]
+  if memo and now - memo.at < CONSUMABLE_MEMO then return memo.view or nil, memo.name end
+  local text = getDescription(spellID)
+  if not text then
+    requestLoad(spellID)
+    return nil
+  end
+  local parsed = Parser.ParseItemHeal(text, ns.DescriptionLang())
+  local view = parsed and consumableView(parsed) or nil
+  local name = spellName(spellID)
+  if consumableMemo[spellID] == nil and next(consumableMemo) ~= nil then
+    local count = 0
+    for _ in pairs(consumableMemo) do count = count + 1 end
+    if count > 300 then consumableMemo = {} end
+  end
+  consumableMemo[spellID] = { at = now, view = view or false, name = name }
+  return view, name
+end
+
 function ns.ComputeItem(itemID)
   if isSecret(itemID) or type(itemID) ~= "number" then return nil end
   local spellID = itemUseSpell(itemID)
@@ -1002,28 +1149,7 @@ function ns.ComputeItem(itemID)
     if view then return view end
     return nil
   end
-  if parsed.healPercent then
-    return ns._percentMana(percentHealView(parsed), parsed)
-  end
-  if parsed.manaPercent then return ns._percentMana(nil, parsed) end
-  local view
-  if parsed.heal then
-    view = view or {}
-    view.heal = { min = parsed.heal.min, max = parsed.heal.max, added = 0 }
-  end
-  if parsed.hot then
-    view = view or {}
-    view.hot = { total = parsed.hot.total, duration = parsed.hot.duration, added = 0 }
-  end
-  if parsed.mana then
-    view = view or {}
-    view.mana = { min = parsed.mana.min, max = parsed.mana.max, added = 0 }
-  end
-  if parsed.manaOverTime then
-    view = view or {}
-    view.manaOverTime = { total = parsed.manaOverTime.total, duration = parsed.manaOverTime.duration }
-  end
-  return view
+  return consumableView(parsed)
 end
 
 -- A seal's Judgement damage, for the seal's own tooltip, or nil.
@@ -1061,6 +1187,11 @@ local buttons = {} -- list of Blizzard action buttons
 local euiButtons = {} -- EUI's action slot lives in a secure attribute; never read its .action field.
 local gamepadButtons, gamepadHosts = {}, {}
 local labels = {}  -- [button] = our FontString for the main number
+-- [button] = what its labels were last drawn from (text, colours, layout, count, button size, the size and place settings):
+-- a refresh that finds the same again leaves the labels alone. Redrawing every button on every refresh (about a dozen
+-- client calls a label) was most of what the module cost; a refresh comes up to ten times a second in a fight.
+-- Kept here, not on the button: a field written onto an action button from addon code is tainted state on it.
+local drawn = setmetatable({}, { __mode = "k" })
 local sideLabels = {} -- [button] = our smaller FontString for a reduction next to a damage number
 
 -- Bars built on LibActionButton (Bartender4, ElvUI and others) keep their buttons in the library,
@@ -1377,6 +1508,7 @@ local function dropListed(list, pred, slots)
     if pred(button) then
       hide(labels[button])
       hide(sideLabels[button])
+      drawn[button] = nil
       if slots then slots[button] = nil end
       table.remove(list, i)
     else
@@ -1435,10 +1567,43 @@ local function petSpellOnSlot(slot)
 end
 ns.PetSpellOnSlot = petSpellOnSlot
 
+-- The view with the kinds of number the player switched off (Options: the "Show" checkboxes) taken away. A view is
+-- only copied when something has to go; what is left decides the layout, so a spell with damage and healing whose
+-- healing is off is an ordinary damage button, and nothing left means no number.
+local function filterView(view)
+  if not view then return nil end
+  local off = {}
+  local any = false
+  for _, key in ipairs(SHOW_KEYS) do
+    if db[key] == false then off[key], any = true, true end
+  end
+  if not any then return view end
+  local v = {}
+  for k, x in pairs(view) do v[k] = x end
+  if off.showDamage then v.direct = nil end
+  if off.showDot then v.dot = nil end
+  if off.showHeal then v.heal = nil end
+  if off.showHot then v.hot, v.hp5 = nil, nil end
+  if off.showMana then v.mana, v.manaOverTime, v.manaPercent, v.manaGain = nil, nil, nil, nil end
+  if off.showAbsorb then v.absorb = nil end
+  -- A share of maximum health (the maximum is hidden in combat) is a heal, or a heal over time when it has a duration.
+  if v.healPercent and ((v.duration and off.showHot) or (not v.duration and off.showHeal)) then
+    v.healPercent, v.directPercent, v.duration, v.percentSelfHeal = nil, nil, nil, nil
+  end
+  -- A finisher's number is the damage (or the damage over time) of its row; with that kind off it has nothing to say
+  -- either, not even the "?" for a combo count the client cannot read.
+  if v.finisher and ((v.finisher.kind == "dot" and off.showDot) or (v.finisher.kind ~= "dot" and off.showDamage)) then
+    return nil
+  end
+  -- The two ends of a transfer (Drain Life) only mean something together.
+  if v.transfer and not ((v.direct or v.dot) and (v.heal or v.hot)) then v.transfer = nil end
+  return v
+end
+
 -- The text on a button for a view from ns.Compute and a reduction from ns.Reduction (either may
 -- be nil), under the current settings: main text, its colour, and the smaller reduction text
 -- next to it (or nil). The options window's preview draws its sample spells through this too.
-local function buttonText(view, reduction)
+local function buttonTextOf(view, reduction)
   if db.button == "off" then return nil end
   if view and view.healPercent then
     local percent = view.healPercent
@@ -1541,6 +1706,17 @@ local function buttonText(view, reduction)
     mainColor = Format.REDUCTION_COLOR
   end
   return mainText, mainColor, sideText
+end
+
+-- Filters the view by the "Show" checkboxes, then draws it; an average of past casts (History.lua) is marked with "~".
+local function buttonText(view, reduction)
+  view = filterView(view)
+  local mainText, mainColor, sideText, sideColor, layout = buttonTextOf(view, reduction)
+  if mainText and view and view.history then
+    mainText = "~" .. mainText
+    if sideText and layout == "stacked" then sideText = "~" .. sideText end
+  end
+  return mainText, mainColor, sideText, sideColor, layout
 end
 ns.ButtonText = buttonText
 
@@ -1855,7 +2031,7 @@ local function updateButton(button, pet)
     local spellID
     if pet then spellID = petSpellOnSlot(petSlots[button]) else spellID = labSpell or spellOnSlot(slot) end
     if spellID then
-      view = ns.Compute(spellID, pet)
+      view = ns.ComputeOrAverage(spellID, pet)
       if db.reduction then reduction = ns.Reduction(spellID) end
       noteMiss(spellID)
     elseif not pet then
@@ -1868,18 +2044,52 @@ local function updateButton(button, pet)
     end
   end
   local mainText, mainColor, sideText, sideColor, layout = buttonText(view, reduction)
+  local d = drawn[button]
+  if not d then
+    d = {}
+    drawn[button] = d
+  end
   if not mainText then
+    if d.blank then return end -- already hidden
+    d.blank = true
     hide(labels[button])
     hide(sideLabels[button])
     return
   end
+  local countShown = (not pet and (labCount or hasCount(slot))) and true or false
+  local width, height = readNumber(button, "GetWidth"), readNumber(button, "GetHeight")
+  if not d.blank and d.main == mainText and d.color == mainColor and d.side == sideText and d.sideColor == sideColor
+    and d.layout == layout and d.count == countShown and d.width == width and d.height == height
+    and d.size == db.size and d.position == db.position and d.sidePosition == db.sidePosition then
+    return -- the labels already show this
+  end
+  d.blank, d.main, d.color, d.side, d.sideColor, d.layout = false, mainText, mainColor, sideText, sideColor, layout
+  d.count, d.width, d.height, d.size, d.position, d.sidePosition = countShown, width, height, db.size, db.position, db.sidePosition
   local side = sideText and getSideLabel(button) or sideLabels[button]
-  drawNumber(button, getLabel(button), side, mainText, mainColor, sideText, not pet and (labCount or hasCount(slot)), sideColor, layout)
+  drawNumber(button, getLabel(button), side, mainText, mainColor, sideText, countShown, sideColor, layout)
 end
 
+-- A refresh walks every button (a hundred on a full set of bars: the character's own bars and the crossbar's pages) and took
+-- 5 ms on average, 17 at worst, which is a dropped frame. It now spends at most SLICE_MS at a time and goes on in the next
+-- frame from the button it stopped at. Returns true while buttons are left.
+local SLICE_MS = 3
+local sliceFrom = 1
 local function updateAllButtons()
-  for _, b in ipairs(buttons) do updateButton(b, false) end
-  for _, b in ipairs(petButtons) do updateButton(b, true) end
+  local main = #buttons
+  local total = main + #petButtons
+  local started = clock and clock()
+  local i = sliceFrom
+  if i > total then i = 1 end
+  while i <= total do
+    if i <= main then updateButton(buttons[i], false) else updateButton(petButtons[i - main], true) end
+    i = i + 1
+    if started and i <= total and clock() - started >= SLICE_MS then
+      sliceFrom = i
+      return true
+    end
+  end
+  sliceFrom = 1
+  return false
 end
 
 -- /sdi buttons: what the number on each collected button was made from (for a bar that shows none).
@@ -2007,23 +2217,61 @@ function ns.DescribeMouseFrame(out)
 end
 
 local pending = false
-local function requestUpdate()
-  if pending then return end
-  pending = true
-  local function run()
-    pending = false
+-- Bars that appear later (EUI, LibActionButton bars, Forever's crossbar) are looked for again at most this often, or at
+-- once when an event says the bars changed (collectDue). It used to run before every refresh: a scan of every button
+-- name of every bar, the libraries and the crossbar's pages, several times a second.
+local COLLECT_EVERY = 1.5
+local collectDue, lastCollect = true, -100
+-- Two refreshes are at least this far apart: the events that ask for one (every aura change, every cast, every
+-- power or attack power tick of the player) came in bursts, and each refresh walks every button.
+local REFRESH_GAP = 0.25
+local lastRun = -100
+local continuing = false -- a refresh was cut into slices and has buttons left
+local again = false      -- a request that came in while it was being sliced: another full refresh follows it
+local deferred = false   -- a text was left unread in some slice (parse budget): read on the next refresh
+local run, requestUpdate
+local function schedule(delay)
+  if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(delay, run) else run() end
+end
+run = function()
+  pending = false
+  lastRun = textClock()
+  local runStart = BIT.Perf and BIT.Perf.Begin()
+  if not continuing then
     -- EUI can create additional bars after login or defer them until combat ends.
     if type(EllesmereUI) == "table" or type(EABButton1) == "table"
-      or type(GamepadMainActionBarFrame) == "table" or labSeen then collectButtons() end
+      or type(GamepadMainActionBarFrame) == "table" or labSeen then
+      if collectDue or lastRun - lastCollect >= COLLECT_EVERY then
+        collectDue, lastCollect = false, lastRun
+        local t0 = BIT.Perf and BIT.Perf.Begin()
+        collectButtons()
+        if BIT.Perf then BIT.Perf.End("SpellDamageInfo.collect", t0) end
+      end
+    end
     readBonus()
     readWeapon()
-    parseBudget, parseDeferred = PARSE_BUDGET, false
-    updateAllButtons()
-    parseBudget = nil
-    if parseDeferred then requestUpdate() end
   end
+  parseBudget, parseDeferred = PARSE_BUDGET, false
+  local t1 = BIT.Perf and BIT.Perf.Begin()
+  continuing = updateAllButtons()
+  if BIT.Perf then BIT.Perf.End("SpellDamageInfo.buttons", t1) end
+  parseBudget = nil
+  if parseDeferred then deferred = true end
+  if BIT.Perf then BIT.Perf.End("SpellDamageInfo.refresh", runStart) end
+  if continuing then
+    pending = true
+    schedule(0) -- the next frame
+  elseif again or deferred then
+    again, deferred = false, false
+    requestUpdate()
+  end
+end
+requestUpdate = function()
+  if continuing then again = true end
+  if pending then return end
+  pending = true
   -- A short delay lets Blizzard's own handlers set button.action after a page change first.
-  if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(0.1, run) else run() end
+  schedule(math.max(0.1, REFRESH_GAP - (textClock() - lastRun)))
 end
 ns.Refresh = requestUpdate
 
@@ -2144,6 +2392,11 @@ local function addTooltipLines(tooltip, spellID, pet)
   local view = ns.Compute(spellID, pet)
   local lines = Format.TooltipLines(view, L)
   local gray = Format.NOTE_COLOR
+  -- what the recent casts of the spell really averaged (the damage meter's numbers, read after each fight): beside
+  -- the description's own figures, and the only figures of a spell the description gives none for
+  if not pet and db.useHistory and ns.History then
+    for _, line in ipairs(ns.History.Lines(spellID)) do lines[#lines + 1] = line end
+  end
   -- Judgement's number is its seal's; without a seal there is none, and the tooltip says why
   if not view and not pet and ns.IsJudgementSpell(spellID) then
     lines[#lines + 1] = { L.NO_SEAL, gray[1], gray[2], gray[3] }
@@ -2359,9 +2612,9 @@ local function validSetting(key, value)
   if key == "button" then return BUTTON_MODES[value] == true end
   if key == "position" then return POSITIONS[value] == true end
   if key == "sidePosition" then return SIDE_POSITIONS[value] == true end
-  if key == "skipUtilityBars" then return type(value) == "boolean" end
+  -- (talents was missing here, so the options window's "Include talents" box wrote nothing)
+  if BOOLEAN_KEYS[key] then return type(value) == "boolean" end
   if key == "size" then return type(value) == "number" and value >= SIZE_MIN and value <= SIZE_MAX end
-  if key == "estimate" or key == "tooltip" or key == "reduction" or key == "weapon" then return type(value) == "boolean" end
   if key == "interfaceLang" then return value == "auto" or value == "en" or value == "de" or value == "ru" end
   return false
 end
@@ -2447,7 +2700,38 @@ local function slash(msg)
     end
     return
   end
-  if cmd == "estimate" or cmd == "tooltip" or cmd == "reduction" or cmd == "weapon" then
+  if cmd == "history" then
+    if arg == "clear" then
+      ns.History.Clear()
+      requestUpdate()
+      say(L.HISTORY_CLEARED)
+      return
+    end
+    if arg == "on" or arg == "off" then
+      db.useHistory = arg == "on"
+      requestUpdate()
+      settingsChanged()
+    elseif arg ~= "" and arg ~= "list" then
+      say(L.BAD_ARG)
+      return
+    end
+    for _, line in ipairs(ns.History.Status()) do say(line) end
+    if arg == "list" then
+      for i, e in ipairs(ns.History.List()) do
+        if i > 25 then break end
+        say(string.format("%d %s: %d casts, damage %.0f, healing %.0f per cast", e.id, e.name or "?", e.casts, e.damage, e.healing))
+      end
+    end
+    return
+  end
+  -- the kinds of number the buttons show (Options: the "Show" checkboxes)
+  local showKey = ({ damage = "showDamage", dot = "showDot", heal = "showHeal", hot = "showHot", mana = "showMana",
+    absorb = "showAbsorb" })[cmd]
+  if showKey then
+    local v = toggleArg(arg, db[showKey])
+    if v == nil then say(L.BAD_ARG) return end
+    db[showKey] = v
+  elseif cmd == "estimate" or cmd == "tooltip" or cmd == "reduction" or cmd == "weapon" then
     local v = toggleArg(arg, db[cmd])
     if v == nil then say(L.BAD_ARG) return end
     db[cmd] = v
@@ -2481,6 +2765,8 @@ local function slash(msg)
   end
   say(string.format(L.STATUS, onOff(db.estimate), db.button, onOff(db.tooltip), onOff(db.reduction), onOff(db.weapon),
     db.size, db.position, langLabel(db.interfaceLang)))
+  say(string.format(L.STATUS_SHOWN, onOff(db.showDamage), onOff(db.showDot), onOff(db.showHeal), onOff(db.showHot),
+    onOff(db.showMana), onOff(db.showAbsorb), onOff(db.useHistory)))
   if cmd == "status" and barAddonLoaded() then say(L.BAR_ADDON) end
   requestUpdate()
   settingsChanged()
@@ -2506,7 +2792,12 @@ local function loadSettings()
   if type(db.reduction) ~= "boolean" then db.reduction = DEFAULTS.reduction end
   if type(db.weapon) ~= "boolean" then db.weapon = DEFAULTS.weapon end
   if type(db.talents) ~= "boolean" then db.talents = DEFAULTS.talents end
-  -- Not a setting: Reset leaves it alone. Rebuilt into the lookup noteMiss uses.
+  for _, key in ipairs(SHOW_KEYS) do
+    if type(db[key]) ~= "boolean" then db[key] = DEFAULTS[key] end
+  end
+  if type(db.useHistory) ~= "boolean" then db.useHistory = DEFAULTS.useHistory end
+  -- Not settings: Reset leaves them alone. The recorded casts (History.lua) first, then the lookup noteMiss uses.
+  if ns.History then ns.History.Attach(db) end
   if type(db.misses) ~= "table" then db.misses = {} end
   missSeen, missCount = {}, 0
   for i = #db.misses, 1, -1 do
@@ -2577,6 +2868,7 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
       loadSettings()
       ns.InitInterfaceL(db.interfaceLang)
     elseif arg1 == "Blizzard_GamepadActionBars" then
+      collectDue = true
       requestUpdate()
     end
   elseif event == "PLAYER_LOGIN" then
@@ -2657,8 +2949,10 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
   else
     if isReset[event] then clearCache() end
     if event == "UPDATE_OVERRIDE_ACTIONBAR" or event == "UPDATE_VEHICLE_ACTIONBAR" then collectButtons() end
-    -- out of combat the target's speed can be read again
-    if event == "PLAYER_REGEN_ENABLED" then readTargetSpeed() end
+    -- out of combat the target's speed can be read again, and bars that were put off until the fight ended exist
+    if event == "PLAYER_REGEN_ENABLED" then readTargetSpeed(); collectDue = true end
+    if event == "ACTIONBAR_PAGE_CHANGED" or event == "UPDATE_BONUS_ACTIONBAR" or event == "PET_BAR_UPDATE" then collectDue = true end
     requestUpdate()
   end
 end)
+if BIT.Perf then BIT.Perf.Watch(frame, "OnEvent", "SpellDamageInfo") end
