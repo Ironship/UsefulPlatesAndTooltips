@@ -139,6 +139,50 @@ function Plate.FillsReversed(bar)
   return reverse
 end
 
+-- Blizzard's Camelot unit frames make the HealthBar frame taller than the bar the player sees: it starts 3 above its
+-- container (HealthBarsContainer, 126 x 15) and ends 2 below it, and the container's HealthBarMask cuts the fill to the
+-- container's shape. Marks laid over the whole frame stick out above and below the visible bar (an outline, a glow), so
+-- they take the container's top and bottom. Returns how far the visible bar lies inside the frame at the top and at the
+-- bottom, in the frame's own units: 0, 0 for any other frame (no mask-holding container of the same width, a container
+-- that is not smaller) and whenever the numbers cannot be read.
+local insetCache = setmetatable({}, { __mode = "k" })
+local INSET_TTL = 1 -- the frame's layout does not change from one draw to the next: asked once a second per bar
+
+function Plate.BarInset(bar)
+  if type(bar) ~= "table" then return 0, 0 end
+  local now, cached = GetTime(), insetCache[bar]
+  if cached and now - cached.at < INSET_TTL then return cached.top, cached.bottom end
+  local top, bottom = Plate.ReadBarInset(bar)
+  if cached then
+    cached.top, cached.bottom, cached.at = top, bottom, now
+  else
+    insetCache[bar] = { top = top, bottom = bottom, at = now }
+  end
+  return top, bottom
+end
+
+function Plate.ReadBarInset(bar)
+  local ok, top, bottom = pcall(function()
+    local container = bar:GetParent()
+    if type(container) ~= "table" or container.HealthBarMask == nil then return 0, 0 end
+    local values = { bar:GetTop(), bar:GetBottom(), bar:GetLeft(), bar:GetRight(),
+      container:GetTop(), container:GetBottom(), container:GetLeft(), container:GetRight() }
+    for i = 1, 8 do
+      local v = values[i]
+      if type(v) ~= "number" or (type(issecretvalue) == "function" and issecretvalue(v)) then return 0, 0 end
+    end
+    local barTop, barBottom, barLeft, barRight, boxTop, boxBottom, boxLeft, boxRight = unpack(values)
+    local insetTop, insetBottom = barTop - boxTop, boxBottom - barBottom
+    if math.abs(barLeft - boxLeft) > 1 or math.abs(barRight - boxRight) > 1 then return 0, 0 end
+    if insetTop < 0 or insetBottom < 0 or insetTop + insetBottom <= 0 or insetTop + insetBottom >= (barTop - barBottom) then
+      return 0, 0
+    end
+    return insetTop, insetBottom
+  end)
+  if ok and type(top) == "number" and type(bottom) == "number" then return top, bottom end
+  return 0, 0
+end
+
 -- The frame, health bar and portrait of a unit's frame. The kill icon spot the player named (Core/Frames.lua) replaces
 -- the portrait of the target frame, whichever frame the bar comes from.
 function Plate.UnitFrame(unit)
@@ -234,15 +278,21 @@ local function searchHealthBar(plate)
   end
 end
 
+-- A plate with no health bar to find (a name-only plate of a friendly NPC, say) was searched again every second, one
+-- walk over the plate's whole frame tree each, for every such plate on screen. A search that finds nothing now waits
+-- twice as long before the next one (1, 2, 4, then 8 seconds); a plate handed to another unit starts over (below).
+local FAIL_BACKOFF_STEPS = 3
+local function searchWait(cached) return SEARCH_INTERVAL * 2 ^ math.min(cached.fails or 0, FAIL_BACKOFF_STEPS) end
+
 local function autoHealthBar(plate)
   local cached, now = searchCache[plate], GetTime()
   if cached and cached.bar and visibleHealthBar(cached.bar) and isUnder(cached.bar, plate) then
     return cached.bar, cached.path
   end
-  if cached and now - cached.at < SEARCH_INTERVAL then return nil, "health bar search pending" end
+  if cached and now - cached.at < searchWait(cached) then return nil, "health bar search pending" end
   local ok, bar, path = pcall(searchHealthBar, plate)
   if not ok then bar, path = nil, "health bar search unavailable" end
-  searchCache[plate] = { bar = bar, path = path, at = now }
+  searchCache[plate] = { bar = bar, path = path, at = now, fails = bar and 0 or ((cached and cached.fails or 0) + 1) }
   return bar, path or "no visible health bar found"
 end
 
@@ -267,7 +317,7 @@ function Plate.WidgetHost(plate)
   return plate
 end
 
-function Plate.HealthBar(plate)
+local function resolveHealthBar(plate)
   if type(plate) ~= "table" then return nil, "no nameplate" end
   if read(plate.IsForbidden, plate) == true then return nil, "forbidden nameplate" end
   local Frames = BIT.Frames
@@ -333,6 +383,40 @@ function Plate.HealthBar(plate)
   end)
   if ok and bar then return bar, path end
   return autoHealthBar(plate)
+end
+
+-- Every module with something on a plate asks for its health bar, several of them on every tick (ShieldsInfo for every
+-- plate on screen, the DoT markers, the cast marker, the range icon): the answer, a bar or none, is kept for a quarter
+-- of a second per plate, so the lookup above runs a few times a second for a plate however many ask. A plate that is
+-- handed to another unit forgets it at once.
+local lookupCache = setmetatable({}, { __mode = "k" })
+local LOOKUP_TTL = 0.25
+
+function Plate.HealthBar(plate)
+  if type(plate) ~= "table" then return nil, "no nameplate" end
+  local entry, now = lookupCache[plate], GetTime()
+  if entry and now - entry.at < LOOKUP_TTL then return entry.bar, entry.path end
+  local bar, path = resolveHealthBar(plate)
+  if entry then
+    entry.bar, entry.path, entry.at = bar, path, now
+  else
+    lookupCache[plate] = { bar = bar, path = path, at = now }
+  end
+  return bar, path
+end
+
+do
+  local watcher = CreateFrame("Frame")
+  watcher:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+  watcher:SetScript("OnEvent", function(_, _, unit)
+    if type(unit) ~= "string" or (type(issecretvalue) == "function" and issecretvalue(unit))
+      or not (C_NamePlate and C_NamePlate.GetNamePlateForUnit) then return end
+    local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+    if ok and type(plate) == "table" then
+      lookupCache[plate] = nil
+      searchCache[plate] = nil
+    end
+  end)
 end
 
 -- Blizzard's own Mouseover Cast (Options > Combat, no macro): with it on and its key held (or none set), a cast
