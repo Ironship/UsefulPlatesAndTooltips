@@ -111,6 +111,11 @@ local STYLES = {
   { id = "border", label = "Pulsing border" },
 }
 
+local BASES = {
+  { id = "min", label = "Low end of the damage range" },
+  { id = "avg", label = "Middle of the damage range" },
+}
+
 ---------------------------------------------------------------------------------------------
 -- The right column
 ---------------------------------------------------------------------------------------------
@@ -127,6 +132,17 @@ local function buildSettings(parent)
   for _, rule in ipairs(ns.RULES) do
     y = place(spellRow(parent, rule), y)
   end
+
+  y = section(parent, y, "LETHAL DAMAGE")
+  y = place(checkRow(parent, "Glow when a spell would kill", "kill",
+    "Any spell on your bars whose direct damage is priced (the same estimate as the kill icon on the target "
+    .. "frame, so CastPrediction must be on) glows while the target's health is at or below that damage. "
+    .. "Shadow Word: Death and every other damage spell get it this way."), y)
+  y = place(choiceRow(parent, "Damage counted", "killBasis", BASES,
+    "The low end is what the spell is certain to deal, so a glow never lies; the middle glows a little earlier."), y)
+  y = place(checkRow(parent, "Skip targets it kills from full health", "killSkipTrivial",
+    "A spell that would kill the target at full health glows all the time on a weak enemy. With this on, "
+    .. "only a target the spell does not kill at full health gets the glow."), y)
 
   y = section(parent, y, "THE WINDOW")
   y = place(sliderRow(parent, "Execute window", "executePct", 5, 60, 1, "%",
@@ -150,6 +166,9 @@ local function buildSettings(parent)
   y = place(choiceRow(parent, "Heal color", "healColor", colorList(), "Tints the glow of Divine Grace."), y)
   y = place(choiceRow(parent, "Reactive color", "reactiveColor", colorList(),
     "Tints the glow of Overpower, Revenge, Mongoose Bite, Counterattack and Victory Rush."), y)
+  y = place(choiceRow(parent, "Lethal damage color", "killColor", colorList(),
+    "Tints the glow of a spell that would kill the target. On a spell that also has its own window "
+    .. "(Execute) that spell's color is used."), y)
   y = place(sliderRow(parent, "Glow size", "size", 100, 250, 5, "%",
     "How big the glow is against the button. Blizzard's proc glow is 140%."), y, 40)
   y = place(sliderRow(parent, "Opacity", "opacity", 10, 100, 5, "%", nil), y, 40)
@@ -178,9 +197,10 @@ end
 local sampleButtons = {}
 
 local SAMPLES = {
-  { rule = "execute", icon = 5308, fallback = "Interface\\Icons\\INV_Sword_48", label = "Execute-type" },
-  { rule = "divineGrace", icon = 1277370, fallback = "Interface\\Icons\\Spell_Holy_PowerWordShield", label = "Heal" },
-  { rule = "overpower", icon = 7384, fallback = "Interface\\Icons\\Ability_MeleeDamage", label = "Reactive" },
+  { group = "hp", icon = 5308, fallback = "Interface\\Icons\\INV_Sword_48", label = "Execute-type" },
+  { group = "heal", icon = 1277370, fallback = "Interface\\Icons\\Spell_Holy_PowerWordShield", label = "Heal" },
+  { group = "reactive", icon = 7384, fallback = "Interface\\Icons\\Ability_MeleeDamage", label = "Reactive" },
+  { group = "kill", icon = 133, fallback = "Interface\\Icons\\Spell_Fire_FlameBolt", label = "Lethal" },
 }
 
 local function iconFor(sample)
@@ -193,8 +213,7 @@ end
 
 local function refreshSample()
   for _, s in ipairs(sampleButtons) do
-    local rule = ns.ByKey[s.rule]
-    ns.SampleGlow(s.frame, rule, s.on, nil)
+    ns.SampleGlow(s.frame, s.group, s.on, nil)
   end
 end
 ns.RefreshSample = refreshSample
@@ -224,14 +243,14 @@ local function buildPreview(pane)
     local cap = pane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     cap:SetPoint("TOP", f, "BOTTOM", 0, -32)
     cap:SetText(BIT.L(sample.label))
-    sampleButtons[#sampleButtons + 1] = { frame = f, rule = sample.rule, on = true }
+    sampleButtons[#sampleButtons + 1] = { frame = f, group = sample.group, on = true }
   end
 
   local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   hint:SetPoint("TOPLEFT", SIDE, -190)
   hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
   hint:SetJustifyH("LEFT")
-  hint:SetText(BIT.L("The three buttons show the style, color, size and opacity as set. The glow on your action "
+  hint:SetText(BIT.L("The four buttons show the style, color, size and opacity as set. The glow on your action "
     .. "bars appears only while the spell's condition holds. \"Test on my bars\" shows it on the real buttons."))
 
   pane.title = title

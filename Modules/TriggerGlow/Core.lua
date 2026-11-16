@@ -20,6 +20,9 @@ local DEFAULTS = {
   hp = true,              -- Execute, Hammer of Wrath
   heal = true,            -- Divine Grace
   reactive = true,        -- Overpower, Revenge, Mongoose Bite, Counterattack, Victory Rush
+  kill = true,            -- any direct-damage spell whose damage would finish the target (needs CastPrediction)
+  killBasis = "min",      -- "min": the low end of the damage range (certain) | "avg": its middle
+  killSkipTrivial = true, -- no glow for a target the spell kills from full health anyway
   spells = {},            -- [rule key] = false switches one spell off
   executePct = 20,        -- the share of the enemy's health the window opens at
   healPct = 50,           -- the share of a friend's health a heal is wanted below
@@ -29,6 +32,7 @@ local DEFAULTS = {
   hpColor = "native",
   healColor = "native",
   reactiveColor = "native",
+  killColor = "native",
   size = 140,             -- glow size, % of the button (Blizzard's proc glow is 140)
   opacity = 100,
   debug = false,
@@ -103,9 +107,9 @@ local function rulePct(rule)
   return clampNumber(c.executePct, 5, 60, 20)
 end
 
-local function colorOf(rule)
+local function colorOf(groupId)
   local group
-  for _, g in ipairs(ns.GROUPS) do if g.id == rule.group then group = g end end
+  for _, g in ipairs(ns.GROUPS) do if g.id == groupId then group = g end end
   local id = group and cfg()[group.colorKey]
   local rgb = id and id ~= "native" and BIT.Looks and BIT.Looks.Rgb and BIT.Looks.Rgb(id)
   return rgb or nil
@@ -372,10 +376,10 @@ local function createGlow(button, kind)
 end
 
 -- Size and tint, applied when the glow is shown and whenever a setting changed.
-local function styleGlow(f, button, rule)
+local function styleGlow(f, button, groupId)
   local w, h = buttonSize(button)
   local scale = clampNumber(cfg().size, 100, 250, 140) / 100
-  local rgb = rule and colorOf(rule)
+  local rgb = groupId and colorOf(groupId)
   local key = string.format("%d/%d/%.2f/%s", w, h, scale, rgb and table.concat(rgb, ",") or "native")
   if f.styleKey == key then return end
   f.styleKey = key
@@ -430,11 +434,11 @@ local function glowFor(button, store)
   return f
 end
 
--- The same glow on any frame, for the settings sample: ns.SampleGlow(frame, rule, on, alpha).
-function ns.SampleGlow(frame, rule, on, alpha)
+-- The same glow on any frame, for the settings sample: ns.SampleGlow(frame, groupId, on, alpha).
+function ns.SampleGlow(frame, groupId, on, alpha)
   local f = glowFor(frame, sampleGlows)
   f.styleKey = nil
-  styleGlow(f, frame, rule)
+  styleGlow(f, frame, groupId)
   if on then
     showGlow(f)
     f:SetAlpha(alpha or opacity())
@@ -497,8 +501,8 @@ end
 
 -- The glow's opacity for the target's health: true and a number or a secret value, or false when nothing can
 -- be said. A secret value is never compared, not even with nil.
-local function healthAlpha(rule)
-  local pct, level = rulePct(rule), opacity()
+local function healthAlpha(pct)
+  local level = opacity()
   local curve = curveFor(pct, level)
   if curve and type(UnitHealthPercent) == "function" then
     local ok, a = pcall(UnitHealthPercent, "target", false, curve)
@@ -516,28 +520,71 @@ local function healthAlpha(rule)
 end
 ns.HealthAlpha = healthAlpha
 
-local active = {}      -- list of { button, rule, spell }
+local active = {}      -- list of { button, spell, rule (a Data.lua rule or nil), kill (a damage prediction or nil), group, label }
 local activeBy = {}    -- [button] = entry
 local testUntil = 0
+local ENEMY = { target = "enemy" }
+local maxHealthNoted = false
+
+-- CastPrediction's price of a spell's direct damage, { min, max, value }, or nil: a heal, a pure DoT, a utility
+-- spell, or CastPrediction switched off. The same estimate the kill icon on the target frame compares.
+local function predictDirect(spellID)
+  local module = BIT.modules and BIT.modules.CastPrediction
+  if type(module) ~= "table" or type(module.PredictDirect) ~= "function" then return nil end
+  if BIT.IsRunning and not BIT.IsRunning("CastPrediction") then return nil end
+  local ok, p = pcall(module.PredictDirect, spellID)
+  if not ok or type(p) ~= "table" then return nil end
+  local min, max, value = p.min, p.max, p.value
+  if isSecret(min) or isSecret(max) or isSecret(value) then return nil end
+  if type(min) ~= "number" or type(max) ~= "number" or type(value) ~= "number" or min ~= min or max ~= max
+    or value ~= value or max <= 0 then return nil end
+  return { min = min, max = max, value = value }
+end
+
+-- The target's health share at or below which this spell's damage finishes it, in %, or nil. The share needs the
+-- target's maximum health, which the client hides only in a few places (an encounter, a restricted match).
+local function killPct(entry)
+  local pred, c = entry.kill, cfg()
+  if not pred or c.kill == false then return nil end
+  local damage = c.killBasis == "avg" and pred.value or pred.min
+  if type(damage) ~= "number" or damage <= 0 then return nil end
+  local max
+  if type(UnitHealthMax) == "function" then
+    local ok, v = pcall(UnitHealthMax, "target")
+    if ok and not isSecret(v) and type(v) == "number" then max = v end
+  end
+  if not max or max <= 0 then
+    if not maxHealthNoted then
+      maxHealthNoted = true
+      trace("kill glow: the target's maximum health is hidden, so no glow from damage")
+    end
+    return nil
+  end
+  if c.killSkipTrivial ~= false and damage >= max then return nil end
+  return math.min(100, damage / max * 100)
+end
+ns.KillPct = killPct
 
 -- Whether the entry's glow is up, and with which opacity.
 local function windowFor(entry)
-  local rule = entry.rule
-  if not ruleEnabled(rule) then return false end
-  if cfg().combatOnly and ask(UnitAffectingCombat, "player") == false then return false end
-  if rule.target then
-    if not targetFits(rule) then return false end
-    if cfg().needResources then
-      local usable = usableNow(entry.spell)
-      if usable == false then return false end
-    end
-    local has, a = healthAlpha(rule)
-    if not has then return false end
-    return true, a
+  local rule, c = entry.rule, cfg()
+  if c.combatOnly and ask(UnitAffectingCombat, "player") == false then return false end
+  local ruleOn = rule and ruleEnabled(rule)
+  if ruleOn and not rule.target then
+    if usableNow(entry.spell) == true then return true, opacity() end
   end
-  local usable = usableNow(entry.spell)
-  if usable == true then return true, opacity() end
-  return false
+  -- Both kinds of window are a share of the target's health: the wider one wins.
+  local pct
+  if ruleOn and rule.target and targetFits(rule) then pct = rulePct(rule) end
+  if entry.kill and targetFits(ENEMY) then
+    local k = killPct(entry)
+    if k and (not pct or k > pct) then pct = k end
+  end
+  if not pct then return false end
+  if c.needResources and usableNow(entry.spell) == false then return false end
+  local has, a = healthAlpha(pct)
+  if not has then return false end
+  return true, a
 end
 
 local lastState = setmetatable({}, { __mode = "k" })
@@ -549,7 +596,7 @@ local function updateEntry(entry, testing)
   local f = glows[button] and glows[button][currentStyle()]
   if on then
     f = glowFor(button)
-    styleGlow(f, button, entry.rule)
+    styleGlow(f, button, entry.group)
     showGlow(f)
     f:SetAlpha(alpha)
   elseif f and f.on then
@@ -558,7 +605,7 @@ local function updateEntry(entry, testing)
   if lastState[button] ~= (on and true or false) then
     lastState[button] = on and true or false
     if not testing then
-      trace(string.format("%s %s on %s", on and "GLOW" or "off", entry.rule.key, tostring(button:GetName() or "button")))
+      trace(string.format("%s %s on %s", on and "GLOW" or "off", entry.label, tostring(button:GetName() or "button")))
     end
   end
 end
@@ -572,12 +619,20 @@ ns.Update = updateAll
 local function rescan()
   collectButtons()
   local list, by = {}, {}
+  local priced = {} -- spell -> its prediction or false, once per scan
+  local wantKill = cfg().kill ~= false
   for _, b in ipairs(buttons) do
     local spell = buttonSpell(b)
     if spell then
       local rule = ruleFor(spell)
-      if rule then
-        local entry = { button = b, rule = rule, spell = spell }
+      local pred
+      if wantKill then
+        pred = priced[spell]
+        if pred == nil then pred = predictDirect(spell) or false; priced[spell] = pred end
+      end
+      if rule or pred then
+        local entry = { button = b, rule = rule, kill = pred or nil, spell = spell,
+          group = rule and rule.group or "kill", label = rule and rule.key or "kill" }
         list[#list + 1] = entry
         by[b] = entry
       end
@@ -594,14 +649,17 @@ local function rescan()
   if not changed then
     for i, e in ipairs(list) do
       local o = active[i]
-      if not o or o.button ~= e.button or o.spell ~= e.spell then changed = true break end
+      if not o or o.button ~= e.button or o.spell ~= e.spell or (o.kill ~= nil) ~= (e.kill ~= nil) then changed = true break end
     end
   end
   active, activeBy = list, by
   if changed then
     local names = {}
-    for _, e in ipairs(list) do names[#names + 1] = e.rule.key .. "=" .. tostring(e.button:GetName() or "?") end
-    trace("buttons with a glow rule: " .. (#list > 0 and table.concat(names, ", ") or "none"))
+    for i, e in ipairs(list) do
+      if i > 14 then names[#names + 1] = "..." break end
+      names[#names + 1] = e.label .. (e.rule and e.kill and "+kill" or "") .. "=" .. tostring(e.button:GetName() or "?")
+    end
+    trace("buttons with a glow: " .. (#list > 0 and table.concat(names, ", ") or "none"))
   end
   updateAll()
 end
@@ -718,7 +776,7 @@ function ns.Test(seconds)
   rescan()
   if #active == 0 then
     BIT.Say(BIT.L("TriggerGlow: none of its spells is on your action bars (Execute, Hammer of Wrath, Divine Grace, "
-      .. "Overpower, Revenge, Mongoose Bite, Counterattack, Victory Rush)."))
+      .. "Overpower, Revenge, Mongoose Bite, Counterattack, Victory Rush, or a spell with priced direct damage)."))
     return 0
   end
   testUntil = (GetTime and GetTime() or 0) + (seconds or 6)
@@ -754,21 +812,31 @@ function ns.Probe()
   add(string.format("style %s, size %s%%, opacity %s%%; target exists %s, can attack %s",
     currentStyle(), shown(cfg().size), shown(cfg().opacity),
     shown(ask(UnitExists, "target")), shown(ask(UnitCanAttack, "player", "target"))))
-  if #active == 0 then add("no button carries Execute, Hammer of Wrath, Divine Grace, Overpower, Revenge, Mongoose Bite, Counterattack or Victory Rush") end
+  add(string.format("CastPrediction (the damage prices for the lethal glow) %s",
+    (BIT.IsRunning and BIT.IsRunning("CastPrediction")) and "running" or "off: no glow from damage"))
+  if #active == 0 then add("no button carries a spell with a rule (Execute, Hammer of Wrath, Divine Grace, Overpower, ...) or priced direct damage") end
   for _, e in ipairs(active) do
     local name = e.button:GetName() or "?"
-    local line = string.format("%s: %s (spell %d, %s) enabled %s", name, e.rule.key, e.spell, tostring(nameOf(e.spell)),
-      tostring(ruleEnabled(e.rule)))
+    local line = string.format("%s: %s (spell %d, %s)", name, e.label, e.spell, tostring(nameOf(e.spell)))
+    if e.rule then line = line .. " rule enabled " .. tostring(ruleEnabled(e.rule)) end
     local usable, noPower = usableNow(e.spell)
     line = line .. string.format(", usable %s (not enough resource %s)", shown(usable), shown(noPower))
-    if e.rule.target then
-      local curve = curveFor(rulePct(e.rule), opacity())
+    local pct = e.rule and e.rule.target and rulePct(e.rule) or nil
+    if e.kill then
+      local k = killPct(e)
+      line = line .. string.format(", damage %d-%d, kill window %s", e.kill.min, e.kill.max,
+        k and string.format("%.1f%% of the target's health", k) or "none")
+      if k and (not pct or k > pct) then pct = k end
+    end
+    if pct then
+      local curve = curveFor(pct, opacity())
       local ok, a = false, nil
       if curve and type(UnitHealthPercent) == "function" then ok, a = pcall(UnitHealthPercent, "target", false, curve) end
-      line = line .. string.format(", target fits %s, curve alpha %s", tostring(targetFits(e.rule)), ok and shown(a) or "n/a")
+      line = line .. string.format(", target fits %s, curve alpha %s", tostring(targetFits(e.rule and e.rule.target and e.rule or ENEMY)),
+        ok and shown(a) or "n/a")
       if curve and type(curve.Evaluate) == "function" then
         local pts = {}
-        for _, x in ipairs({ 0.05, rulePct(e.rule) / 100, rulePct(e.rule) / 100 + 0.01, 0.9 }) do
+        for _, x in ipairs({ 0.05, pct / 100, pct / 100 + 0.01, 0.9 }) do
           local okc, y = pcall(curve.Evaluate, curve, x)
           pts[#pts + 1] = string.format("%.0f%%=%s", x * 100, okc and shown(y) or "err")
         end

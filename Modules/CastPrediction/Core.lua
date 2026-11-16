@@ -503,6 +503,15 @@ local function predictionFor(view, spellID)
         auraPercent = auraPercent, samples = learnedSamples(spellID) }
 end
 
+-- What a cast of this spell is expected to do at once, { min, max, value, ... }, or nil for a heal, a pure DoT, a
+-- utility spell or a text that is not read as plain direct damage. TriggerGlow compares it with the target's health.
+function ns.PredictDirect(spellID)
+    if not settings then return nil end
+    local view = buildView(spellID, false)
+    if not view then return nil end
+    return predictionFor(view, spellID)
+end
+
 -- A cast the estimate cannot learn from: damage of its school landed within reach of the prediction, yet no hit
 -- matched it (a factor too far from 1 for the window), or a hit matched but fell outside the window. Only counted,
 -- so that /upt castpred learned can show a spell that never learns. A cast whose own hit did match is never counted

@@ -13,8 +13,10 @@
 -- group "reactive": the game itself says when the spell can be cast (an Overpower after a dodge, a Revenge
 --                   after a block, dodge or parry, a Victory Rush after a kill): C_Spell.IsSpellUsable.
 --
--- Left out on purpose: Shadow Word: Death (401955, 1309595, 1309633, 1309635, 1309636). Its description in this
--- build has no health condition (damage, and a backlash when the target survives), so nothing opens a window.
+-- group "kill":     not a rule of this table: any spell on a bar whose direct damage CastPrediction can price glows
+--                   while the target's health is at or below that damage (Core.lua, killPct). This is what a
+--                   Shadow Word: Death (401955, 1309595, 1309633, 1309635, 1309636) gets: its description in this
+--                   build has no health condition (damage, and a backlash when the target survives), so no rule.
 
 local _, BIT = ...
 local ns = BIT.Module("TriggerGlow")
@@ -23,6 +25,7 @@ ns.GROUPS = {
   { id = "hp", label = "Execute-type spells", colorKey = "hpColor", enableKey = "hp" },
   { id = "heal", label = "Heal for a low-health friend", colorKey = "healColor", enableKey = "heal" },
   { id = "reactive", label = "Reactive spells", colorKey = "reactiveColor", enableKey = "reactive" },
+  { id = "kill", label = "Lethal damage", colorKey = "killColor", enableKey = "kill" },
 }
 
 ns.RULES = {
