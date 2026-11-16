@@ -193,6 +193,93 @@ local function buildSettings(parent)
 end
 
 ---------------------------------------------------------------------------------------------
+-- The second page: every spell the lethal glow can apply to, by class
+---------------------------------------------------------------------------------------------
+
+local function classLabel(class)
+  local name = type(LOCALIZED_CLASS_NAMES_MALE) == "table" and LOCALIZED_CLASS_NAMES_MALE[class]
+  if type(name) ~= "string" then name = class:sub(1, 1) .. class:sub(2):lower() end
+  local color = type(RAID_CLASS_COLORS) == "table" and RAID_CLASS_COLORS[class]
+  local hex = color and color.colorStr
+  if type(hex) == "string" and #hex == 8 then name = "|c" .. hex .. name .. "|r" end
+  return name
+end
+
+-- Every switch lives in settings.lethalOff[key] = true (off); a missing key is on.
+local function setLethal(keys, on)
+  if type(db().lethalOff) ~= "table" then db().lethalOff = {} end
+  for _, key in ipairs(keys) do db().lethalOff[key] = (not on) or nil end
+  changed()
+end
+
+local function anyLethalOff(keys)
+  for _, key in ipairs(keys) do
+    if not ns.LethalAllowed(key) then return true end
+  end
+  return false
+end
+
+local function lethalRow(parent, key, label, tipFn)
+  note("lethalOff")
+  return BIT.Looks.Rows.Check(parent, label, function() return ns.LethalAllowed(key) end, function(v)
+    setLethal({ key }, v)
+  end, { tooltipFor = tipFn, settings = db, localize = function(fontString, text) fontString:SetText(text) end })
+end
+
+local function recordRow(parent, rec)
+  local shown = ns.SpellName and ns.SpellName(rec.ids[1]) or rec.name
+  return lethalRow(parent, rec.name, shown, function()
+    local body = string.format(BIT.L("Glows while the target's health is at or below the damage of this spell. "
+      .. "%d ranks (spell ids %d to %d) share this switch. English name: %s."), #rec.ids, rec.ids[1], rec.ids[#rec.ids], rec.name)
+    return shown, body
+  end)
+end
+
+local function buildLethal(parent)
+  local y = section(parent, 0, "ALL LETHAL SPELLS")
+  y = noteRow(parent, y, "Every spell the estimate can price as direct damage, by class. A spell glows on your "
+    .. "bars while the target's health is at or below its damage (the low end of the range by default). All are "
+    .. "on; switch off the ones you do not want lit. The ranks of a spell share one switch. Weapon attacks, "
+    .. "finishers and spells whose text the estimate cannot read have no price, so they are not here.")
+  local all = {}
+  for _, class in ipairs(ns.LETHAL_CLASSES) do
+    for _, rec in ipairs(ns.LETHAL[class]) do all[#all + 1] = rec.name end
+  end
+  y = place(buttonRow(parent, "All spells on", "Switch on", function() setLethal(all, true) end,
+    "Turns the lethal glow on for every spell listed here."), y)
+  y = place(buttonRow(parent, "All spells off", "Switch off", function() setLethal(all, false) end,
+    "Turns the lethal glow off for every spell listed here."), y)
+  for _, class in ipairs(ns.LETHAL_CLASSES) do
+    local list = ns.LETHAL[class]
+    if #list > 0 then
+      local keys = {}
+      for _, rec in ipairs(list) do keys[#keys + 1] = rec.name end
+      y = section(parent, y, classLabel(class) .. string.format("  (%d)", #list))
+      y = place(buttonRow(parent, "This class", "All on / all off", function()
+        setLethal(keys, anyLethalOff(keys))
+      end, "Switches every spell of the class on, or all of them off when none is off."), y)
+      for _, rec in ipairs(list) do y = place(recordRow(parent, rec), y) end
+    end
+  end
+  -- Priced spells the list does not know (a wording the generator did not see), found on the bars at run time.
+  local other = {}
+  for key in pairs(type(db().lethalOther) == "table" and db().lethalOther or {}) do other[#other + 1] = key end
+  table.sort(other)
+  if #other > 0 then
+    y = section(parent, y, "OTHER SPELLS FOUND ON YOUR BARS")
+    y = noteRow(parent, y, "Spells the client's own text lets the estimate price although the list above does not "
+      .. "have them. They glow too, and have a switch here the same way.")
+    for _, key in ipairs(other) do
+      local label = key:sub(2)
+      y = place(lethalRow(parent, key, label, function()
+        return label, BIT.L("Found on your action bars at run time; its damage is priced from the client's text.")
+      end), y)
+    end
+  end
+  return y
+end
+
+---------------------------------------------------------------------------------------------
 -- The preview pane: one mock button per kind, glowing with its own color
 ---------------------------------------------------------------------------------------------
 
@@ -303,10 +390,33 @@ if BIT.RegisterTab then
       local column = BIT.UI.ScrollColumn(area)
       column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -42)
       column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
+      local lethalColumn = BIT.UI.ScrollColumn(area)
+      lethalColumn:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -42)
+      lethalColumn:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
       tabKeys = {}
       column:Fit((buildSettings(column.content) or 0) + 12)
+      lethalColumn:Fit((buildLethal(lethalColumn.content) or 0) + 12)
       local keys = tabKeys
       tabKeys = nil
+      -- two pages in one tab: the settings, and the lethal spells by class
+      local pageButtons = {}
+      local function showPage(which)
+        column:SetShown(which == "settings")
+        lethalColumn:SetShown(which == "lethal")
+        for page, button in pairs(pageButtons) do button:SetEnabled(page ~= which) end
+      end
+      local nSpells = 0
+      for _, class in ipairs(ns.LETHAL_CLASSES) do nSpells = nSpells + #ns.LETHAL[class] end
+      for i, page in ipairs({ "settings", "lethal" }) do
+        local button = CreateFrame("Button", nil, area, "UIPanelButtonTemplate")
+        button:SetSize(i == 1 and 110 or 170, 22)
+        button:SetPoint("TOPLEFT", area, "TOPLEFT", i == 1 and 8 or 124, -6)
+        if BIT.UI.SkinButton then BIT.UI.SkinButton(button) end
+        button:SetText(i == 1 and BIT.L("Settings") or string.format(BIT.L("Lethal spells (%d)"), nSpells))
+        button:SetScript("OnClick", function() showPage(page) end)
+        pageButtons[page] = button
+      end
+      showPage("settings")
       local reset = BIT.Looks.ResetButton(area, function()
         for _, key in ipairs(keys) do
           local default = ns._defaults()[key]

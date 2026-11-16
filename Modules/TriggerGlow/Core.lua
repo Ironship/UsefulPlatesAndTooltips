@@ -27,7 +27,9 @@ local DEFAULTS = {
   reactive = true,        -- Overpower, Revenge, Mongoose Bite, Counterattack, Victory Rush
   kill = true,            -- any direct-damage spell whose damage would finish the target (needs CastPrediction)
   killBasis = "min",      -- "min": the low end of the damage range (certain) | "avg": its middle
-  killSkipTrivial = true, -- no glow for a target the spell kills from full health anyway
+  killSkipTrivial = true, -- no glow while the target is at full health
+  lethalOff = {},         -- [spell's English name] = true switches that spell's lethal glow off (Spells.lua)
+  lethalOther = {},       -- ["~" .. client name] = true: priced spells found on the bars that Spells.lua does not list
   spells = {},            -- [rule key] = false switches one spell off
   executePct = 20,        -- the share of the enemy's health the window opens at
   healPct = 50,           -- the share of a friend's health a heal is wanted below
@@ -88,8 +90,9 @@ local function cfg() return settings or DEFAULTS end
 -- BIT.Settings hands a table default over as it is; these two belong to the saved settings alone.
 local function prepareSettings()
   settings = BIT.Settings("TriggerGlow", DEFAULTS)
-  if settings.spells == DEFAULTS.spells then settings.spells = {} end
-  if settings.log == DEFAULTS.log then settings.log = {} end
+  for _, key in ipairs({ "spells", "log", "lethalOff", "lethalOther" }) do
+    if settings[key] == DEFAULTS[key] then settings[key] = {} end
+  end
   ns.settings = settings
 end
 
@@ -562,6 +565,45 @@ local activeBy = {}    -- [button] = entry
 local testUntil = 0
 local ENEMY = { target = "enemy" }
 
+-- The key of a spell's lethal switch: its English name when Spells.lua lists it (a rank missing from the ids is found
+-- by the client's name of a listed one), "~" and the client's name for a priced spell the list does not know, nil
+-- for a spell that is not a cast of damage at all (Spells.lua LETHAL_SKIP).
+local lethalNames, lethalNamesAt = nil, 0
+local function buildLethalNames()
+  lethalNames, lethalNamesAt = {}, (GetTime and GetTime() or 0)
+  for _, class in ipairs(ns.LETHAL_CLASSES) do
+    for _, rec in ipairs(ns.LETHAL[class]) do
+      local name = nameOf(rec.ids[1])
+      if name then lethalNames[name] = rec end
+    end
+  end
+  for _, id in ipairs(ns.LETHAL_SKIP.ids) do
+    local name = nameOf(id)
+    if name and not lethalNames[name] then lethalNames[name] = "skip" end
+  end
+end
+
+local function lethalKey(spellID)
+  if ns.LethalSkipId[spellID] then return nil end
+  local rec = ns.LethalById[spellID]
+  if rec then return rec.name end
+  local name = nameOf(spellID)
+  if not name then return nil end
+  if not lethalNames or (GetTime and GetTime() or 0) - lethalNamesAt > 30 then buildLethalNames() end
+  local hit = lethalNames[name]
+  if hit == "skip" then return nil end
+  if hit then return hit.name end
+  return "~" .. name
+end
+ns.LethalKey = lethalKey
+ns.SpellName = nameOf
+
+local function lethalAllowed(key)
+  local off = cfg().lethalOff
+  return type(off) ~= "table" or off[key] ~= true
+end
+ns.LethalAllowed = lethalAllowed
+
 -- CastPrediction's price of a spell's direct damage, { min, max, value }, or nil: a heal, a pure DoT, a utility
 -- spell, or CastPrediction switched off. The same estimate the kill icon on the target frame compares.
 local function predictDirect(spellID)
@@ -747,8 +789,13 @@ local function rescan()
     local rule = ruleFor(spell)
     local pred
     if wantKill then
-      pred = priced[spell]
-      if pred == nil then pred = predictDirect(spell) or false; priced[spell] = pred end
+      local key = lethalKey(spell)
+      if key then
+        pred = priced[spell]
+        if pred == nil then pred = predictDirect(spell) or false; priced[spell] = pred end
+        if pred and key:sub(1, 1) == "~" and type(settings.lethalOther) == "table" then settings.lethalOther[key] = true end
+        if pred and not lethalAllowed(key) then pred = false end
+      end
     end
     if rule or pred then
       local entry = { button = host, rule = rule, kill = pred or nil, spell = spell, name = name,
@@ -886,6 +933,7 @@ function ns.Apply()
   end
   if settings then
     dirtyUpdate = true
+    dirtyScan = true -- the lethal switches decide which buttons are priced at all
     updateAll()
   end
   if ns.RefreshSample then ns.RefreshSample() end
