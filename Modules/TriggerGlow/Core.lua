@@ -278,6 +278,24 @@ local function collectButtons()
   end
 end
 
+-- ClassicConsoleGamepadUI hides Blizzard's bars and draws its own slots (children of ClassicConsoleGamepadUIBar), each
+-- mirroring one native button in its `source` field. A glow on the native button would be invisible, so the slot
+-- hosts the glow as well.
+local function mirrorSlots()
+  local list = {}
+  local root = _G.ClassicConsoleGamepadUIBar
+  if type(root) ~= "table" or type(root.GetChildren) ~= "function" then return list end
+  local ok, children = pcall(function() return { root:GetChildren() } end)
+  if not ok or type(children) ~= "table" then return list end
+  for _, child in ipairs(children) do
+    if type(child) == "table" and type(child.GetObjectType) == "function" then
+      local okSource, source = pcall(function() return child.source end)
+      if okSource and type(source) == "table" and not isSecret(source) then list[#list + 1] = { slot = child, source = source } end
+    end
+  end
+  return list
+end
+
 local function slotOf(button)
   local slot = button.action
   if not isSecret(slot) and type(slot) == "number" and slot > 0 then return slot end
@@ -340,6 +358,12 @@ local function buttonSize(button)
   return w, h
 end
 
+-- A glow hangs above the host's own artwork and labels (ClassicConsoleGamepadUI's slots keep theirs a few levels up).
+local function raise(frame, host)
+  local level = readNumber(host, "GetFrameLevel")
+  if level and type(frame.SetFrameLevel) == "function" then pcall(frame.SetFrameLevel, frame, level + 6) end
+end
+
 local function createGlow(button, kind)
   local f
   if kind == "blizzard" then
@@ -377,6 +401,7 @@ local function createGlow(button, kind)
     f:SetScript("OnHide", function(self) if self.pulse then self.pulse:Stop() end end)
   end
   f.on = false
+  raise(f, button)
   return f
 end
 
@@ -580,6 +605,7 @@ local function detectorFor(button)
   local d = detectors[button]
   if d then return d end
   local clip = CreateFrame("Frame", nil, button)
+  raise(clip, button)
   clip:SetClipsChildren(true)
   clip:Hide()
   local bar = CreateFrame("StatusBar", nil, clip)
@@ -626,7 +652,7 @@ local function updateKill(entry, testing)
     if d and d.on then hideDetector(d) end
     if lastKill[button] then
       lastKill[button] = nil
-      trace(string.format("kill detector off on %s", tostring(button:GetName() or "button")))
+      trace(string.format("kill detector off on %s", entry.name))
     end
     return
   end
@@ -677,7 +703,7 @@ local function updateKill(entry, testing)
   d.on = true
   if not testing and not lastKill[button] then
     lastKill[button] = true
-    trace(string.format("kill detector armed on %s (damage %d)", tostring(button:GetName() or "button"), math.floor(damage + 0.5)))
+    trace(string.format("kill detector armed on %s (damage %d)", entry.name, math.floor(damage + 0.5)))
   end
 end
 
@@ -699,7 +725,7 @@ local function updateEntry(entry, testing)
   if entry.rule and lastState[button] ~= (on and true or false) then
     lastState[button] = on and true or false
     if not testing then
-      trace(string.format("%s %s on %s", on and "GLOW" or "off", entry.label, tostring(button:GetName() or "button")))
+      trace(string.format("%s %s on %s", on and "GLOW" or "off", entry.label, entry.name))
     end
   end
   updateKill(entry, testing)
@@ -716,21 +742,25 @@ local function rescan()
   local list, by = {}, {}
   local priced = {} -- spell -> its prediction or false, once per scan
   local wantKill = cfg().kill ~= false
-  for _, b in ipairs(buttons) do
-    local spell = buttonSpell(b)
-    if spell then
-      local rule = ruleFor(spell)
-      local pred
-      if wantKill then
-        pred = priced[spell]
-        if pred == nil then pred = predictDirect(spell) or false; priced[spell] = pred end
-      end
-      if rule or pred then
-        local entry = { button = b, rule = rule, kill = pred or nil, spell = spell,
-          group = rule and rule.group or "kill", label = rule and rule.key or "kill" }
-        list[#list + 1] = entry
-        by[b] = entry
-      end
+  local function consider(host, spell, name)
+    if not spell then return end
+    local rule = ruleFor(spell)
+    local pred
+    if wantKill then
+      pred = priced[spell]
+      if pred == nil then pred = predictDirect(spell) or false; priced[spell] = pred end
+    end
+    if rule or pred then
+      local entry = { button = host, rule = rule, kill = pred or nil, spell = spell, name = name,
+        group = rule and rule.group or "kill", label = rule and rule.key or "kill" }
+      list[#list + 1] = entry
+      by[host] = entry
+    end
+  end
+  for _, b in ipairs(buttons) do consider(b, buttonSpell(b), tostring(b:GetName() or "button")) end
+  for _, m in ipairs(mirrorSlots()) do
+    if not by[m.slot] then
+      consider(m.slot, buttonSpell(m.source), "ClassicConsoleGamepadUI slot of " .. tostring(m.source:GetName() or "?"))
     end
   end
   -- a button that no longer carries one of the spells loses its glow
@@ -758,7 +788,7 @@ local function rescan()
     local names = {}
     for i, e in ipairs(list) do
       if i > 14 then names[#names + 1] = "..." break end
-      names[#names + 1] = e.label .. (e.rule and e.kill and "+kill" or "") .. "=" .. tostring(e.button:GetName() or "?")
+      names[#names + 1] = e.label .. (e.rule and e.kill and "+kill" or "") .. "=" .. e.name
     end
     trace("buttons with a glow: " .. (#list > 0 and table.concat(names, ", ") or "none"))
   end
@@ -917,8 +947,7 @@ function ns.Probe()
     (BIT.IsRunning and BIT.IsRunning("CastPrediction")) and "running" or "off: no glow from damage"))
   if #active == 0 then add("no button carries a spell with a rule (Execute, Hammer of Wrath, Divine Grace, Overpower, ...) or priced direct damage") end
   for _, e in ipairs(active) do
-    local name = e.button:GetName() or "?"
-    local line = string.format("%s: %s (spell %d, %s)", name, e.label, e.spell, tostring(nameOf(e.spell)))
+    local line = string.format("%s: %s (spell %d, %s)", e.name, e.label, e.spell, tostring(nameOf(e.spell)))
     if e.rule then line = line .. " rule enabled " .. tostring(ruleEnabled(e.rule)) end
     local usable, noPower = usableNow(e.spell)
     line = line .. string.format(", usable %s (not enough resource %s)", shown(usable), shown(noPower))
