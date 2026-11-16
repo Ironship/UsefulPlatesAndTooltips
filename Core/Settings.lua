@@ -29,6 +29,7 @@ local SHORT_LABEL = {
   ShieldsInfo = "Shields",
   HealPrediction = "Heals",
   HunterRangeFinder = "Hunter",
+  TriggerGlow = "Glow",
 }
 
 local window
