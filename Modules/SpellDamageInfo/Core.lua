@@ -37,7 +37,7 @@ local SHOW_KEYS = { "showDamage", "showDot", "showHeal", "showHot", "showMana", 
 local BOOLEAN_KEYS = { estimate = true, tooltip = true, reduction = true, weapon = true, talents = true, useHistory = true,
   skipUtilityBars = true, showDamage = true, showDot = true, showHeal = true, showHot = true, showMana = true,
   showAbsorb = true }
-local BUTTON_MODES = { total = true, direct = true, off = true }
+local BUTTON_MODES = { total = true, direct = true, dps = true, off = true }
 local POSITIONS = { bottom = true, center = true, top = true }
 local SIDE_POSITIONS = { opposite = true, bottom = true, top = true }
 local SIZE_MIN, SIZE_MAX = 50, 200
@@ -833,7 +833,7 @@ local function judgementView(pet)
   local seal = getEntry(sealID)
   if not seal or not seal.judgement then return nil end
   local view = withEstimate(seal.judgement, nil, false, 0)
-  if view then view.fromSeal = spellName(sealID) or tostring(sealID) end
+  if view then view.fromSeal, view.castTime = spellName(sealID) or tostring(sealID), 0 end
   return view
 end
 
@@ -866,6 +866,10 @@ function ns.Compute(spellID, pet)
   elseif show == "finisher" then
     view = finisherView(entry.finisher, spellID, pet)
   end
+  -- the cast time the per-second number divides by ("dps" on the buttons); an unreadable one counts as an instant cast
+  if view and db.button == "dps" and not view.weapon and view.castTime == nil then
+    view.castTime = getCastTime(spellID) or 0
+  end
   -- a chance effect: the number is what one trigger does
   if view and proc then view.proc = proc end
   return view
@@ -879,7 +883,9 @@ function ns.ComputeOrAverage(spellID, pet)
   if view or pet or not db.useHistory or not ns.History then return view end
   local entry = getEntry(spellID)
   if not entry or entry.show ~= nil then return nil end
-  return ns.History.View(spellID)
+  local average = ns.History.View(spellID)
+  if average and db.button == "dps" then average.castTime = getCastTime(spellID) or 0 end
+  return average
 end
 
 -- The damage of the part of a spell that lands at once, as its description states it (no spell power added): the average of
@@ -1600,6 +1606,48 @@ local function filterView(view)
   return v
 end
 
+-- The "per second" number on the buttons (setting button = "dps"): the view with its amounts turned into rates, which the
+-- ordinary "total" arithmetic then adds up. What lands at once (direct damage, a heal) is spread over the time the cast
+-- takes, at least the global cooldown (1.5 s; 1 s for energy users: rogues, cats), because that is the time it costs in
+-- a rotation; damage, healing and mana over time (a DoT, a HoT, food, a drink, a bandage) are spread over their own
+-- duration. Only views of spells carry a castTime (Compute stamps it), so an item's instant amount (a potion), a weapon
+-- hit or a shield stays what it is.
+local function dpsView(view)
+  if not view then return view end
+  local v = {}
+  for k, x in pairs(view) do v[k] = x end
+  if view.castTime ~= nil then
+    local gcd = 1.5
+    if type(UnitPowerType) == "function" then
+      local ok, powerType = pcall(UnitPowerType, "player")
+      if ok and not isSecret(powerType) and powerType == 3 then gcd = 1 end
+    end
+    local window = math.max(view.castTime, gcd)
+    for _, key in ipairs({ "direct", "heal" }) do
+      local r = view[key]
+      if r then v[key] = { min = r.min / window, max = r.max / window, added = (r.added or 0) / window } end
+    end
+  end
+  for _, key in ipairs({ "dot", "hot", "manaOverTime" }) do
+    local p = view[key]
+    -- a figure without a duration (a tick on its own) cannot be turned into a rate
+    if p and p.duration and p.duration > 0 then
+      v[key] = { total = p.total / p.duration, duration = p.duration, added = (p.added or 0) / p.duration }
+    end
+  end
+  return v
+end
+
+-- A number for a button: Format.Short, except that in "per second" mode a rate under 10 keeps one decimal (food heals
+-- 3.2 a second, and "3" would hide that).
+local function short(value)
+  if db.button == "dps" then
+    local r = math.floor(value * 10 + 0.5) / 10
+    if r < 10 then return string.format("%.1f", r) end
+  end
+  return Format.Short(value)
+end
+
 -- The text on a button for a view from ns.Compute and a reduction from ns.Reduction (either may
 -- be nil), under the current settings: main text, its colour, and the smaller reduction text
 -- next to it (or nil). The options window's preview draws its sample spells through this too.
@@ -1615,7 +1663,7 @@ local function buttonTextOf(view, reduction)
     if view.percentSelfHeal then
       local damage, kind = Estimate.ButtonValue(view, db.button)
       if kind == "damage" and damage and damage >= 0.5 then
-        return Format.Short(damage), Format.DAMAGE_COLOR, "+" .. fallback, Format.HEAL_COLOR
+        return short(damage), Format.DAMAGE_COLOR, "+" .. fallback, Format.HEAL_COLOR
       end
     end
     return fallback, Format.HEAL_COLOR
@@ -1639,8 +1687,8 @@ local function buttonTextOf(view, reduction)
   -- Food that is also a drink: the health total in green above the mana total in blue.
   if view and view.manaOverTime and view.hot and db.button ~= "direct"
       and view.hot.total >= 0.5 and view.manaOverTime.total >= 0.5 then
-    return Format.Short(view.hot.total), Format.HEAL_COLOR,
-      Format.Short(view.manaOverTime.total), Format.WEAPON_COLOR, "stacked"
+    return short(view.hot.total), Format.HEAL_COLOR,
+      short(view.manaOverTime.total), Format.WEAPON_COLOR, "stacked"
   end
   -- Two stacked labels: damage in gold, healing in green. Only simultaneous self-heals get "+".
   if view and (view.transfer or view.percentSelfHeal
@@ -1654,8 +1702,8 @@ local function buttonTextOf(view, reduction)
         healValue = (view.hot and view.hot.total or 0) + (view.heal and (view.heal.min + view.heal.max) / 2 or 0)
       end
       local prefix = (view.transfer or view.percentSelfHeal) and "+" or ""
-      local sideText = (healValue and healValue >= 0.5) and (prefix .. Format.Short(healValue)) or nil
-      return Format.Short(value), Format.DAMAGE_COLOR, sideText, Format.HEAL_COLOR, "stacked"
+      local sideText = (healValue and healValue >= 0.5) and (prefix .. short(healValue)) or nil
+      return short(value), Format.DAMAGE_COLOR, sideText, Format.HEAL_COLOR, "stacked"
     end
   end
   if not db.reduction then reduction = nil end
@@ -1677,7 +1725,7 @@ local function buttonTextOf(view, reduction)
       if #t <= SIDE_MAX_CHARS then sideText = t end
     end
   elseif value then
-    mainText = Format.Short(value)
+    mainText = short(value)
     -- Mana consumables read in the established mana blue (Life Tap's +mana);
     -- healing stays green, damage stays gold.
     if kind == "heal" then mainColor = Format.HEAL_COLOR
@@ -1711,6 +1759,7 @@ end
 -- Filters the view by the "Show" checkboxes, then draws it; an average of past casts (History.lua) is marked with "~".
 local function buttonText(view, reduction)
   view = filterView(view)
+  if db.button == "dps" then view = dpsView(view) end
   local mainText, mainColor, sideText, sideColor, layout = buttonTextOf(view, reduction)
   if mainText and view and view.history then
     mainText = "~" .. mainText

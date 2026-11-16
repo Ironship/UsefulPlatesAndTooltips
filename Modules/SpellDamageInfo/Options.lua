@@ -68,7 +68,7 @@ local SAMPLES = {
     view = { manaOverTime = { total = 835, duration = 24 } } },
   -- a spell the parser cannot read: the average of its last casts (History.lua), marked with ~
   { name = "OPT_SAMPLE_12", icon = "Interface\\Icons\\Spell_Shadow_ShadowBolt", hotkey = "=",
-    view = { history = { casts = 40 }, direct = { min = 412, max = 412, added = 0 } } },
+    view = { history = { casts = 40 }, direct = { min = 412, max = 412, added = 0 }, castTime = 0 } },
 }
 
 local window
@@ -125,6 +125,7 @@ local function sampleText(sample)
     local bonus = db().estimate and not retail and Estimate.DamageBonus(sample.parsed.school, SAMPLE_POWER) or nil
     local coef = sample.spellID and ns.SpellCoefficientsFor and ns.SpellCoefficientsFor(sample.spellID) or nil
     view = Estimate.Apply(sample.parsed, sample.castTime, bonus, nil, coef)
+    if view then view.castTime = sample.castTime or 0 end
   end
   return ns.ButtonText(view, sample.reduction)
 end
@@ -287,6 +288,7 @@ local function buildSettings(area)
   place("button", choice(area, "button", L.OPT_BUTTON, {
     { id = "total", label = L.OPT_BUTTON_TOTAL },
     { id = "direct", label = L.OPT_BUTTON_DIRECT },
+    { id = "dps", label = L.OPT_BUTTON_DPS },
     { id = "off", label = L.OPT_BUTTON_OFF },
   }, { tooltip = L.OPT_BUTTON_TIP }))
   place("size", slider(area, "size", L.OPT_SIZE, ns.SIZE_MIN, ns.SIZE_MAX, SIZE_STEP,

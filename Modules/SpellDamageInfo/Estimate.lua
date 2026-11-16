@@ -138,7 +138,8 @@ function Estimate.Apply(parsed, castTime, damageBonus, healBonus, coef)
 end
 
 -- The number for an action button. mode: "total" (average direct + everything over time),
--- "direct" (average direct only) or "off". Damage wins over healing when a spell has both.
+-- "direct" (average direct only) or "off". ("dps" is the "total" sum of a view whose amounts Core's dpsView already
+-- turned into rates, so it is not a mode here.) Damage wins over healing when a spell has both.
 -- Returns value, "damage" | "heal"; or nil.
 function Estimate.ButtonValue(view, mode)
   if not view or mode == "off" then return nil end
