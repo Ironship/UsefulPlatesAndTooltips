@@ -137,12 +137,14 @@ local function buildSettings(parent)
   y = place(checkRow(parent, "Glow when a spell would kill", "kill",
     "Any spell on your bars whose direct damage is priced (the same estimate as the kill icon on the target "
     .. "frame, so CastPrediction must be on) glows while the target's health is at or below that damage. "
-    .. "Shadow Word: Death and every other damage spell get it this way."), y)
+    .. "The comparison is made by the client, which hides the health from addons. Shadow Word: Death and every "
+    .. "other damage spell get it this way."), y)
   y = place(choiceRow(parent, "Damage counted", "killBasis", BASES,
     "The low end is what the spell is certain to deal, so a glow never lies; the middle glows a little earlier."), y)
-  y = place(checkRow(parent, "Skip targets it kills from full health", "killSkipTrivial",
-    "A spell that would kill the target at full health glows all the time on a weak enemy. With this on, "
-    .. "only a target the spell does not kill at full health gets the glow."), y)
+  y = place(checkRow(parent, "Only once the target is hurt", "killSkipTrivial",
+    "The client hides the target's health and maximum health, so a weak enemy that any spell kills outright "
+    .. "cannot be told from the percent alone. With this on, no glow while the target is at full health "
+    .. "(on a weak enemy it glows from the first hit); off, a spell that kills glows even on a fresh target."), y)
 
   y = section(parent, y, "THE WINDOW")
   y = place(sliderRow(parent, "Execute window", "executePct", 5, 60, 1, "%",

@@ -14,7 +14,7 @@
 --                   after a block, dodge or parry, a Victory Rush after a kill): C_Spell.IsSpellUsable.
 --
 -- group "kill":     not a rule of this table: any spell on a bar whose direct damage CastPrediction can price glows
---                   while the target's health is at or below that damage (Core.lua, killPct). This is what a
+--                   while the target's health is at or below that damage (Core.lua, updateKill). This is what a
 --                   Shadow Word: Death (401955, 1309595, 1309633, 1309635, 1309636) gets: its description in this
 --                   build has no health condition (damage, and a backlash when the target survives), so no rule.
 

@@ -8,10 +8,15 @@
 -- The glow is a frame of ours hanging on the button. Blizzard's own alert manager is never called: it belongs
 -- to secure code (our call would taint it) and its UpdateSpellAlert hides an alert whose spell is not a proc.
 --
--- The target's health is hidden from addons in a fight (UnitHealth and UnitHealthPercent return secret values).
--- UnitHealthPercent(unit, false, curve) hands the percentage to a curve the client evaluates itself, and the
--- result goes straight into SetAlpha, which accepts a secret value: the glow is opaque at or below the share and
--- invisible above it, without the addon ever reading the number. The same call works when the value is readable.
+-- The target's health is hidden from addons (UnitHealth, UnitHealthMax and UnitHealthPercent return secret values,
+-- in a fight and out of it). Two ways to use a hidden value without reading it:
+--   * UnitHealthPercent(unit, false, curve) hands the percentage to a curve the client evaluates itself, and the
+--     result goes straight into SetAlpha, which accepts a secret value: the glow is opaque at or below a share of
+--     health and invisible above it (the rules of Data.lua).
+--   * A StatusBar fills natively by value / maximum, both of which may be secret. The lethal glow sets a very wide
+--     bar to (0, target's health) with the spell's damage as its value, hangs the glow on the end of the fill
+--     and clips it to a window the size of the glow: the fill only reaches the window when the damage is at least
+--     the health, so the glow only shows then. The same idea as the kill icon on the target frame.
 
 local ADDON_NAME, BIT = ...
 local ns = BIT.Module("TriggerGlow")
@@ -376,15 +381,21 @@ local function createGlow(button, kind)
 end
 
 -- Size and tint, applied when the glow is shown and whenever a setting changed.
-local function styleGlow(f, button, groupId)
+local function styleGlow(f, button, groupId, place)
   local w, h = buttonSize(button)
   local scale = clampNumber(cfg().size, 100, 250, 140) / 100
   local rgb = groupId and colorOf(groupId)
   local key = string.format("%d/%d/%.2f/%s", w, h, scale, rgb and table.concat(rgb, ",") or "native")
   if f.styleKey == key then return end
   f.styleKey = key
-  f:ClearAllPoints()
-  f:SetPoint("CENTER", button, "CENTER", 0, 0)
+  local gw, gh = w * scale, h * scale
+  if f.glowKind ~= "blizzard" then gw, gh = gw * 1.35, gh * 1.35 end
+  if place then
+    place(f, gw, gh) -- the lethal glow hangs on its detector instead of on the button
+  else
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", button, "CENTER", 0, 0)
+  end
   if f.glowKind == "blizzard" then
     f:SetSize(w * scale, h * scale)
     local r, g, b = 1, 1, 1
@@ -400,12 +411,13 @@ local function styleGlow(f, button, groupId)
   end
 end
 
-local function showGlow(f)
+local function showGlow(f, noBurst)
   if f.on then return end
   f.on = true
   f:Show()
   if f.glowKind == "blizzard" then
-    if f.ProcStartAnim then f.ProcStartAnim:Play() else f.ProcLoop:Play() end
+    -- the burst flipbook is bigger than the glow and would be cut by the detector's window
+    if f.ProcStartAnim and not noBurst then f.ProcStartAnim:Play() else f.ProcLoop:Play() end
   elseif f.pulse then
     f.pulse:Play()
   end
@@ -524,7 +536,6 @@ local active = {}      -- list of { button, spell, rule (a Data.lua rule or nil)
 local activeBy = {}    -- [button] = entry
 local testUntil = 0
 local ENEMY = { target = "enemy" }
-local maxHealthNoted = false
 
 -- CastPrediction's price of a spell's direct damage, { min, max, value }, or nil: a heal, a pure DoT, a utility
 -- spell, or CastPrediction switched off. The same estimate the kill icon on the target frame compares.
@@ -541,57 +552,140 @@ local function predictDirect(spellID)
   return { min = min, max = max, value = value }
 end
 
--- The target's health share at or below which this spell's damage finishes it, in %, or nil. The share needs the
--- target's maximum health, which the client hides only in a few places (an encounter, a restricted match).
-local function killPct(entry)
-  local pred, c = entry.kill, cfg()
-  if not pred or c.kill == false then return nil end
-  local damage = c.killBasis == "avg" and pred.value or pred.min
-  if type(damage) ~= "number" or damage <= 0 then return nil end
-  local max
-  if type(UnitHealthMax) == "function" then
-    local ok, v = pcall(UnitHealthMax, "target")
-    if ok and not isSecret(v) and type(v) == "number" then max = v end
-  end
-  if not max or max <= 0 then
-    if not maxHealthNoted then
-      maxHealthNoted = true
-      trace("kill glow: the target's maximum health is hidden, so no glow from damage")
-    end
-    return nil
-  end
-  if c.killSkipTrivial ~= false and damage >= max then return nil end
-  return math.min(100, damage / max * 100)
-end
-ns.KillPct = killPct
-
--- Whether the entry's glow is up, and with which opacity.
+-- Whether the entry's rule opens a window, and with which opacity (a number or a secret value).
 local function windowFor(entry)
   local rule, c = entry.rule, cfg()
+  if not rule or not ruleEnabled(rule) then return false end
   if c.combatOnly and ask(UnitAffectingCombat, "player") == false then return false end
-  local ruleOn = rule and ruleEnabled(rule)
-  if ruleOn and not rule.target then
+  if not rule.target then
     if usableNow(entry.spell) == true then return true, opacity() end
+    return false
   end
-  -- Both kinds of window are a share of the target's health: the wider one wins.
-  local pct
-  if ruleOn and rule.target and targetFits(rule) then pct = rulePct(rule) end
-  if entry.kill and targetFits(ENEMY) then
-    local k = killPct(entry)
-    if k and (not pct or k > pct) then pct = k end
-  end
-  if not pct then return false end
+  if not targetFits(rule) then return false end
   if c.needResources and usableNow(entry.spell) == false then return false end
-  local has, a = healthAlpha(pct)
+  local has, a = healthAlpha(rulePct(rule))
   if not has then return false end
   return true, a
+end
+
+---------------------------------------------------------------------------------------------
+-- The lethal glow: a detector per button (see the header)
+---------------------------------------------------------------------------------------------
+
+local DETECT_WIDTH = 10000 -- the bar is this wide, so a fill short of full by 0.3% is already out of the window
+local WHITE = "Interface\\Buttons\\WHITE8X8"
+local detectors = setmetatable({}, { __mode = "k" }) -- [button] = { clip, bar, glows = { blizzard, border }, on }
+
+local function detectorFor(button)
+  local d = detectors[button]
+  if d then return d end
+  local clip = CreateFrame("Frame", nil, button)
+  clip:SetClipsChildren(true)
+  clip:Hide()
+  local bar = CreateFrame("StatusBar", nil, clip)
+  bar:SetStatusBarTexture(WHITE)
+  bar:SetStatusBarColor(0, 0, 0, 0)
+  bar:SetMinMaxValues(0, 1)
+  bar:SetValue(0)
+  d = { clip = clip, bar = bar, glows = {}, on = false }
+  detectors[button] = d
+  return d
+end
+
+local function hideDetector(d)
+  if not d.on then return end
+  d.on = false
+  for _, g in pairs(d.glows) do hideGlow(g) end
+  d.clip:Hide()
+end
+
+-- Does this entry's lethal glow have a reason to be armed? The damage is compared in the client.
+local function killWanted(entry)
+  local c = cfg()
+  if c.kill == false or not entry.kill then return false end
+  if c.combatOnly and ask(UnitAffectingCombat, "player") == false then return false end
+  if not targetFits(ENEMY) then return false end
+  if c.needResources and usableNow(entry.spell) == false then return false end
+  return true
+end
+
+local function killDamage(entry)
+  local pred = entry.kill
+  local damage = cfg().killBasis == "avg" and pred.value or pred.min
+  if type(damage) ~= "number" or damage ~= damage or damage <= 0 then return nil end
+  return damage
+end
+
+local lastKill = setmetatable({}, { __mode = "k" })
+
+local function updateKill(entry, testing)
+  local button = entry.button
+  local d = detectors[button]
+  local damage = entry.kill and killDamage(entry)
+  if not testing and not (damage and killWanted(entry)) then
+    if d and d.on then hideDetector(d) end
+    if lastKill[button] then
+      lastKill[button] = nil
+      trace(string.format("kill detector off on %s", tostring(button:GetName() or "button")))
+    end
+    return
+  end
+  if testing and not entry.kill then
+    if d and d.on then hideDetector(d) end
+    return
+  end
+  d = d or detectorFor(button)
+  local kind = currentStyle()
+  local g = d.glows[kind]
+  if not g then g = createGlow(d.clip, kind); d.glows[kind] = g end
+  for k, other in pairs(d.glows) do
+    if k ~= kind and other.on then hideGlow(other) end
+  end
+  styleGlow(g, button, "kill", function(f, gw, gh)
+    d.clip:ClearAllPoints()
+    d.clip:SetPoint("CENTER", button, "CENTER", 0, 0)
+    d.clip:SetSize(gw, gh)
+    d.bar:ClearAllPoints()
+    d.bar:SetPoint("RIGHT", d.clip, "RIGHT", 0, 0)
+    d.bar:SetSize(DETECT_WIDTH, gh)
+    f:ClearAllPoints()
+    f:SetPoint("RIGHT", d.bar:GetStatusBarTexture(), "RIGHT", 0, 0)
+  end)
+  local alpha = opacity()
+  if testing then
+    d.bar:SetMinMaxValues(0, 1)
+    d.bar:SetValue(1)
+  else
+    -- (0, health) with the damage as the value: the fill is the damage's share of the health, full when it kills.
+    -- The health may be a secret value; it only goes into the bar.
+    local okSet = pcall(function() d.bar:SetMinMaxValues(0, UnitHealth("target", false)) end)
+    if not okSet then
+      if d.on then hideDetector(d) end
+      return
+    end
+    d.bar:SetValue(damage)
+    -- At full health the share cannot be told from a weak target's (its maximum is hidden too): such a target
+    -- is left alone, whatever the damage, when the setting says so.
+    if cfg().killSkipTrivial ~= false then
+      local has, a = healthAlpha(99.5)
+      if has then alpha = a end
+    end
+  end
+  d.clip:Show()
+  showGlow(g, true)
+  g:SetAlpha(alpha)
+  d.on = true
+  if not testing and not lastKill[button] then
+    lastKill[button] = true
+    trace(string.format("kill detector armed on %s (damage %d)", tostring(button:GetName() or "button"), math.floor(damage + 0.5)))
+  end
 end
 
 local lastState = setmetatable({}, { __mode = "k" })
 
 local function updateEntry(entry, testing)
   local on, alpha
-  if testing then on, alpha = true, opacity() else on, alpha = windowFor(entry) end
+  if testing then on, alpha = entry.rule and true or false, opacity() else on, alpha = windowFor(entry) end
   local button = entry.button
   local f = glows[button] and glows[button][currentStyle()]
   if on then
@@ -602,12 +696,13 @@ local function updateEntry(entry, testing)
   elseif f and f.on then
     hideGlow(f)
   end
-  if lastState[button] ~= (on and true or false) then
+  if entry.rule and lastState[button] ~= (on and true or false) then
     lastState[button] = on and true or false
     if not testing then
       trace(string.format("%s %s on %s", on and "GLOW" or "off", entry.label, tostring(button:GetName() or "button")))
     end
   end
+  updateKill(entry, testing)
 end
 
 local function updateAll()
@@ -643,6 +738,12 @@ local function rescan()
     if not by[b] then
       for _, f in pairs(set) do if f.on then hideGlow(f) end end
       lastState[b] = nil
+    end
+  end
+  for b, d in pairs(detectors) do
+    if not by[b] or not by[b].kill then
+      hideDetector(d)
+      lastKill[b] = nil
     end
   end
   local changed = #list ~= #active
@@ -823,10 +924,14 @@ function ns.Probe()
     line = line .. string.format(", usable %s (not enough resource %s)", shown(usable), shown(noPower))
     local pct = e.rule and e.rule.target and rulePct(e.rule) or nil
     if e.kill then
-      local k = killPct(e)
-      line = line .. string.format(", damage %d-%d, kill window %s", e.kill.min, e.kill.max,
-        k and string.format("%.1f%% of the target's health", k) or "none")
-      if k and (not pct or k > pct) then pct = k end
+      local d = detectors[e.button]
+      local damage = killDamage(e)
+      line = line .. string.format(", damage %d-%d (counted %s), kill detector %s", e.kill.min, e.kill.max,
+        damage and string.format("%d", math.floor(damage + 0.5)) or "none", d and d.on and "ARMED" or "idle")
+      if cfg().killSkipTrivial ~= false then
+        local has, a = healthAlpha(99.5)
+        line = line .. string.format(", not-full-health gate %s", has and shown(a) or "n/a")
+      end
     end
     if pct then
       local curve = curveFor(pct, opacity())
