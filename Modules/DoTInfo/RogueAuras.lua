@@ -362,8 +362,11 @@ local function poisonAppearance(entry, spec)
         config.dotColors, config.fillColor, config.fillOpacity = "single", "white", 55
     end
     parts[#parts + 1] = tostring(forever and ns.db.nativeShowAll == true)
-    if spec.gated and not gateReplace() then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
-    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace())
+    -- In place the twin looks like the plain segment; with the diagnostic option on as well it is cyan and the plain
+    -- segment stays, to see where the twin is drawn and whether its fill shows.
+    local probing = forever and ns.db.nativeShowAll == true
+    if spec.gated and (not gateReplace() or probing) then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
+    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace()) .. tostring(probing)
     return config, table.concat(parts, "|")
 end
 
@@ -670,6 +673,9 @@ local function displayContainer(entry, state, unit, enabled, refresh)
     -- Nameplate addons re-level health bars while active; keep native projections above them.
     local level, strata = ask(entry.bar.GetFrameLevel, entry.bar), ask(entry.bar.GetFrameStrata, entry.bar)
     level = type(level) == "number" and level + 5 or 200
+    if forever and state.spec and state.spec.gated and gateReplace() and ns.db.nativeShowAll == true then
+        level, strata = level + 40, "HIGH" -- probing: above whatever else the plate draws
+    end
     if level ~= state.level and pcall(container.SetFrameLevel, container, level) then state.level = level end
     if type(strata) == "string" and strata ~= state.strata
         and pcall(container.SetFrameStrata, container, strata) then state.strata = strata end
@@ -850,7 +856,7 @@ end
 -- Whether the plain segment of this DoT on this plate may stay hidden: only when its aura-gated twin exists, did not
 -- fail and is shown by the game right now. Until then (and whenever anything is off) the plain segment keeps drawing.
 function R.Covers(plate, name)
-    if not gateReplace() then return false end
+    if not gateReplace() or ns.db.nativeShowAll == true then return false end
     local record = plans[plate]
     if not record or record.reverse then return false end
     local entry = byPlate[plate]
@@ -954,12 +960,6 @@ local function describe()
     local function number(value)
         return type(value) == "number" and string.format("%.1f", value) or "none"
     end
-    local function fillWidth(bar)
-        local good, width = pcall(function() return bar:GetStatusBarTexture():GetWidth() end)
-        if not good then return "error" end
-        if secret(width) then return "secret" end
-        return number(width)
-    end
     local listed = 0
     for plate, entry in pairs(byPlate) do
         if listed >= 2 then break end
@@ -972,9 +972,9 @@ local function describe()
         for _, damage in pairs(entry.natives) do
             if damage.spec.gated then
                 hasTwin = true
-                add(string.format("  plate %s twin %s: offset %s total %s width %s | fill px base %s scale %s | shown %s enabled %s failed %s | covers %s",
+                add(string.format("  plate %s twin %s: offset %s total %s width %s | shown %s enabled %s failed %s | covers %s",
                     tostring(entry.unit or "?"), damage.spec.label, number(damage.offset), number(damage.total),
-                    number(damage.width), fillWidth(damage.base), fillWidth(damage.scale), tostring(damage.shown),
+                    number(damage.width), tostring(damage.shown),
                     tostring(damage.enabled), tostring(damage.failed), tostring(R.Covers(plate, damage.spec.luaName))))
             end
         end
