@@ -332,6 +332,12 @@ local function poisonAppearance(entry, spec)
     config.school = spec.school
     config.stacksText = spec.stacked == true and ns.db.nativeStacks == true
     parts[#parts + 1] = tostring(config.stacksText)
+    -- Diagnostic (nativeShowAll): the native segment is white and half transparent, so it can be told from the plain one of the
+    -- same DoT, which is drawn in the DoT's own colour.
+    if forever and ns.db.nativeShowAll == true then
+        config.dotColors, config.fillColor, config.fillOpacity = "single", "white", 55
+    end
+    parts[#parts + 1] = tostring(forever and ns.db.nativeShowAll == true)
     return config, table.concat(parts, "|")
 end
 
