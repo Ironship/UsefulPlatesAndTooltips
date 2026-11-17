@@ -163,6 +163,7 @@ else
         familyID = 2818, nameID = 2818, fallback = "Deadly Poison", size = poisonAmount } } }
 end
 local activeSpecs = {}
+local lastErrors = {} -- [label] = the last setup/update error text, for /upt native
 
 -- Experimental (setting nativeAllDots, Forever): a segment for every DoT in your spellbook that SpellDamageInfo can
 -- size, wherever Lua has no DoT of its own on that mob (the plain segment of the same name always wins).
@@ -271,6 +272,8 @@ local function poisonAppearance(entry, spec)
     config.onPlate = onPlate
     config.name = ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.fallback
     config.school = spec.school
+    config.stacksText = spec.stacked == true and ns.db.nativeStacks == true
+    parts[#parts + 1] = tostring(config.stacksText)
     return config, table.concat(parts, "|")
 end
 
@@ -343,6 +346,14 @@ local function createNativeDamage(entry, spec, config, signature)
                     } })
                     button:SetDurationBar(timer, { direction = direction.RemainingTime })
                     if stacks then button:SetApplicationBar(stacks, { minApplications = 0, maxApplications = MAX_STACKS }) end
+                    if config.stacksText then
+                        -- The game fills this with the stack count; Lua never reads it.
+                        local count = button:CreateFontString(nil, "OVERLAY")
+                        count:SetFont("Fonts\\FRIZQT__.TTF", config.labelSize or 11, "OUTLINE")
+                        count:SetTextColor(1, 1, 1)
+                        count:SetPoint("BOTTOMLEFT", entry.bar, "TOPLEFT", 2, 2)
+                        button:SetApplicationCount(count)
+                    end
                 end)
                 -- Native visibility, timers and formatted damage stay inside the restricted button.
             end,
@@ -353,7 +364,9 @@ local function createNativeDamage(entry, spec, config, signature)
         if scale then pcall(scale.Hide, scale) end
         if container then pcall(container.SetEnabled, container, false); pcall(container.Hide, container) end
         if ns.TraceRogueAura then
-            ns.TraceRogueAura("NATIVE " .. spec.label .. " setup failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
+            local text = type(err) == "string" and not secret(err) and err or "restricted"
+            lastErrors[spec.label] = "setup: " .. text
+            ns.TraceRogueAura("NATIVE " .. spec.label .. " setup failed: " .. text)
         end
         return
     end
@@ -527,13 +540,16 @@ end
 
 local function display(entry, unit, enabled, refresh)
     if not entry then return end
+    if forever and ns.db and ns.db.nativeDots == false then enabled = false end
     local allDots = ns.db and ns.db.nativeAllDots == true
     for _, spec in ipairs(currentSpecs(allDots)) do
         local ok, err = pcall(updateNativeDamage, entry, unit, enabled, spec)
         if not ok and not entry.poisonError then
             entry.poisonError = true
             if ns.TraceRogueAura then
-                ns.TraceRogueAura("NATIVE " .. spec.label .. " update failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
+                local text = type(err) == "string" and not secret(err) and err or "restricted"
+                lastErrors[spec.label] = "update: " .. text
+                ns.TraceRogueAura("NATIVE " .. spec.label .. " update failed: " .. text)
             end
         end
     end
@@ -550,7 +566,14 @@ end
 
 local function update(refresh)
     if not started or not ns.db then return end
-    local markers = ns.db.showMarkers ~= false
+    -- The master switch (nativeDots) also hands traps and Wyvern Sting back to the old rhythm guess in ProcDots.
+    local nativeOn = not forever or ns.db.nativeDots ~= false
+    if forever and ns.ProcDots then
+        for _, spec in ipairs(activeSpecs) do
+            if spec.covers then ns.ProcDots[spec.covers] = nativeOn end
+        end
+    end
+    local markers = ns.db.showMarkers ~= false and nativeOn
     local targetHost, targetBar
     if BIT.Plate and BIT.Plate.UnitFrame then targetHost, targetBar = BIT.Plate.UnitFrame("target")
     else targetHost, targetBar = TargetFrame, healthBar(TargetFrame, false) end
@@ -653,4 +676,39 @@ function R.StartRogueAuras()
     end
     seedPlates()
     update(false)
+end
+
+-- /upt native: what the native segments are doing, one printout for a report.
+local function describe()
+    local lines = {}
+    local function add(text) lines[#lines + 1] = text end
+    local db = ns.db or {}
+    local ok, _, class = pcall(UnitClass, "player")
+    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, class %s",
+        forever and "Forever" or "Retail", tostring(started), tostring(db.nativeDots ~= false),
+        tostring(db.nativeAllDots == true), tostring(db.nativeStacks == true),
+        tostring(ok and not secret(class) and class or "?")))
+    for _, spec in ipairs(currentSpecs(db.nativeAllDots == true)) do
+        local good, size = pcall(function() return spec.size and spec.size() end)
+        add(string.format("  %s%s: size %s", spec.label, spec.generic and " (every DoT)" or "",
+            good and type(size) == "number" and string.format("%.0f", size) or "none"))
+    end
+    local plates, containers = 0, 0
+    for _, entry in pairs(byPlate) do
+        plates = plates + 1
+        for _ in pairs(entry.natives) do containers = containers + 1 end
+    end
+    local onTarget, failed = 0, 0
+    if targetEntry then for _ in pairs(targetEntry.natives) do onTarget = onTarget + 1 end end
+    for _ in pairs(failedHosts) do failed = failed + 1 end
+    add(string.format("  target frame: %d segment(s); nameplates: %d with segments (%d containers); failed hosts: %d",
+        onTarget, plates, containers, failed))
+    for label, text in pairs(lastErrors) do add("  last error " .. label .. " - " .. text) end
+    return lines
+end
+
+if BIT.RegisterCommand and BIT.Say then
+    BIT.RegisterCommand("native", function()
+        for _, line in ipairs(describe()) do BIT.Say(line) end
+    end)
 end

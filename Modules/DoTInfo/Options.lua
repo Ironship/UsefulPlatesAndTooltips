@@ -626,6 +626,13 @@ local function buildTabs()
             .. "points, nothing is drawn). A crit counts as yours when you cast at that mob just before, or, for "
             .. "Deep Wounds, swing at it while alone; the first tick confirms it. Traps (Immolation Trap) are "
             .. "tracked as well." })
+        behavior:checkbox("nativeDots", "Native aura segments", { tooltip = "Deadly Poison, Deep Wound, Ignite, "
+            .. "Righteous Judgement, Immolation Trap, Explosive Trap, Wyvern Sting and Flamestrike are drawn from the real "
+            .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
+            .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
+            .. "Takes effect at once." })
+        behavior:checkbox("nativeStacks", "Deadly Poison stack count", { tooltip = "A small number above the bar's left "
+            .. "end with the stacks of your Deadly Poison on that mob (the game draws it, the addon cannot read it)." })
         behavior:checkbox("nativeAllDots", "Native segment for every DoT (experimental)", { tooltip = "Draws a segment from "
             .. "the real aura (its start, time left and removal) for every damage over time you know, wherever Lua has no DoT "
             .. "of its own on that mob: other mobs, mobs out of sight, effects nothing announces. The size comes from the "
