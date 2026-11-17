@@ -169,6 +169,8 @@ local lastErrors = {} -- [label] = the last setup/update error text, for /upt na
 -- size, wherever Lua has no DoT of its own on that mob (the plain segment of the same name always wins).
 local GENERIC_MAX = 14
 local generic, combined
+local genericMs, genericBuilds, genericExamined = nil, 0, 0
+local clock = debugprofilestop or function() return GetTime() * 1000 end
 
 local function spellbookIDs()
     local ids, seen = {}, {}
@@ -215,7 +217,9 @@ local function buildGeneric()
         covered[ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.fallback] = true
     end
     local groups = {}
-    for _, id in ipairs(spellbookIDs()) do
+    local book = spellbookIDs()
+    genericExamined = #book
+    for _, id in ipairs(book) do
         local name = ask(C_Spell and C_Spell.GetSpellName, id)
         if type(name) == "string" and not covered[id] and not covered[name] and not ignored[name]
             and not (ns.TRAP_DOTS and ns.TRAP_DOTS[name]) and not (ns.DELAYED_DOTS and ns.DELAYED_DOTS[name]) then
@@ -248,7 +252,11 @@ end
 -- The segments to update now: the fixed ones, plus the generic ones while the setting is on.
 local function currentSpecs(allDots)
     if not forever or not allDots then return activeSpecs end
-    if not generic then generic, combined = buildGeneric(), nil end
+    if not generic then
+        local t0 = clock()
+        generic, combined = buildGeneric(), nil
+        genericMs, genericBuilds = clock() - t0, genericBuilds + 1
+    end
     if not combined then
         combined = {}
         for _, spec in ipairs(activeSpecs) do combined[#combined + 1] = spec end
@@ -375,6 +383,7 @@ local function createNativeDamage(entry, spec, config, signature)
 end
 
 local function updateNativeOffset(entry, unit, enabled, damage)
+    if damage.failed then return end
     local offset = enabled and ns.nativePoisonBase and ns.nativePoisonBase(unit, entry.parent, entry.bar) or 0
     if offset ~= damage.offset or damage.total ~= damage.offsetTotal then
         damage.base:SetValue(offset)
@@ -385,7 +394,18 @@ end
 
 local function updatePoisonOffset(entry, unit, enabled)
     if not entry or not entry.natives then return end
-    for _, damage in pairs(entry.natives) do updateNativeOffset(entry, unit, enabled, damage) end
+    for _, damage in pairs(entry.natives) do
+        -- Called from Core's frame update, outside any pcall of ours: an error here would reach the player's error
+        -- window every frame. The segment is switched off for good instead and the reason kept for /upt native.
+        local ok, err = pcall(updateNativeOffset, entry, unit, enabled, damage)
+        if not ok then
+            damage.failed = true
+            pcall(damage.container.Hide, damage.container)
+            local text = type(err) == "string" and not secret(err) and err or "restricted"
+            lastErrors[damage.spec.label] = "offset: " .. text
+            if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. damage.spec.label .. " offset failed: " .. text) end
+        end
+    end
 end
 
 -- What one application of the effect does over its whole duration, or nil when the segment has nothing to show.
@@ -431,7 +451,7 @@ local function updateNativeDamage(entry, unit, enabled, spec)
         entry.signatures[spec.key] = signature
     end
     local damage = entry.natives[spec.key]
-    if not damage then return end
+    if not damage or damage.failed then return end
     local total = nativeTotal(unit, spec, enabled)
     local label = not spec.stacked and ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
@@ -544,6 +564,13 @@ local function display(entry, unit, enabled, refresh)
     local allDots = ns.db and ns.db.nativeAllDots == true
     for _, spec in ipairs(currentSpecs(allDots)) do
         local ok, err = pcall(updateNativeDamage, entry, unit, enabled, spec)
+        if not ok then
+            local broken = entry.natives[spec.key]
+            if broken then
+                broken.failed = true
+                pcall(broken.container.Hide, broken.container)
+            end
+        end
         if not ok and not entry.poisonError then
             entry.poisonError = true
             if ns.TraceRogueAura then
@@ -556,7 +583,7 @@ local function display(entry, unit, enabled, refresh)
     displayContainer(entry, entry, unit, enabled, refresh)
     for _, damage in pairs(entry.natives) do
         -- Generic segments go dark with their setting; the container stays for when it is switched on again.
-        displayContainer(entry, damage, unit, enabled and (not damage.spec.generic or allDots), refresh)
+        displayContainer(entry, damage, unit, enabled and not damage.failed and (not damage.spec.generic or allDots), refresh)
     end
 end
 
@@ -713,6 +740,18 @@ local function describe()
     for _ in pairs(failedHosts) do failed = failed + 1 end
     add(string.format("  target frame: %d segment(s); nameplates: %d with segments (%d containers); failed hosts: %d",
         onTarget, plates, containers, failed))
+    local broken = 0
+    for _, entry in pairs(byPlate) do
+        for _, damage in pairs(entry.natives) do if damage.failed then broken = broken + 1 end end
+    end
+    if targetEntry then
+        for _, damage in pairs(targetEntry.natives) do if damage.failed then broken = broken + 1 end end
+    end
+    if broken > 0 then add("  switched off after an error: " .. broken .. " segment(s)") end
+    if genericMs then
+        add(string.format("  every-DoT list: %.1f ms to build from %d spellbook spells (built %d time(s))",
+            genericMs, genericExamined, genericBuilds))
+    end
     for label, text in pairs(lastErrors) do add("  last error " .. label .. " - " .. text) end
     return lines
 end
