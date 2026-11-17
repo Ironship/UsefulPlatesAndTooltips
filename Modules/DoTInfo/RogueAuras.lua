@@ -164,6 +164,7 @@ else
 end
 local activeSpecs = {}
 local lastErrors = {} -- [label] = the last setup/update error text, for /upt native
+local LANE_GAP, LANE_HEIGHT = 2, 6 -- diagnostic row under the bar (nativeShowAll)
 
 -- Experimental (setting nativeAllDots, Forever): a segment for every DoT in your spellbook that SpellDamageInfo can
 -- size, wherever Lua has no DoT of its own on that mob (the plain segment of the same name always wins).
@@ -216,10 +217,14 @@ local genericMaxSlice = 0
 local lastBookSig, genericSkipped = nil, 0
 
 local function bookSignature(book)
-    local sum = 0
-    for _, id in ipairs(book) do sum = (sum * 31 + id) % 2147483647 end
-    return #book .. ":" .. sum
+    local sum, squares = 0, 0
+    for _, id in ipairs(book) do
+        sum = sum + id
+        squares = (squares + id * id) % 2147483647
+    end
+    return #book .. ":" .. sum .. ":" .. squares
 end
+local genericSizes = {} -- how many spells each build of the every-DoT list read, for /upt native
 
 local function startGenericBuild()
     local covered = {}
@@ -243,6 +248,8 @@ local function finishGenericBuild()
     end
     generic, combined = specs, nil
     lastBookSig = building.sig
+    genericSizes[#genericSizes + 1] = #building.book
+    if #genericSizes > 8 then table.remove(genericSizes, 1) end
     genericMs, genericBuilds = building.ms, genericBuilds + 1
     building = nil
 end
@@ -350,7 +357,7 @@ local function createNativeDamage(entry, spec, config, signature)
         if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " duration formatting unavailable") end
         return
     end
-    local scale, base, container, formatter, initialized, initializerError
+    local scale, base, container, formatter, initialized, initializerError, lane
     local ok, err = pcall(function()
         -- This plain HP scale stays outside restricted aura buttons. Its fill supplies native geometry.
         for _, key in ipairs({ spec.key .. "Scale", spec.key .. "Base" }) do
@@ -365,6 +372,18 @@ local function createNativeDamage(entry, spec, config, signature)
             end
         end
         scale, base = entry[spec.key .. "Scale"], entry[spec.key .. "Base"]
+        -- Diagnostic (nativeShowAll): the native segment gets its own thin row under the bar and starts at its left edge, so
+        -- its length can be compared by eye with the plain segment of the same DoT on the bar.
+        lane = forever and ns.db.nativeShowAll == true
+        if forever then -- Retail's bars are only ever placed when they are made
+            for _, geometry in ipairs({ scale, base }) do
+                geometry:ClearAllPoints()
+                if lane then
+                    geometry:SetPoint("TOPLEFT", entry.bar, "BOTTOMLEFT", 0, -LANE_GAP)
+                    geometry:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, -(LANE_GAP + LANE_HEIGHT))
+                else geometry:SetAllPoints(entry.bar) end
+            end
+        end
         container = CreateFrame("AuraContainer", nil, entry.parent, "CustomAuraContainerTemplate")
         container:SetSize(1, 1)
         container:SetPoint("BOTTOMLEFT", entry.bar, "TOPLEFT", 0, 4)
@@ -379,8 +398,9 @@ local function createNativeDamage(entry, spec, config, signature)
                     button:SetPoint("BOTTOMRIGHT", scale:GetStatusBarTexture(), "BOTTOMRIGHT")
                     local clip = CreateFrame("Frame", nil, button, "DisableUntrustedLayoutScriptsTemplate")
                     local padding = (config.glowSize or 0) + (config.outlineThickness or 1)
-                    clip:SetPoint("TOPLEFT", entry.bar, "TOPLEFT", 0, padding)
-                    clip:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, -padding)
+                    local frame = lane and base or entry.bar
+                    clip:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, padding)
+                    clip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -padding)
                     clip:SetClipsChildren(true)
                     local timer = CreateFrame("StatusBar", nil, clip, "DisableUntrustedLayoutScriptsTemplate")
                     local stacks
@@ -435,12 +455,12 @@ local function createNativeDamage(entry, spec, config, signature)
         return
     end
     if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " damage display ready") end
-    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature, spec = spec }
+    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature, spec = spec, lane = lane }
 end
 
 local function updateNativeOffset(entry, unit, enabled, damage)
     if damage.failed then return end
-    local offset = enabled and ns.nativePoisonBase and ns.nativePoisonBase(unit, entry.parent, entry.bar) or 0
+    local offset = enabled and not damage.lane and ns.nativePoisonBase and ns.nativePoisonBase(unit, entry.parent, entry.bar) or 0
     if offset ~= damage.offset or damage.total ~= damage.offsetTotal then
         damage.base:SetValue(offset)
         damage.scale:SetValue(damage.width and (damage.total or 0) or offset + (damage.total or 0))
@@ -538,7 +558,7 @@ local function updateNativeDamage(entry, unit, enabled, spec, entries)
                 damage.scale:SetPoint("TOPLEFT", damage.base:GetStatusBarTexture(), "TOPRIGHT")
                 damage.scale:SetPoint("BOTTOMLEFT", damage.base:GetStatusBarTexture(), "BOTTOMRIGHT")
                 damage.scale:SetWidth(width)
-            else damage.scale:SetAllPoints(entry.bar) end
+            else damage.scale:SetAllPoints(damage.lane and damage.base or entry.bar) end
             damage.width, damage.offset = width, nil
         end
     end
@@ -828,6 +848,7 @@ local function describe()
     if genericMs then
         add(string.format("  every-DoT list: %.1f ms in all (largest slice %.1f ms) from %d spellbook spells (built %d time(s), %d skipped as unchanged)",
             genericMs, genericMaxSlice, genericExamined, genericBuilds, genericSkipped))
+        add("  spells read by each build: " .. table.concat(genericSizes, ", "))
     end
     for label, text in pairs(lastErrors) do add("  last error " .. label .. " - " .. text) end
     return lines
