@@ -950,6 +950,40 @@ local function describe()
             end
         end
     end
+    -- Numbers for a look at the twins that draw nameplate segments in place of the plain ones (nativeGateReplace).
+    local function number(value)
+        return type(value) == "number" and string.format("%.1f", value) or "none"
+    end
+    local function fillWidth(bar)
+        local good, width = pcall(function() return bar:GetStatusBarTexture():GetWidth() end)
+        if not good then return "error" end
+        if secret(width) then return "secret" end
+        return number(width)
+    end
+    local listed = 0
+    for plate, entry in pairs(byPlate) do
+        if listed >= 2 then break end
+        local record = plans[plate]
+        local planned = 0
+        if record then
+            for _, item in pairs(record.items) do if item.damage > 0 then planned = planned + 1 end end
+        end
+        local hasTwin = false
+        for _, damage in pairs(entry.natives) do
+            if damage.spec.gated then
+                hasTwin = true
+                add(string.format("  plate %s twin %s: offset %s total %s width %s | fill px base %s scale %s | shown %s enabled %s failed %s | covers %s",
+                    tostring(entry.unit or "?"), damage.spec.label, number(damage.offset), number(damage.total),
+                    number(damage.width), fillWidth(damage.base), fillWidth(damage.scale), tostring(damage.shown),
+                    tostring(damage.enabled), tostring(damage.failed), tostring(R.Covers(plate, damage.spec.luaName))))
+            end
+        end
+        if hasTwin or record then
+            add(string.format("  plate %s plan: %d DoT(s) drawn, age %s s, reverse %s", tostring(entry.unit or "?"), planned,
+                record and number(GetTime() - record.at) or "none", tostring(record and record.reverse)))
+            listed = listed + 1
+        end
+    end
     local onTarget, failed = 0, 0
     if targetEntry then for _ in pairs(targetEntry.natives) do onTarget = onTarget + 1 end end
     for _ in pairs(failedHosts) do failed = failed + 1 end
