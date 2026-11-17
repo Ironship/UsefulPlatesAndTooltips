@@ -647,7 +647,15 @@ local function update(refresh)
     end
 end
 
+local lateTry
 function R.UpdateRogueAuras()
+    if not started and forever and ns.db and ns.db.nativeAllDots == true then
+        local now = GetTime()
+        if not lateTry or now - lateTry >= 5 then
+            lateTry = now
+            R.StartRogueAuras()
+        end
+    end
     update(false)
 end
 
@@ -668,7 +676,9 @@ end
 function R.StartRogueAuras()
     if started or ns.off or not ns.db then return end
     local ok, _, class = pcall(UnitClass, "player")
-    if not ok or secret(class) or type(class) ~= "string" or not SPECS[class] then return end
+    if not ok or secret(class) or type(class) ~= "string" then return end
+    -- A class with no fixed segment (warlock, priest, druid, shaman) only has the every-DoT layer.
+    if not SPECS[class] and not (forever and ns.db.nativeAllDots == true) then return end
     if not C_XMLUtil or type(C_XMLUtil.GetTemplateInfo) ~= "function" then return end
     if not events then
         events = CreateFrame("Frame")
@@ -709,7 +719,7 @@ function R.StartRogueAuras()
     end
     if ask(C_XMLUtil.GetTemplateInfo, "CustomAuraContainerTemplate") == nil then return end
     started = true
-    activeSpecs = SPECS[class]
+    activeSpecs = SPECS[class] or {}
     -- The segment now draws what ProcDots would only guess from hits: it stops arming those guesses.
     for _, spec in ipairs(activeSpecs) do
         if spec.covers and ns.ProcDots then ns.ProcDots[spec.covers] = true end
