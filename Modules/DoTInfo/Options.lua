@@ -637,13 +637,13 @@ local function buildTabs()
             .. "after you run away, a DoT is dispelled or resisted, it disappears at once instead of a few seconds later. "
             .. "The addon never reads the aura. Only DoTs whose spell puts the aura on the target itself are drawn this "
             .. "way (not Curse of Agony, Siphon Life, traps, poisons), and only with a colour per DoT (not \"One colour\"). "
-            .. "The kill icon and the damage number still use the addon's own numbers. Off by default." })
+            .. "The kill icon and the damage number still use the addon's own numbers. On by default in this beta." })
         behavior:checkbox("nativeGate", "Aura-gated plain segment (experiment)", { tooltip = "An experiment: a second thin "
             .. "row under the bar (cyan) as long as the addon's own remaining damage of a DoT it draws (so it drops tick by "
             .. "tick like the segment on the bar), but shown only while the real aura is on the mob: the game shows and hides "
             .. "it, the addon never reads the aura. Watch it when a mob resets after you run away, a DoT is dispelled or "
-            .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. Off by "
-            .. "default." })
+            .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. On by "
+            .. "default in this beta." })
         behavior:checkbox("nativeShowAll", "Native next to plain segments (diagnostic)", { tooltip = "For checking the "
             .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
             .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "
@@ -655,7 +655,7 @@ local function buildTabs()
             .. "the real aura (its start, time left and removal) for every damage over time you know, wherever Lua has no DoT "
             .. "of its own on that mob: other mobs, mobs out of sight, effects nothing announces. The size comes from the "
             .. "spell description and your stats. One or two extra aura frames per spell on every hostile nameplate: check "
-            .. "/upt perf before keeping it on. Off by default. The spells of \"Native aura segments\" are drawn this "
+            .. "/upt perf before keeping it on. On by default in this beta. The spells of \"Native aura segments\" are drawn this "
             .. "way whenever that option is on." })
         behavior:checkbox("deathMark", "Death Mark (experimental)", { tooltip = "Rogues: shows what Death Mark has "
             .. "stored so far as one more segment, until it goes off 6 s after the finisher, never above the cap in its "
