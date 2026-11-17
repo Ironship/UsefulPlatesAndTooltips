@@ -216,6 +216,7 @@ function P.TargetFrame(parent, opts)
     healthBack:SetColorTexture(0.25, 0.08, 0.08, 1)
   end
   addHealthMask(mock, healthBar, "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Mask", -1, 6)
+  healthBar.uptBarInset = { 3, 2 } -- as the game's Camelot frame: the bar is 20 tall, the part the player sees 15 (Plate.BarInset)
   local out = { frame = mock, healthBar = healthBar, bar = healthBar, portrait = portrait, name = nameText,
     level = levelText, host = { healthBar = healthBar, portrait = portrait, layerFrame = opts.layerFrame } }
   if opts.text ~= false then
@@ -292,6 +293,7 @@ function P.PlayerFrame(parent, opts)
     healthBack:SetColorTexture(0.05, 0.2, 0.05, 1)
   end
   addHealthMask(mock, healthBar, "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Mask", -2, 6)
+  healthBar.uptBarInset = { 3, 2 } -- the same Camelot geometry as the target frame (Plate.BarInset)
   local out = { frame = mock, healthBar = healthBar, bar = healthBar, portrait = portrait, name = nameText,
     host = { healthBar = healthBar, portrait = portrait, layerFrame = opts.layerFrame } }
   if opts.text ~= false then

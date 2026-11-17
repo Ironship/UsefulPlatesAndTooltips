@@ -163,6 +163,10 @@ end
 
 function Plate.ReadBarInset(bar)
   local ok, top, bottom = pcall(function()
+    -- The settings previews' mock bars (Core/Preview.lua) say so themselves: their parent is the whole mock frame, not a
+    -- container with a mask of the bar's width, so the measurement below finds nothing.
+    local declared = bar.uptBarInset
+    if type(declared) == "table" then return declared[1], declared[2] end
     local container = bar:GetParent()
     if type(container) ~= "table" or container.HealthBarMask == nil then return 0, 0 end
     local values = { bar:GetTop(), bar:GetBottom(), bar:GetLeft(), bar:GetRight(),

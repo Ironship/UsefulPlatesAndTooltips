@@ -2813,7 +2813,7 @@ end
 function ns.anchorMarker()
     if not healthBar then return end
     local top, bottom = 0, 0
-    if not previewHost and BIT.Plate and BIT.Plate.BarInset then top, bottom = BIT.Plate.BarInset(healthBar) end
+    if BIT.Plate and BIT.Plate.BarInset then top, bottom = BIT.Plate.BarInset(healthBar) end
     if ns._anchoredBar == healthBar and ns._anchoredTop == top and ns._anchoredBottom == bottom then return end
     ns._anchoredBar, ns._anchoredTop, ns._anchoredBottom = healthBar, top, bottom
     remainingBar:ClearAllPoints()
