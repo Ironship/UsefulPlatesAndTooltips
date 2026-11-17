@@ -35,6 +35,12 @@ local function plain(value, kind)
     return not secret(value) and type(value) == kind
 end
 
+-- The error text of a failed pcall for the trace (a secret or non-string error says only that).
+local function errorText(err)
+    if type(err) ~= "string" or secret(err) then return "restricted" end
+    return (err:gsub("%s+", " "):sub(1, 200))
+end
+
 local function boolean(fn, unit)
     if type(fn) ~= "function" then return end
     local ok, value = pcall(fn, unit)
@@ -208,7 +214,7 @@ local function scan(unit)
         for _, aura in ipairs(auras) do unavailable = observe(unit, aura, true, false, seen) or unavailable end
         return unavailable
     end)
-    if not ok then reason = "aura access denied" end
+    if not ok then reason = "aura access denied: " .. errorText(reason) end
     if reason then report(unit, reason) end
     -- An idle, visible NPC has left combat even when Retail still restricts its aura list.
     -- Keep effects actually read in a partial scan; an unavailable scan alone never clears PvP/combat.
@@ -274,8 +280,11 @@ local function update(unit, updateInfo)
         ns.RemoveRogueAuras(unit, nil, ids)
         return unavailable
     end)
-    if not ok then reason = "aura access denied" end
-    if reason then scan(unit) end
+    if not ok then reason = "aura update error: " .. errorText(reason) end
+    if reason then
+        report(unit, reason)
+        scan(unit)
+    end
 end
 
 function E.Start(unitKey)
