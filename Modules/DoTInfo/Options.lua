@@ -637,8 +637,8 @@ local function buildTabs()
             .. "the real aura (its start, time left and removal) for every damage over time you know, wherever Lua has no DoT "
             .. "of its own on that mob: other mobs, mobs out of sight, effects nothing announces. The size comes from the "
             .. "spell description and your stats. One or two extra aura frames per spell on every hostile nameplate: check "
-            .. "/upt perf before keeping it on. Off by default. Deadly Poison, Deep Wound, Ignite, Righteous Judgement, "
-            .. "Immolation Trap, Explosive Trap, Flamestrike and Wyvern Sting are always drawn this way." })
+            .. "/upt perf before keeping it on. Off by default. The spells of \"Native aura segments\" are drawn this "
+            .. "way whenever that option is on." })
         behavior:checkbox("deathMark", "Death Mark (experimental)", { tooltip = "Rogues: shows what Death Mark has "
             .. "stored so far as one more segment, until it goes off 6 s after the finisher, never above the cap in its "
             .. "description. Garrote and Rupture ticks count twice. Experimental, off by default: the game doesn't say "
