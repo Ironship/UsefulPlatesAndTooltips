@@ -366,7 +366,8 @@ local function poisonAppearance(entry, spec)
     -- segment stays, to see where the twin is drawn and whether its fill shows.
     local probing = forever and ns.db.nativeShowAll == true
     if spec.gated and (not gateReplace() or probing) then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
-    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace()) .. tostring(probing)
+    config.fillAbove = forever and spec.gated == true and gateReplace()
+    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace()) .. tostring(probing) .. tostring(config.fillAbove)
     return config, table.concat(parts, "|")
 end
 

@@ -3198,7 +3198,14 @@ function ns.stylePoisonSegment(timer, health, config)
     if color then r, g, b = color[1], color[2], color[3] end
     local poisonSpan = timer:GetStatusBarTexture()
     timer:SetStatusBarColor(0, 0, 0, 0)
-    local texture = timer:CreateTexture(nil, "ARTWORK")
+    local fillHost = timer
+    if config.fillAbove then
+        -- The fill gets a frame of its own above the bar, like the outline below: a fill that is a region of the bar
+        -- itself was never seen on a nameplate (the outline, a child frame, was).
+        fillHost = CreateFrame("Frame", nil, timer, "DisableUntrustedLayoutScriptsTemplate")
+        fillHost:SetAllPoints(timer)
+    end
+    local texture = fillHost:CreateTexture(nil, "ARTWORK")
     texture:SetPoint("TOPLEFT", poisonSpan, "TOPLEFT")
     texture:SetPoint("BOTTOMRIGHT", poisonSpan, "BOTTOMRIGHT")
     texture:SetTexture((style.path and not style.gradient) and style.path or WHITE,
