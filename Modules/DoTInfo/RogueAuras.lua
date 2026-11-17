@@ -77,11 +77,32 @@ local function initialize(button)
     button:SetApplicationCount(count)
 end
 
+local function known(id)
+    return ask(IsSpellKnown, id) == true or ask(IsPlayerSpell, id) == true
+end
+
+-- The damage over time of a spell as SpellDamageInfo reads it (description plus your stats): the rank you cast last,
+-- else the highest rank you know. `castIDs` is an array of the spell's rank ids, lowest first.
+local function dotTotal(castIDs)
+    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+    if type(sdi) ~= "table" or type(sdi.Compute) ~= "function" then return nil end
+    local id = ns.ProcDots and ns.ProcDots.LastCastOf and ns.ProcDots.LastCastOf(castIDs)
+    if not id then
+        for index = #castIDs, 1, -1 do
+            if known(castIDs[index]) then id = castIDs[index]; break end
+        end
+    end
+    if not id then return nil end
+    local ok, view = pcall(sdi.Compute, id, false)
+    local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table" and tonumber(view.dot.total)
+    return dot and dot > 0 and dot or nil
+end
+
 local function poisonAmount()
     local coating = 2823
     if forever then
         for _, id in ipairs(COATINGS) do
-            if ask(IsSpellKnown, id) == true then coating = id; break end
+            if known(id) then coating = id; break end
         end
     end
     local desc = ask(C_Spell and C_Spell.GetSpellDescription, coating)
@@ -111,9 +132,17 @@ if forever then
         WARRIOR = { { key = "deepWounds", slot = "deepWounds", label = "DEEP WOUNDS", ids = { [412609] = true },
             school = 1, luaName = "Deep Wounds", nameID = 412609, fallback = "Deep Wounds", setting = "procDots",
             size = function() return procSize("proc") end } },
-        MAGE = { { key = "ignite", slot = "ignite", label = "IGNITE", ids = { [412538] = true }, school = 4,
-            luaName = "Ignite", nameID = 412538, fallback = "Ignite", setting = "procDots",
-            size = function() return procSize("proc") end } },
+        MAGE = {
+            { key = "ignite", slot = "ignite", label = "IGNITE", ids = { [412538] = true }, school = 4,
+                luaName = "Ignite", nameID = 412538, fallback = "Ignite", setting = "procDots",
+                size = function() return procSize("proc") end },
+            -- Lua ignores the area spells (ns.IGNORED_SPELLS): every mob the pillar burns shows its own segment.
+            { key = "flamestrike", slot = "flamestrike", label = "FLAMESTRIKE", school = 4, nameID = 2120,
+                fallback = "Flamestrike", ids = { [2120] = true, [2121] = true, [8422] = true, [8423] = true,
+                    [10215] = true, [10216] = true },
+                castIDs = { 2120, 2121, 8422, 8423, 10215, 10216 },
+                size = function() return dotTotal({ 2120, 2121, 8422, 8423, 10215, 10216 }) end },
+        },
         PALADIN = { { key = "judgement", slot = "judgement", label = "JUDGEMENT", ids = { [440675] = true }, school = 2,
             luaName = "Righteous Judgement", nameID = 440675, fallback = "Righteous Judgement", setting = "procDots",
             size = function() return procSize("proc") end } },
@@ -121,6 +150,9 @@ if forever then
             { key = "trap", slot = "trap", label = "TRAP", ids = { [13797] = true, [14298] = true, [14299] = true,
                 [14300] = true, [14301] = true }, school = 4, covers = "nativeTraps", nameID = 13797,
                 fallback = "Immolation Trap", setting = "procDots", size = function() return procSize("trap") end },
+            { key = "explosive", slot = "explosive", label = "EXPLOSIVE TRAP", school = 4, nameID = 13812,
+                fallback = "Explosive Trap", ids = { [13812] = true, [14314] = true, [14315] = true },
+                castIDs = { 13813, 14316, 14317 }, size = function() return dotTotal({ 13813, 14316, 14317 }) end },
             { key = "wyvern", slot = "wyvern", label = "WYVERN", ids = { [24336] = true }, school = 8,
                 covers = "nativeDelayed", nameID = 24336, fallback = "Wyvern Sting", setting = "procDots",
                 size = function() return procSize("delayed") end },
@@ -131,6 +163,98 @@ else
         familyID = 2818, nameID = 2818, fallback = "Deadly Poison", size = poisonAmount } } }
 end
 local activeSpecs = {}
+
+-- Experimental (setting nativeAllDots, Forever): a segment for every DoT in your spellbook that SpellDamageInfo can
+-- size, wherever Lua has no DoT of its own on that mob (the plain segment of the same name always wins).
+local GENERIC_MAX = 14
+local generic, combined
+
+local function spellbookIDs()
+    local ids, seen = {}, {}
+    local function add(id)
+        if not secret(id) and type(id) == "number" and not seen[id] then seen[id] = true; ids[#ids + 1] = id end
+    end
+    if C_SpellBook and type(C_SpellBook.GetNumSpellBookSkillLines) == "function" then
+        local bank = (type(Enum) == "table" and type(Enum.SpellBookSpellBank) == "table" and Enum.SpellBookSpellBank.Player) or 0
+        local lines = ask(C_SpellBook.GetNumSpellBookSkillLines)
+        for line = 1, type(lines) == "number" and lines or 0 do
+            local info = ask(C_SpellBook.GetSpellBookSkillLineInfo, line)
+            if type(info) == "table" and type(info.itemIndexOffset) == "number" and type(info.numSpellBookItems) == "number" then
+                for index = info.itemIndexOffset + 1, info.itemIndexOffset + info.numSpellBookItems do
+                    local item = ask(C_SpellBook.GetSpellBookItemInfo, index, bank)
+                    if type(item) == "table" then add(item.spellID) end
+                end
+            end
+        end
+    elseif type(GetNumSpellTabs) == "function" and type(GetSpellTabInfo) == "function"
+        and type(GetSpellBookItemInfo) == "function" then
+        local tabs = ask(GetNumSpellTabs)
+        for tab = 1, type(tabs) == "number" and tabs or 0 do
+            local ok, _, _, offset, count = pcall(GetSpellTabInfo, tab)
+            if ok and type(offset) == "number" and type(count) == "number" then
+                for index = offset + 1, offset + count do
+                    local okItem, kind, id = pcall(GetSpellBookItemInfo, index, "spell")
+                    if okItem and kind == "SPELL" then add(id) end
+                end
+            end
+        end
+    end
+    return ids
+end
+
+local function buildGeneric()
+    local list = {}
+    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+    if type(sdi) ~= "table" or type(sdi.Compute) ~= "function" then return list end
+    local ignored = ns.IGNORED_SPELLS or {}
+    local covered = {}
+    for _, spec in ipairs(activeSpecs) do
+        for id in pairs(spec.ids) do covered[id] = true end
+        for _, id in ipairs(spec.castIDs or {}) do covered[id] = true end
+        covered[ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.fallback] = true
+    end
+    local groups = {}
+    for _, id in ipairs(spellbookIDs()) do
+        local name = ask(C_Spell and C_Spell.GetSpellName, id)
+        if type(name) == "string" and not covered[id] and not covered[name] and not ignored[name]
+            and not (ns.TRAP_DOTS and ns.TRAP_DOTS[name]) and not (ns.DELAYED_DOTS and ns.DELAYED_DOTS[name]) then
+            local group = groups[name]
+            local ok, view = pcall(sdi.Compute, id, false)
+            local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table"
+                and tonumber(view.dot.total)
+            if dot and dot > 0 then
+                if not group then
+                    group = { name = name, ids = {}, castIDs = {}, school = type(view.school) == "number" and view.school or 1 }
+                    groups[name] = group
+                    list[#list + 1] = group
+                end
+                group.ids[id] = true
+                group.castIDs[#group.castIDs + 1] = id
+            end
+        end
+    end
+    local specs = {}
+    for _, group in ipairs(list) do
+        if #specs >= GENERIC_MAX then break end
+        table.sort(group.castIDs)
+        specs[#specs + 1] = { key = "g" .. group.castIDs[1], slot = "g" .. group.castIDs[1], label = group.name:upper(),
+            ids = group.ids, school = group.school, luaName = group.name, nameID = group.castIDs[1],
+            fallback = group.name, generic = true, size = function() return dotTotal(group.castIDs) end }
+    end
+    return specs
+end
+
+-- The segments to update now: the fixed ones, plus the generic ones while the setting is on.
+local function currentSpecs(allDots)
+    if not forever or not allDots then return activeSpecs end
+    if not generic then generic, combined = buildGeneric(), nil end
+    if not combined then
+        combined = {}
+        for _, spec in ipairs(activeSpecs) do combined[#combined + 1] = spec end
+        for _, spec in ipairs(generic) do combined[#combined + 1] = spec end
+    end
+    return combined
+end
 
 local function poisonAppearance(entry, spec)
     local config, parts = {}, {}
@@ -255,7 +379,17 @@ end
 local function nativeTotal(unit, spec, enabled)
     if not enabled then return nil end
     if spec.setting and ns.db[spec.setting] == false then return nil end
-    local total = spec.size and spec.size()
+    local total
+    if forever then
+        -- Description and stats change slowly; the segment asks every refresh for every plate.
+        local now = GetTime()
+        local cached = spec.cached
+        if not cached or now - cached.at >= 1 then
+            cached = { at = now, value = spec.size and spec.size() }
+            spec.cached = cached
+        end
+        total = cached.value
+    else total = spec.size and spec.size() end
     if type(total) ~= "number" or total ~= total or total <= 0 or total >= math.huge then return nil end
     if spec.stacked then total = total * MAX_STACKS end -- the bar's full width; no number: the stacks are hidden
     if ns.dotBreakdownForUnit then
@@ -393,7 +527,8 @@ end
 
 local function display(entry, unit, enabled, refresh)
     if not entry then return end
-    for _, spec in ipairs(activeSpecs) do
+    local allDots = ns.db and ns.db.nativeAllDots == true
+    for _, spec in ipairs(currentSpecs(allDots)) do
         local ok, err = pcall(updateNativeDamage, entry, unit, enabled, spec)
         if not ok and not entry.poisonError then
             entry.poisonError = true
@@ -403,7 +538,10 @@ local function display(entry, unit, enabled, refresh)
         end
     end
     displayContainer(entry, entry, unit, enabled, refresh)
-    for _, damage in pairs(entry.natives) do displayContainer(entry, damage, unit, enabled, refresh) end
+    for _, damage in pairs(entry.natives) do
+        -- Generic segments go dark with their setting; the container stays for when it is switched on again.
+        displayContainer(entry, damage, unit, enabled and (not damage.spec.generic or allDots), refresh)
+    end
 end
 
 local function hostile(unit)
@@ -475,7 +613,9 @@ function R.StartRogueAuras()
             "NAME_PLATE_UNIT_REMOVED", "UNIT_FACTION", "UNIT_AURA", "PLAYER_REGEN_ENABLED", "ADDON_LOADED" }) do
             events:RegisterEvent(event)
         end
+        if forever then events:RegisterEvent("SPELLS_CHANGED") end
         events:SetScript("OnEvent", function(_, event, unit)
+            if event == "SPELLS_CHANGED" then generic, combined = nil, nil; return end
             if event == "ADDON_LOADED" and (secret(unit) or unit ~= "Blizzard_AuraContainer") then return end
             if not started then
                 if event ~= "PLAYER_ENTERING_WORLD" and event ~= "PLAYER_REGEN_ENABLED"

@@ -109,6 +109,7 @@ ns.refreshNames = {
 }
 
 -- Traps that put a DoT on the first enemy to walk in (ProcDots.lua): placing one only arms it.
+ns.IGNORED_SPELLS = IGNORED_SPELLS -- RogueAuras.lua keeps its own list of area spells away from the generic DoT segments
 ns.TRAP_DOTS = { ["Immolation Trap"] = true }
 -- Cast at a mob, but the DoT starts later (ProcDots.lua finds the start by its rhythm).
 ns.DELAYED_DOTS = { ["Wyvern Sting"] = true }
@@ -170,6 +171,7 @@ local DEFAULTS = {
     labelColor = "white",
     -- Misc
     procDots = true, -- Ignite (mage) and Deep Wounds (warrior), lit by crits (ProcDots.lua)
+    nativeAllDots = false, -- experimental (Forever): a native aura segment for every DoT you know (RogueAuras.lua)
     deathMark = false, -- experimental: Death Mark (rogue) stored damage (DeathMark.lua); counts others' hits in a group
     debug = false,
     -- Accuracy

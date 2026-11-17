@@ -626,6 +626,12 @@ local function buildTabs()
             .. "points, nothing is drawn). A crit counts as yours when you cast at that mob just before, or, for "
             .. "Deep Wounds, swing at it while alone; the first tick confirms it. Traps (Immolation Trap) are "
             .. "tracked as well." })
+        behavior:checkbox("nativeAllDots", "Native segment for every DoT (experimental)", { tooltip = "Draws a segment from "
+            .. "the real aura (its start, time left and removal) for every damage over time you know, wherever Lua has no DoT "
+            .. "of its own on that mob: other mobs, mobs out of sight, effects nothing announces. The size comes from the "
+            .. "spell description and your stats. One or two extra aura frames per spell on every hostile nameplate: check "
+            .. "/upt perf before keeping it on. Off by default. Deadly Poison, Deep Wound, Ignite, Righteous Judgement, "
+            .. "Immolation Trap, Explosive Trap, Flamestrike and Wyvern Sting are always drawn this way." })
         behavior:checkbox("deathMark", "Death Mark (experimental)", { tooltip = "Rogues: shows what Death Mark has "
             .. "stored so far as one more segment, until it goes off 6 s after the finisher, never above the cap in its "
             .. "description. Garrote and Rupture ticks count twice. Experimental, off by default: the game doesn't say "

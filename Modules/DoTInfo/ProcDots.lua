@@ -340,6 +340,16 @@ local function light(s, key, amount, now)
     return true
 end
 
+-- The most recent of your last damaging casts whose id is in `ids` (an array), or nil.
+function P.LastCastOf(ids)
+    for index = #castLog, 1, -1 do
+        for _, id in ipairs(ids) do
+            if castLog[index] == id then return id end
+        end
+    end
+    return nil
+end
+
 -- What the native aura segment of a proc DoT, trap or delayed DoT is sized with (the whole effect for one
 -- application), or nil when it cannot be told. "trap" and "delayed" are the sizes of the last such cast; "proc" is
 -- Ignite, Deep Wound or Righteous Judgement from the talent and your stats, with no crit read from a hit (the client
