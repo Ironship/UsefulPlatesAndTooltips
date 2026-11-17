@@ -340,7 +340,7 @@ end
 
 local function hideWidgets(w)
     w.displayDamage = 0
-    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
+    if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(w.plate) end
     w.marker:Hide()
     w.iconWindow:Hide()
     w.iconArmed = nil
@@ -391,7 +391,7 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
     end
     w.marker:SetShown(db.showMarkers and not iconOnly)
     w.displayDamage = db.showMarkers and not iconOnly and total or 0
-    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
+    if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(w.plate) end
     -- UI-3: the kill icon is part of the marker set: with showMarkers off it
     -- must hide too, not linger alone on the plate.
     -- A window going hidden -> shown renders one frame with the icon bar's stale/unlaid-out fill (full width),

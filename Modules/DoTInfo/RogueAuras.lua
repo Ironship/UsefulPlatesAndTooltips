@@ -1,17 +1,27 @@
 -- Blizzard owns these aura icons, timers and stacks; Lua never reads their combat state.
 local _, BIT = ...
 local ns = BIT.Module("DoTInfo")
-local R = ns.Retail
-if not R then return end
+-- Retail keeps these hooks on ns.Retail; WoW: Forever (no ns.Retail) uses ns.RogueNative, which only draws Deadly Poison.
+-- Forever refuses addon code every read of an enemy's auras in combat (GetUnitAuras, GetAuraDataByIndex and
+-- GetUnitAuraInstanceIDs all throw "Auras cannot be accessed when secret while tainted"), so the native aura
+-- container is the only way to show the poison there.
+local forever = ns.Retail == nil
+local R = ns.Retail or {}
+if forever then ns.RogueNative = R end
 
 local SIZE, GAP, MAX_PLATES = 18, 2, 40
 local AURA_REFRESH_INTERVAL = 0.25
-local spellIDs = {
+local spellIDs = forever and {
+    [2818] = true, [2819] = true, [11353] = true, [11354] = true, [25349] = true, -- Deadly Poison I-V
+} or {
     [703] = true, [1943] = true, -- Garrote, Rupture (including Crimson Tempest copies)
     [2818] = true, [383414] = true, -- Deadly Poison, Amplifying Poison stacks
     [385627] = true, [360194] = true, -- Kingsbane, Deathmark
     [381628] = true, [394021] = true, -- Internal Bleeding, Mutilated Flesh
 }
+-- Forever's Deadly Poison stacks to five; the damage bar is five stacks wide and fills with the stacks it has.
+local MAX_STACKS = 5
+local COATINGS = { 25351, 11356, 11355, 2824, 2823 } -- the poison spells, highest rank first
 local targetEntry, byPlate, activeUnits, failedHosts = nil, {}, {}, {}
 local started, events = false, nil
 
@@ -66,8 +76,19 @@ local function initialize(button)
 end
 
 local function poisonAmount()
-    local desc = ask(C_Spell and C_Spell.GetSpellDescription, 2823)
-    local total = desc and R.Parse(2818, desc)
+    local coating = 2823
+    if forever then
+        for _, id in ipairs(COATINGS) do
+            if ask(IsSpellKnown, id) == true then coating = id; break end
+        end
+    end
+    local desc = ask(C_Spell and C_Spell.GetSpellDescription, coating)
+    -- One application's damage over the whole duration; Forever's stacks are read natively (the bar below).
+    local total
+    if desc then
+        if forever then total = ns.ParseRogueAura and ns.ParseRogueAura(2818, desc, { poison = true, stacked = true })
+        else total = R.Parse(2818, desc) end
+    end
     if type(total) == "number" and total > 0 and total < math.huge then return total end
 end
 
@@ -118,7 +139,7 @@ local function createPoisonDamage(entry, config, signature)
         formatter = C_StringUtil.CreateNumericRuleFormatter()
         formatter:SetBreakpoints({ { threshold = 0, format = "" } })
         container:AddAuraSlot("deadlyDamage", "HARMFUL|PLAYER", {
-            candidateFilters = { includeSpellIDs = { [2818] = true } },
+            candidateFilters = { includeSpellIDs = forever and spellIDs or { [2818] = true } },
             initializeFrame = function(button)
                 -- The native factory swallows callback errors, so retain setup failure explicitly.
                 initialized, initializerError = pcall(function()
@@ -130,7 +151,19 @@ local function createPoisonDamage(entry, config, signature)
                     clip:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, -padding)
                     clip:SetClipsChildren(true)
                     local timer = CreateFrame("StatusBar", nil, clip, "DisableUntrustedLayoutScriptsTemplate")
-                    timer:SetAllPoints(button)
+                    local stacks
+                    if forever then
+                        -- An invisible bar that fills with the stacks; the timer is as wide as that fill, so what it
+                        -- draws is stacks x one application x the time left, without Lua reading either.
+                        stacks = CreateFrame("StatusBar", nil, clip, "DisableUntrustedLayoutScriptsTemplate")
+                        stacks:SetAllPoints(button)
+                        stacks:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
+                        stacks:SetStatusBarColor(0, 0, 0, 0)
+                        stacks:SetMinMaxValues(0, MAX_STACKS)
+                        stacks:SetValue(0)
+                        timer:SetPoint("TOPLEFT", button, "TOPLEFT")
+                        timer:SetPoint("BOTTOMRIGHT", stacks:GetStatusBarTexture(), "BOTTOMRIGHT")
+                    else timer:SetAllPoints(button) end
                     timer:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
                     timer:SetStatusBarColor(0.2, 1, 0.2, 0.9)
                     if ns.stylePoisonSegment then ns.stylePoisonSegment(timer, entry.bar, config) end
@@ -144,6 +177,7 @@ local function createPoisonDamage(entry, config, signature)
                         },
                     } })
                     button:SetDurationBar(timer, { direction = direction.RemainingTime })
+                    if stacks then button:SetApplicationBar(stacks, { minApplications = 0, maxApplications = MAX_STACKS }) end
                 end)
                 -- Native visibility, timers and formatted damage stay inside the restricted button.
             end,
@@ -189,13 +223,14 @@ local function updatePoisonDamage(entry, unit, enabled)
     local damage = entry.poisonDamage
     if not damage then return end
     local total = enabled and poisonAmount() or nil
+    if forever and total then total = total * MAX_STACKS end -- the bar's full width; no number: the stacks are hidden
     if enabled and ns.dotBreakdownForUnit then
         local entries = ns.dotBreakdownForUnit(unit)
         for _, effect in ipairs(entries) do
             if effect.familyID == 2818 then total = nil; break end -- Already drawn by the plain DoT segments.
         end
     end
-    local label = ns.db and ns.db.showLabel == true
+    local label = not forever and ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
         damage.formatter:SetBreakpoints({ total and label and {
             -- Duration text supplies 0..100 percent, unlike the timer bar's 0..1 fraction.

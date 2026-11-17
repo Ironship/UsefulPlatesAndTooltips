@@ -240,6 +240,10 @@ local function probe(unit)
 end
 
 local function scan(unit)
+    -- WoW: Forever refuses addon code every read of an enemy's auras in combat (alpha logs: GetUnitAuras,
+    -- GetAuraDataByIndex and GetUnitAuraInstanceIDs all throw), so a scan in combat can only fail. Deadly Poison
+    -- is drawn by the native aura container (RogueAuras.lua) there; out of combat the scans below still work.
+    if not retail and boolean(UnitAffectingCombat, "player") ~= false then return end
     local seen = {}
     local ok, reason = pcall(function()
         if not C_UnitAuras then return "aura API unavailable" end

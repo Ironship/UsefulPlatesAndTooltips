@@ -2859,7 +2859,7 @@ end
 
 local function hideMarkers()
     remainingBar:Hide()
-    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(TargetFrame) end
+    if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(TargetFrame) end
     fillLayer.refreshMark:Hide()
     markerScale = nil -- grow in again next time it appears
 end
@@ -3055,8 +3055,8 @@ local reportedErrors = {}
 local function safeRefresh()
     -- Native aura containers render their own protected timers; keep an unavailable host
     -- or API from interrupting the separate cast-based damage estimate.
-    if ns.Retail and ns.Retail.UpdateRogueAuras then
-        local ok, err = pcall(ns.Retail.UpdateRogueAuras)
+    if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdateRogueAuras then
+        local ok, err = pcall((ns.Retail or ns.RogueNative).UpdateRogueAuras)
         if not ok and not reportedErrors[err] then
             reportedErrors[err] = true
             trace("ERROR in rogue aura update: " .. tostring(err))
@@ -3077,7 +3077,7 @@ local function safeRefresh()
             trace("ERROR in API update: " .. tostring(apiErr))
         end
     end
-    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(TargetFrame) end
+    if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(TargetFrame) end
 end
 
 ---------------------------------------------------------------------------
@@ -3438,7 +3438,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         end
         ns.ensureDB()
         trace("===== session start =====")
-        if ns.Retail and ns.Retail.StartRogueAuras then ns.Retail.StartRogueAuras() end
+        if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).StartRogueAuras then (ns.Retail or ns.RogueNative).StartRogueAuras() end
         if ns.RogueEffects then ns.RogueEffects.Start(unitKey) end
         local added = ns.locale.addClientNames(NAME_TABLES, function(spellID)
             local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID)
@@ -3562,7 +3562,7 @@ end)
 local sinceUpdate = 0
 frame:SetScript("OnUpdate", function(self, elapsed)
     if db then animateMarker(elapsed) end
-    if db and ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(TargetFrame) end
+    if db and (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(TargetFrame) end
     sinceUpdate = sinceUpdate + elapsed
     if sinceUpdate < UPDATE_INTERVAL or not db then return end
     sinceUpdate = 0
