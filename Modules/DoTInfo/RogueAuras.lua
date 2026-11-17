@@ -205,58 +205,87 @@ local function spellbookIDs()
     return ids
 end
 
-local function buildGeneric()
-    local list = {}
-    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
-    if type(sdi) ~= "table" or type(sdi.Compute) ~= "function" then return list end
-    local ignored = ns.IGNORED_SPELLS or {}
+-- Building the list reads the description of every spell in the book (first reads are parsed): about 0.4 ms each,
+-- so a whole book in one frame is a visible hitch (5.5 ms for 15 spells measured in game). It is done in slices of
+-- GENERIC_SLICE_MS, one per frame, and the finished list replaces the old one in one step.
+local GENERIC_SLICE_MS = 1.0
+local building, rebuildGeneric, lastAdvance = nil, false, nil
+local genericMaxSlice = 0
+
+local function startGenericBuild()
     local covered = {}
     for _, spec in ipairs(activeSpecs) do
         for id in pairs(spec.ids) do covered[id] = true end
         for _, id in ipairs(spec.castIDs or {}) do covered[id] = true end
         covered[ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.fallback] = true
     end
-    local groups = {}
-    local book = spellbookIDs()
-    genericExamined = #book
-    for _, id in ipairs(book) do
-        local name = ask(C_Spell and C_Spell.GetSpellName, id)
-        if type(name) == "string" and not covered[id] and not covered[name] and not ignored[name]
-            and not (ns.TRAP_DOTS and ns.TRAP_DOTS[name]) and not (ns.DELAYED_DOTS and ns.DELAYED_DOTS[name]) then
-            local group = groups[name]
-            local ok, view = pcall(sdi.Compute, id, false)
-            local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table"
-                and tonumber(view.dot.total)
-            if dot and dot > 0 then
-                if not group then
-                    group = { name = name, ids = {}, castIDs = {}, school = type(view.school) == "number" and view.school or 1 }
-                    groups[name] = group
-                    list[#list + 1] = group
-                end
-                group.ids[id] = true
-                group.castIDs[#group.castIDs + 1] = id
-            end
-        end
-    end
+    building = { sdi = BIT.modules and BIT.modules.SpellDamageInfo, index = 1, list = {}, groups = {}, ms = 0,
+        covered = covered }
+end
+
+local function finishGenericBuild()
     local specs = {}
-    for _, group in ipairs(list) do
+    for _, group in ipairs(building.list) do
         if #specs >= GENERIC_MAX then break end
         table.sort(group.castIDs)
         specs[#specs + 1] = { key = "g" .. group.castIDs[1], slot = "g" .. group.castIDs[1], label = group.name:upper(),
             ids = group.ids, school = group.school, luaName = group.name, nameID = group.castIDs[1],
             fallback = group.name, generic = true, size = function() return dotTotal(group.castIDs) end }
     end
-    return specs
+    generic, combined = specs, nil
+    genericMs, genericBuilds = building.ms, genericBuilds + 1
+    building = nil
 end
 
--- The segments to update now: the fixed ones, plus the generic ones while the setting is on.
-local function currentSpecs(allDots)
-    if not forever or not allDots then return activeSpecs end
-    if not generic then
-        local t0 = clock()
-        generic, combined = buildGeneric(), nil
-        genericMs, genericBuilds = clock() - t0, genericBuilds + 1
+-- One slice per frame at most, however often the aura update runs.
+local function advanceGeneric()
+    local now = GetTime()
+    if lastAdvance == now then return end
+    lastAdvance = now
+    if not building and (not generic or rebuildGeneric) then
+        rebuildGeneric = false
+        startGenericBuild()
     end
+    local b = building
+    if not b then return end
+    local t0 = clock()
+    if not b.book then
+        b.book = spellbookIDs()
+        genericExamined = #b.book
+    end
+    if type(b.sdi) ~= "table" or type(b.sdi.Compute) ~= "function" then b.index = #b.book + 1 end
+    local ignored = ns.IGNORED_SPELLS or {}
+    while b.index <= #b.book do
+        local id = b.book[b.index]
+        b.index = b.index + 1
+        local name = ask(C_Spell and C_Spell.GetSpellName, id)
+        if type(name) == "string" and not b.covered[id] and not b.covered[name] and not ignored[name]
+            and not (ns.TRAP_DOTS and ns.TRAP_DOTS[name]) and not (ns.DELAYED_DOTS and ns.DELAYED_DOTS[name]) then
+            local ok, view = pcall(b.sdi.Compute, id, false)
+            local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table"
+                and tonumber(view.dot.total)
+            if dot and dot > 0 then
+                local group = b.groups[name]
+                if not group then
+                    group = { name = name, ids = {}, castIDs = {}, school = type(view.school) == "number" and view.school or 1 }
+                    b.groups[name] = group
+                    b.list[#b.list + 1] = group
+                end
+                group.ids[id] = true
+                group.castIDs[#group.castIDs + 1] = id
+            end
+        end
+        if clock() - t0 >= GENERIC_SLICE_MS then break end
+    end
+    local spent = clock() - t0
+    b.ms = b.ms + spent
+    if spent > genericMaxSlice then genericMaxSlice = spent end
+    if b.index > #b.book then finishGenericBuild() end
+end
+
+-- The segments to update now: the fixed ones, plus the generic ones once their list is built and the setting is on.
+local function currentSpecs(allDots)
+    if not forever or not allDots or not generic then return activeSpecs end
     if not combined then
         combined = {}
         for _, spec in ipairs(activeSpecs) do combined[#combined + 1] = spec end
@@ -593,6 +622,7 @@ end
 
 local function update(refresh)
     if not started or not ns.db then return end
+    if forever and ns.db.nativeAllDots == true then advanceGeneric() end
     -- The master switch (nativeDots) also hands traps and Wyvern Sting back to the old rhythm guess in ProcDots.
     local nativeOn = not forever or ns.db.nativeDots ~= false
     if forever and ns.ProcDots then
@@ -675,7 +705,7 @@ function R.StartRogueAuras()
         end
         if forever then events:RegisterEvent("SPELLS_CHANGED") end
         events:SetScript("OnEvent", function(_, event, unit)
-            if event == "SPELLS_CHANGED" then generic, combined = nil, nil; return end
+            if event == "SPELLS_CHANGED" then rebuildGeneric = true; return end
             if event == "ADDON_LOADED" and (secret(unit) or unit ~= "Blizzard_AuraContainer") then return end
             if not started then
                 if event ~= "PLAYER_ENTERING_WORLD" and event ~= "PLAYER_REGEN_ENABLED"
@@ -748,9 +778,13 @@ local function describe()
         for _, damage in pairs(targetEntry.natives) do if damage.failed then broken = broken + 1 end end
     end
     if broken > 0 then add("  switched off after an error: " .. broken .. " segment(s)") end
+    if building and building.book then
+        add(string.format("  every-DoT list: building, %d of %d spellbook spells done, %.1f ms so far",
+            building.index - 1, #building.book, building.ms))
+    end
     if genericMs then
-        add(string.format("  every-DoT list: %.1f ms to build from %d spellbook spells (built %d time(s))",
-            genericMs, genericExamined, genericBuilds))
+        add(string.format("  every-DoT list: %.1f ms in all (largest slice %.1f ms) from %d spellbook spells (built %d time(s))",
+            genericMs, genericMaxSlice, genericExamined, genericBuilds))
     end
     for label, text in pairs(lastErrors) do add("  last error " .. label .. " - " .. text) end
     return lines
