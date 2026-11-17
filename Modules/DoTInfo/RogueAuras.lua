@@ -274,6 +274,8 @@ local function poisonAppearance(entry, spec)
     config.school = spec.school
     config.stacksText = spec.stacked == true and ns.db.nativeStacks == true
     parts[#parts + 1] = tostring(config.stacksText)
+    config.chain = ns.db.nativeChain == true
+    parts[#parts + 1] = tostring(config.chain)
     return config, table.concat(parts, "|")
 end
 
@@ -286,7 +288,7 @@ local function createNativeDamage(entry, spec, config, signature)
         if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " duration formatting unavailable") end
         return
     end
-    local scale, base, container, formatter, initialized, initializerError
+    local scale, base, container, formatter, initialized, initializerError, timerRef, chainAnchor, chainedAfter
     local ok, err = pcall(function()
         -- This plain HP scale stays outside restricted aura buttons. Its fill supplies native geometry.
         for _, key in ipairs({ spec.key .. "Scale", spec.key .. "Base" }) do
@@ -301,6 +303,35 @@ local function createNativeDamage(entry, spec, config, signature)
             end
         end
         scale, base = entry[spec.key .. "Scale"], entry[spec.key .. "Base"]
+        if config.chain then
+            -- Experimental: start where the previous native segment's fill ends instead of at the plain segments'
+            -- end, through a plain frame of ours that is anchored to that fill (the restricted frames are never
+            -- touched after they are built). A failure only means this segment keeps the old place.
+            local previous
+            for _, other in ipairs(currentSpecs(ns.db.nativeAllDots == true)) do
+                if other == spec then break end
+                local native = entry.natives[other.key]
+                if native and native.timer then previous = native end
+            end
+            if previous then
+                local good, problem = pcall(function()
+                    local texture = previous.timer:GetStatusBarTexture()
+                    local frame = entry[spec.key .. "Chain"]
+                        or CreateFrame("Frame", nil, entry.parent, "DisableUntrustedLayoutScriptsTemplate")
+                    frame:ClearAllPoints()
+                    frame:SetWidth(1)
+                    frame:SetPoint("TOPLEFT", texture, "TOPRIGHT")
+                    frame:SetPoint("BOTTOMLEFT", texture, "BOTTOMRIGHT")
+                    entry[spec.key .. "Chain"] = frame
+                    chainAnchor, chainedAfter = frame, previous.spec.label
+                end)
+                if not good and ns.TraceRogueAura then
+                    local text = type(problem) == "string" and not secret(problem) and problem or "restricted"
+                    lastErrors[spec.label] = "chain: " .. text
+                    ns.TraceRogueAura("NATIVE " .. spec.label .. " chain failed: " .. text)
+                end
+            end
+        end
         container = CreateFrame("AuraContainer", nil, entry.parent, "CustomAuraContainerTemplate")
         container:SetSize(1, 1)
         container:SetPoint("BOTTOMLEFT", entry.bar, "TOPLEFT", 0, 4)
@@ -311,7 +342,8 @@ local function createNativeDamage(entry, spec, config, signature)
             initializeFrame = function(button)
                 -- The native factory swallows callback errors, so retain setup failure explicitly.
                 initialized, initializerError = pcall(function()
-                    button:SetPoint("TOPLEFT", base:GetStatusBarTexture(), "TOPRIGHT")
+                    if chainAnchor then button:SetPoint("TOPLEFT", chainAnchor, "TOPRIGHT")
+                    else button:SetPoint("TOPLEFT", base:GetStatusBarTexture(), "TOPRIGHT") end
                     button:SetPoint("BOTTOMRIGHT", scale:GetStatusBarTexture(), "BOTTOMRIGHT")
                     local clip = CreateFrame("Frame", nil, button, "DisableUntrustedLayoutScriptsTemplate")
                     local padding = (config.glowSize or 0) + (config.outlineThickness or 1)
@@ -319,6 +351,7 @@ local function createNativeDamage(entry, spec, config, signature)
                     clip:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, -padding)
                     clip:SetClipsChildren(true)
                     local timer = CreateFrame("StatusBar", nil, clip, "DisableUntrustedLayoutScriptsTemplate")
+                    timerRef = timer
                     local stacks
                     if spec.stacked then
                         -- An invisible bar that fills with the stacks; the timer is as wide as that fill, so what it
@@ -371,7 +404,9 @@ local function createNativeDamage(entry, spec, config, signature)
         return
     end
     if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " damage display ready") end
-    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature, spec = spec }
+    if chainedAfter and ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " chained after " .. chainedAfter) end
+    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature, spec = spec,
+        timer = timerRef, anchor = chainAnchor, chained = chainedAfter }
 end
 
 local function updateNativeOffset(entry, unit, enabled, damage)
@@ -457,8 +492,13 @@ local function updateNativeDamage(entry, unit, enabled, spec)
             damage.scale:ClearAllPoints()
             if width then
                 -- Translate a full HP-sized scale; clip the resulting countdown only at the HP bar's edge.
-                damage.scale:SetPoint("TOPLEFT", damage.base:GetStatusBarTexture(), "TOPRIGHT")
-                damage.scale:SetPoint("BOTTOMLEFT", damage.base:GetStatusBarTexture(), "BOTTOMRIGHT")
+                if damage.anchor then
+                    damage.scale:SetPoint("TOPLEFT", damage.anchor, "TOPRIGHT")
+                    damage.scale:SetPoint("BOTTOMLEFT", damage.anchor, "BOTTOMRIGHT")
+                else
+                    damage.scale:SetPoint("TOPLEFT", damage.base:GetStatusBarTexture(), "TOPRIGHT")
+                    damage.scale:SetPoint("BOTTOMLEFT", damage.base:GetStatusBarTexture(), "BOTTOMRIGHT")
+                end
                 damage.scale:SetWidth(width)
             else damage.scale:SetAllPoints(entry.bar) end
             damage.width, damage.offset = width, nil
@@ -684,15 +724,22 @@ local function describe()
     local function add(text) lines[#lines + 1] = text end
     local db = ns.db or {}
     local ok, _, class = pcall(UnitClass, "player")
-    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, class %s",
+    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, chain %s, class %s",
         forever and "Forever" or "Retail", tostring(started), tostring(db.nativeDots ~= false),
-        tostring(db.nativeAllDots == true), tostring(db.nativeStacks == true),
+        tostring(db.nativeAllDots == true), tostring(db.nativeStacks == true), tostring(db.nativeChain == true),
         tostring(ok and not secret(class) and class or "?")))
     for _, spec in ipairs(currentSpecs(db.nativeAllDots == true)) do
         local good, size = pcall(function() return spec.size and spec.size() end)
         add(string.format("  %s%s: size %s", spec.label, spec.generic and " (every DoT)" or "",
             good and type(size) == "number" and string.format("%.0f", size) or "none"))
     end
+    local function chainLine(label, entry)
+        if not entry then return end
+        for _, damage in pairs(entry.natives) do
+            if damage.chained then add(string.format("  %s: %s chained after %s", label, damage.spec.label, damage.chained)) end
+        end
+    end
+    chainLine("target frame", targetEntry)
     local plates, containers = 0, 0
     for _, entry in pairs(byPlate) do
         plates = plates + 1

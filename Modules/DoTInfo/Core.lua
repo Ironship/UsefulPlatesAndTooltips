@@ -172,6 +172,7 @@ local DEFAULTS = {
     -- Misc
     procDots = true, -- Ignite (mage) and Deep Wounds (warrior), lit by crits (ProcDots.lua)
     nativeDots = true, -- Forever: the native aura segments (Deadly Poison, Deep Wound, Ignite, ...) as a whole (RogueAuras.lua)
+    nativeChain = false, -- experimental (Forever): native segments of different spells follow each other on the bar
     nativeStacks = false, -- Forever: the stack count of the Deadly Poison segment as a small number above the bar
     nativeAllDots = false, -- experimental (Forever): a native aura segment for every DoT you know (RogueAuras.lua)
     deathMark = false, -- experimental: Death Mark (rogue) stored damage (DeathMark.lua); counts others' hits in a group
