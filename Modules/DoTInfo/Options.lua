@@ -631,11 +631,6 @@ local function buildTabs()
             .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
             .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
             .. "Takes effect at once." })
-        behavior:checkbox("nativeChain", "Chain native segments (experimental)", { tooltip = "Several native segments on "
-            .. "one mob (a trap and a Wyvern Sting, or the every-DoT layer) start at the same place on the bar and overlap. "
-            .. "With this on, each one starts where the previous one's fill ends, so they follow each other. Off by "
-            .. "default: whether the game lets one native segment be anchored to another is being tested; if the "
-            .. "segments disappear or land in the wrong place, switch it off and report with /upt native." })
         behavior:checkbox("nativeStacks", "Deadly Poison stack count", { tooltip = "A small number above the bar's left "
             .. "end with the stacks of your Deadly Poison on that mob (the game draws it, the addon cannot read it)." })
         behavior:checkbox("nativeAllDots", "Native segment for every DoT (experimental)", { tooltip = "Draws a segment from "
