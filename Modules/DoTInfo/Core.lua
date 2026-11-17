@@ -172,6 +172,7 @@ local DEFAULTS = {
     -- Misc
     procDots = true, -- Ignite (mage) and Deep Wounds (warrior), lit by crits (ProcDots.lua)
     nativeDots = true, -- Forever: the native aura segments (Deadly Poison, Deep Wound, Ignite, ...) as a whole (RogueAuras.lua)
+    nativeGateReplace = false, -- experiment (Forever): nameplate DoT segments drawn by aura-gated twins (RogueAuras.lua)
     nativeGate = false, -- experiment (Forever): a segment sized by the plain DoT, shown only while the real aura is there
     nativeShowAll = false, -- diagnostic (Forever): native segments are drawn even where a plain DoT of the same name is
     nativeStacks = false, -- Forever: the stack count of the Deadly Poison segment as a small number above the bar

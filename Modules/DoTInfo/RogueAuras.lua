@@ -130,11 +130,11 @@ if forever then
         ROGUE = { { key = "poison", slot = "deadlyDamage", label = "POISON", ids = spellIDs, school = 8, stacked = true,
             familyID = 2818, nameID = 2818, fallback = "Deadly Poison", size = poisonAmount } },
         WARRIOR = { { key = "deepWounds", slot = "deepWounds", label = "DEEP WOUNDS", ids = { [412609] = true },
-            school = 1, luaName = "Deep Wounds", nameID = 412609, fallback = "Deep Wounds", setting = "procDots",
+            school = 1, luaName = "Deep Wounds", verified = true, nameID = 412609, fallback = "Deep Wounds", setting = "procDots",
             size = function() return procSize("proc") end } },
         MAGE = {
             { key = "ignite", slot = "ignite", label = "IGNITE", ids = { [412538] = true }, school = 4,
-                luaName = "Ignite", nameID = 412538, fallback = "Ignite", setting = "procDots",
+                luaName = "Ignite", verified = true, nameID = 412538, fallback = "Ignite", setting = "procDots",
                 size = function() return procSize("proc") end },
             -- Lua ignores the area spells (ns.IGNORED_SPELLS): every mob the pillar burns shows its own segment.
             { key = "flamestrike", slot = "flamestrike", label = "FLAMESTRIKE", school = 4, nameID = 2120,
@@ -144,7 +144,7 @@ if forever then
                 size = function() return dotTotal({ 2120, 2121, 8422, 8423, 10215, 10216 }) end },
         },
         PALADIN = { { key = "judgement", slot = "judgement", label = "JUDGEMENT", ids = { [440675] = true }, school = 2,
-            luaName = "Righteous Judgement", nameID = 440675, fallback = "Righteous Judgement", setting = "procDots",
+            luaName = "Righteous Judgement", verified = true, nameID = 440675, fallback = "Righteous Judgement", setting = "procDots",
             size = function() return procSize("proc") end } },
         HUNTER = {
             { key = "trap", slot = "trap", label = "TRAP", ids = { [13797] = true, [14298] = true, [14299] = true,
@@ -165,6 +165,22 @@ end
 local activeSpecs = {}
 local lastErrors = {} -- [label] = the last setup/update error text, for /upt native
 local LANE_GAP, LANE_HEIGHT = 2, 6 -- diagnostic row under the bar (nativeShowAll)
+
+-- Aura-gated plain segments on nameplates (nativeGateReplace): Nameplates.lua tells, per plate, where each plain DoT
+-- segment is (its offset and damage on the health scale); a twin of the spell's native segment is drawn there, sized by
+-- Lua and shown by the game only while the aura is on the mob, and the plain segment of that DoT is hidden.
+local plans = setmetatable({}, { __mode = "k" }) -- [plate] = { items = { [DoT name] = { offset, damage } }, at, reverse }
+local function gateReplace()
+    return forever and ns.db ~= nil and ns.db.nativeGateReplace == true and ns.db.nativeDots ~= false
+end
+local function wantGeneric()
+    return forever and ns.db ~= nil and (ns.db.nativeAllDots == true or ns.db.nativeGateReplace == true)
+end
+-- Only the spells that put the aura on the target themselves (NativeAuraIDs.lua) can have a segment of their own.
+local function allowedID(id)
+    local verified = ns.NativeAuraIDs
+    return verified ~= nil and verified[id] == true
+end
 
 -- Experimental (setting nativeAllDots, Forever): a segment for every DoT in your spellbook that SpellDamageInfo can
 -- size, wherever Lua has no DoT of its own on that mob (the plain segment of the same name always wins).
@@ -288,7 +304,8 @@ local function advanceGeneric()
         b.index = b.index + 1
         local name = ask(C_Spell and C_Spell.GetSpellName, id)
         if type(name) == "string" and not b.covered[id] and not b.covered[name] and not ignored[name]
-            and not (ns.TRAP_DOTS and ns.TRAP_DOTS[name]) and not (ns.DELAYED_DOTS and ns.DELAYED_DOTS[name]) then
+            and not (ns.TRAP_DOTS and ns.TRAP_DOTS[name]) and not (ns.DELAYED_DOTS and ns.DELAYED_DOTS[name])
+            and allowedID(id) then
             local ok, view = pcall(b.sdi.Compute, id, false)
             local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table"
                 and tonumber(view.dot.total)
@@ -345,8 +362,8 @@ local function poisonAppearance(entry, spec)
         config.dotColors, config.fillColor, config.fillOpacity = "single", "white", 55
     end
     parts[#parts + 1] = tostring(forever and ns.db.nativeShowAll == true)
-    if spec.gated then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
-    parts[#parts + 1] = tostring(spec.gated == true)
+    if spec.gated and not gateReplace() then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
+    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace())
     return config, table.concat(parts, "|")
 end
 
@@ -376,7 +393,7 @@ local function createNativeDamage(entry, spec, config, signature)
         scale, base = entry[spec.key .. "Scale"], entry[spec.key .. "Base"]
         -- Diagnostic (nativeShowAll): the native segment gets its own thin row under the bar and starts at its left edge, so
         -- its length can be compared by eye with the plain segment of the same DoT on the bar.
-        lane = forever and (spec.gated == true or ns.db.nativeShowAll == true)
+        lane = forever and ((spec.gated == true and not gateReplace()) or (not spec.gated and ns.db.nativeShowAll == true))
         local rowTop = -(LANE_GAP + (spec.gated and 1 or 0) * (LANE_HEIGHT + LANE_GAP))
         if forever then -- Retail's bars are only ever placed when they are made
             for _, geometry in ipairs({ scale, base }) do
@@ -471,6 +488,19 @@ end
 
 local function updateNativeOffset(entry, unit, enabled, damage)
     if damage.failed then return end
+    if damage.spec.gated and gateReplace() then
+        local record = plans[entry.parent]
+        local item = enabled and record and not record.reverse and GetTime() - record.at < 0.5
+            and record.items[damage.spec.luaName]
+        local offset, total = 0, 0
+        if item and item.damage > 0 then offset, total = item.offset, item.damage end
+        if offset ~= damage.offset or total ~= damage.offsetTotal then
+            damage.base:SetValue(offset)
+            damage.scale:SetValue(damage.width and total or offset + total)
+            damage.offset, damage.offsetTotal, damage.total = offset, total, total
+        end
+        return
+    end
     local offset = enabled and not damage.lane and ns.nativePoisonBase and ns.nativePoisonBase(unit, entry.parent, entry.bar) or 0
     if offset ~= damage.offset or damage.total ~= damage.offsetTotal then
         damage.base:SetValue(offset)
@@ -496,9 +526,15 @@ local function updatePoisonOffset(entry, unit, enabled)
 end
 
 -- What one application of the effect does over its whole duration, or nil when the segment has nothing to show.
-local function nativeTotal(unit, spec, enabled, entries)
+local function nativeTotal(unit, spec, enabled, entries, entry)
     if not enabled then return nil end
     if spec.gated then
+        if gateReplace() then
+            -- In place of the plain segment: its length comes from the plan the nameplate has just drawn with.
+            local record = entry and plans[entry.parent]
+            local item = record and not record.reverse and GetTime() - record.at < 0.5 and record.items[spec.luaName]
+            return item and item.damage > 0 and item.damage or nil
+        end
         -- The remaining damage of the plain DoT of the same name (it drops tick by tick); nothing when there is none.
         entries = entries or (ns.dotBreakdownForUnit and ns.dotBreakdownForUnit(unit))
         for _, effect in ipairs(entries or {}) do
@@ -546,12 +582,16 @@ local function updateNativeDamage(entry, unit, enabled, spec, entries)
         if replacement then
             if old then pcall(old.container.SetEnabled, old.container, false); pcall(old.container.Hide, old.container) end
             entry.natives[spec.key] = replacement
+            if spec.gated and spec.luaName then
+                entry.gated = entry.gated or {}
+                entry.gated[spec.luaName] = replacement
+            end
         end
         entry.signatures[spec.key] = signature
     end
     local damage = entry.natives[spec.key]
     if not damage or damage.failed then return end
-    local total = nativeTotal(unit, spec, enabled, entries)
+    local total = nativeTotal(unit, spec, enabled, entries, entry)
     local label = not spec.stacked and not spec.gated and ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
         damage.formatter:SetBreakpoints({ total and label and {
@@ -664,7 +704,7 @@ local HEAVY_INTERVAL = 0.09
 
 -- The experiment's second row for a spec whose plain DoT the addon draws (it needs the DoT's name to find it).
 local function gatedTwin(spec)
-    if not spec.luaName then return nil end
+    if not spec.luaName or not (spec.generic or spec.verified) then return nil end
     local twin = spec.twin
     if not twin then
         twin = {}
@@ -680,7 +720,7 @@ local NO_SPECS = {}
 local function display(entry, unit, enabled, refresh)
     if not entry then return end
     if forever and ns.db and ns.db.nativeDots == false then enabled = false end
-    local allDots = ns.db and ns.db.nativeAllDots == true
+    local allDots = wantGeneric()
     local now = GetTime()
     local heavy = not forever or refresh == true or not entry.heavyAt or now - entry.heavyAt >= HEAVY_INTERVAL
         or entry.heavyEnabled ~= enabled or entry.heavyUnit ~= unit
@@ -707,7 +747,9 @@ local function display(entry, unit, enabled, refresh)
             end
         end
     end
-    local gate = forever and ns.db and ns.db.nativeGate == true
+    local replace = gateReplace()
+    local laneGate = forever and ns.db and ns.db.nativeGate == true and not replace
+    local gate = laneGate or (replace and entry.onPlate == true)
     if heavy and gate then
         for _, spec in ipairs(currentSpecs(allDots)) do
             local twin = gatedTwin(spec)
@@ -735,7 +777,7 @@ end
 
 local function update(refresh)
     if not started or not ns.db then return end
-    if forever and ns.db.nativeAllDots == true then advanceGeneric() end
+    if wantGeneric() then advanceGeneric() end
     -- The master switch (nativeDots) also hands traps and Wyvern Sting back to the old rhythm guess in ProcDots.
     local nativeOn = not forever or ns.db.nativeDots ~= false
     if forever and ns.ProcDots then
@@ -779,7 +821,7 @@ end
 
 local lateTry
 function R.UpdateRogueAuras()
-    if not started and forever and ns.db and ns.db.nativeAllDots == true then
+    if not started and wantGeneric() then
         local now = GetTime()
         if not lateTry or now - lateTry >= 5 then
             lateTry = now
@@ -795,6 +837,27 @@ function R.UpdatePoisonOffset(parent)
     if entry then updatePoisonOffset(entry, entry.unit, entry.enabled) end
 end
 
+-- Nameplates.lua: where each plain DoT segment of this plate is, on the health scale, as it has just been drawn.
+function R.SetPlan(plate, items, reverse)
+    local record = plans[plate]
+    if not record then
+        record = {}
+        plans[plate] = record
+    end
+    record.items, record.at, record.reverse = items, GetTime(), reverse == true
+end
+
+-- Whether the plain segment of this DoT on this plate may stay hidden: only when its aura-gated twin exists, did not
+-- fail and is shown by the game right now. Until then (and whenever anything is off) the plain segment keeps drawing.
+function R.Covers(plate, name)
+    if not gateReplace() then return false end
+    local record = plans[plate]
+    if not record or record.reverse then return false end
+    local entry = byPlate[plate]
+    local damage = entry and entry.gated and entry.gated[name]
+    return damage ~= nil and not damage.failed and damage.enabled == true and damage.shown == true
+end
+
 local function seedPlates()
     wipe(activeUnits)
     for i = 1, MAX_PLATES do
@@ -808,7 +871,7 @@ function R.StartRogueAuras()
     local ok, _, class = pcall(UnitClass, "player")
     if not ok or secret(class) or type(class) ~= "string" then return end
     -- A class with no fixed segment (warlock, priest, druid, shaman) only has the every-DoT layer.
-    if not SPECS[class] and not (forever and ns.db.nativeAllDots == true) then return end
+    if not SPECS[class] and not wantGeneric() then return end
     if not C_XMLUtil or type(C_XMLUtil.GetTemplateInfo) ~= "function" then return end
     if not events then
         events = CreateFrame("Frame")
@@ -864,11 +927,12 @@ local function describe()
     local function add(text) lines[#lines + 1] = text end
     local db = ns.db or {}
     local ok, _, class = pcall(UnitClass, "player")
-    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, shown next to plain %s, gate %s, class %s",
+    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, shown next to plain %s, gate %s, gate in place %s, class %s",
         forever and "Forever" or "Retail", tostring(started), tostring(db.nativeDots ~= false),
         tostring(db.nativeAllDots == true), tostring(db.nativeStacks == true), tostring(db.nativeShowAll == true),
-        tostring(db.nativeGate == true), tostring(ok and not secret(class) and class or "?")))
-    for _, spec in ipairs(currentSpecs(db.nativeAllDots == true)) do
+        tostring(db.nativeGate == true), tostring(db.nativeGateReplace == true),
+        tostring(ok and not secret(class) and class or "?")))
+    for _, spec in ipairs(currentSpecs(wantGeneric())) do
         local good, size = pcall(function() return spec.size and spec.size() end)
         add(string.format("  %s%s: size %s", spec.label, spec.generic and " (every DoT)" or "",
             good and type(size) == "number" and string.format("%.0f", size) or "none"))

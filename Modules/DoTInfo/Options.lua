@@ -631,6 +631,13 @@ local function buildTabs()
             .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
             .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
             .. "Takes effect at once." })
+        behavior:checkbox("nativeGateReplace", "Aura-gated DoT segments on nameplates (experiment)", { tooltip = "The DoT "
+            .. "segments on nameplates are drawn by the game's own aura frames, with the length the addon calculates (they "
+            .. "still drop tick by tick), so a segment is shown only while the real aura is on the mob: when a mob resets "
+            .. "after you run away, a DoT is dispelled or resisted, it disappears at once instead of a few seconds later. "
+            .. "The addon never reads the aura. Only DoTs whose spell puts the aura on the target itself are drawn this "
+            .. "way (not Curse of Agony, Siphon Life, traps, poisons), and only with a colour per DoT (not \"One colour\"). "
+            .. "The kill icon and the damage number still use the addon's own numbers. Off by default." })
         behavior:checkbox("nativeGate", "Aura-gated plain segment (experiment)", { tooltip = "An experiment: a second thin "
             .. "row under the bar (cyan) as long as the addon's own remaining damage of a DoT it draws (so it drops tick by "
             .. "tick like the segment on the bar), but shown only while the real aura is on the mob: the game shows and hides "
