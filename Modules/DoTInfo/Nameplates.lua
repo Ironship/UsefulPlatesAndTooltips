@@ -376,7 +376,9 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
                         items[entry.name] = item
                     end
                     item.offset, item.damage = running, entry.damage
-                    covered = gateApi.Covers(w.plate, entry.name)
+                    -- An estimate made while casting has no aura yet (the twin is shown by the game only once the
+                    -- DoT lands): keep drawing it.
+                    covered = not entry.provisional and gateApi.Covers(w.plate, entry.name)
                 end
                 running = running + entry.damage
                 -- The last segment also covers any DoTs beyond MAX_SEGMENTS.
