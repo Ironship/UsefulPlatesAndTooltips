@@ -410,6 +410,14 @@ local function createNativeDamage(entry, spec, config, signature)
         container = CreateFrame("AuraContainer", nil, entry.parent, "CustomAuraContainerTemplate")
         container:SetSize(1, 1)
         container:SetPoint("BOTTOMLEFT", entry.bar, "TOPLEFT", 0, 4)
+        if forever then
+            -- The segment's frames are made right below, as children of this one: it gets the strata and the level it will
+            -- keep first, or they stay at the plate's own level, under its health bar, and a segment drawn over the bar
+            -- (an in-place twin) is covered by it. A row under the bar was never covered, which is why only twins showed it.
+            local barStrata, barLevel = ask(entry.bar.GetFrameStrata, entry.bar), ask(entry.bar.GetFrameLevel, entry.bar)
+            if type(barStrata) == "string" then container:SetFrameStrata(barStrata) end
+            container:SetFrameLevel(type(barLevel) == "number" and barLevel + (spec.gated and gateReplace() and 10 or 5) or 200)
+        end
         formatter = C_StringUtil.CreateNumericRuleFormatter()
         formatter:SetBreakpoints({ { threshold = 0, format = "" } })
         container:AddAuraSlot(spec.slot, "HARMFUL|PLAYER", {
@@ -672,7 +680,7 @@ local function displayContainer(entry, state, unit, enabled, refresh)
     if not usable(container) then return end
     -- Nameplate addons re-level health bars while active; keep native projections above them.
     local level, strata = ask(entry.bar.GetFrameLevel, entry.bar), ask(entry.bar.GetFrameStrata, entry.bar)
-    level = type(level) == "number" and level + 5 or 200
+    level = type(level) == "number" and level + ((forever and state.spec and state.spec.gated and gateReplace()) and 10 or 5) or 200
     if forever and state.spec and state.spec.gated and gateReplace() and ns.db.nativeShowAll == true then
         level, strata = level + 40, "HIGH" -- probing: above whatever else the plate draws
     end
