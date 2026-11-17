@@ -631,6 +631,12 @@ local function buildTabs()
             .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
             .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
             .. "Takes effect at once." })
+        behavior:checkbox("nativeGate", "Aura-gated plain segment (experiment)", { tooltip = "An experiment: a second thin "
+            .. "row under the bar (cyan) as long as the addon's own remaining damage of a DoT it draws (so it drops tick by "
+            .. "tick like the segment on the bar), but shown only while the real aura is on the mob: the game shows and hides "
+            .. "it, the addon never reads the aura. Watch it when a mob resets after you run away, a DoT is dispelled or "
+            .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. Off by "
+            .. "default." })
         behavior:checkbox("nativeShowAll", "Native next to plain segments (diagnostic)", { tooltip = "For checking the "
             .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
             .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "

@@ -345,6 +345,8 @@ local function poisonAppearance(entry, spec)
         config.dotColors, config.fillColor, config.fillOpacity = "single", "white", 55
     end
     parts[#parts + 1] = tostring(forever and ns.db.nativeShowAll == true)
+    if spec.gated then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
+    parts[#parts + 1] = tostring(spec.gated == true)
     return config, table.concat(parts, "|")
 end
 
@@ -374,13 +376,14 @@ local function createNativeDamage(entry, spec, config, signature)
         scale, base = entry[spec.key .. "Scale"], entry[spec.key .. "Base"]
         -- Diagnostic (nativeShowAll): the native segment gets its own thin row under the bar and starts at its left edge, so
         -- its length can be compared by eye with the plain segment of the same DoT on the bar.
-        lane = forever and ns.db.nativeShowAll == true
+        lane = forever and (spec.gated == true or ns.db.nativeShowAll == true)
+        local rowTop = -(LANE_GAP + (spec.gated and 1 or 0) * (LANE_HEIGHT + LANE_GAP))
         if forever then -- Retail's bars are only ever placed when they are made
             for _, geometry in ipairs({ scale, base }) do
                 geometry:ClearAllPoints()
                 if lane then
-                    geometry:SetPoint("TOPLEFT", entry.bar, "BOTTOMLEFT", 0, -LANE_GAP)
-                    geometry:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, -(LANE_GAP + LANE_HEIGHT))
+                    geometry:SetPoint("TOPLEFT", entry.bar, "BOTTOMLEFT", 0, rowTop)
+                    geometry:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, rowTop - LANE_HEIGHT)
                 else geometry:SetAllPoints(entry.bar) end
             end
         end
@@ -419,6 +422,13 @@ local function createNativeDamage(entry, spec, config, signature)
                     timer:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
                     timer:SetStatusBarColor(0.2, 1, 0.2, 0.9)
                     if ns.stylePoisonSegment then ns.stylePoisonSegment(timer, entry.bar, config) end
+                    if spec.gated then
+                        -- Experiment: no native timer. The segment is as long as the scale bar says (the plain DoT's
+                        -- remaining damage, from Lua) and is shown only while the aura is there: the game shows and
+                        -- hides the button, the addon never reads the aura.
+                        timer:SetMinMaxValues(0, 1)
+                        timer:SetValue(1)
+                    else
                     local label = button:CreateFontString(nil, "OVERLAY")
                     label:SetFont("Fonts\\FRIZQT__.TTF", config.labelSize or 11, "OUTLINE")
                     if ns.colorOf then label:SetTextColor(ns.colorOf(config.labelColor)) else label:SetTextColor(0.2, 1, 0.2) end
@@ -430,6 +440,7 @@ local function createNativeDamage(entry, spec, config, signature)
                     } })
                     button:SetDurationBar(timer, { direction = direction.RemainingTime })
                     if stacks then button:SetApplicationBar(stacks, { minApplications = 0, maxApplications = MAX_STACKS }) end
+                    end
                     if config.stacksText then
                         -- The game fills this with the stack count; Lua never reads it.
                         local count = button:CreateFontString(nil, "OVERLAY")
@@ -487,6 +498,16 @@ end
 -- What one application of the effect does over its whole duration, or nil when the segment has nothing to show.
 local function nativeTotal(unit, spec, enabled, entries)
     if not enabled then return nil end
+    if spec.gated then
+        -- The remaining damage of the plain DoT of the same name (it drops tick by tick); nothing when there is none.
+        entries = entries or (ns.dotBreakdownForUnit and ns.dotBreakdownForUnit(unit))
+        for _, effect in ipairs(entries or {}) do
+            if effect.name == spec.luaName and type(effect.damage) == "number" and effect.damage > 0 then
+                return effect.damage
+            end
+        end
+        return nil
+    end
     if spec.setting and ns.db[spec.setting] == false then return nil end
     local total
     if forever then
@@ -531,7 +552,7 @@ local function updateNativeDamage(entry, unit, enabled, spec, entries)
     local damage = entry.natives[spec.key]
     if not damage or damage.failed then return end
     local total = nativeTotal(unit, spec, enabled, entries)
-    local label = not spec.stacked and ns.db and ns.db.showLabel == true
+    local label = not spec.stacked and not spec.gated and ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
         damage.formatter:SetBreakpoints({ total and label and {
             -- Duration text supplies 0..100 percent, unlike the timer bar's 0..1 fraction.
@@ -640,6 +661,20 @@ end
 -- plain DoTs are looked at about ten times a second per entry however many events arrive (right away when the unit,
 -- the switch or a forced refresh changes); only the native refresh below follows each event.
 local HEAVY_INTERVAL = 0.09
+
+-- The experiment's second row for a spec whose plain DoT the addon draws (it needs the DoT's name to find it).
+local function gatedTwin(spec)
+    if not spec.luaName then return nil end
+    local twin = spec.twin
+    if not twin then
+        twin = {}
+        for key, value in pairs(spec) do twin[key] = value end
+        twin.key, twin.slot, twin.label = spec.key .. "G", spec.slot .. "G", spec.label .. " (GATE)"
+        twin.gated, twin.twin, twin.stacked, twin.size, twin.covers = true, nil, nil, nil, nil
+        spec.twin = twin
+    end
+    return twin
+end
 local NO_SPECS = {}
 
 local function display(entry, unit, enabled, refresh)
@@ -672,10 +707,25 @@ local function display(entry, unit, enabled, refresh)
             end
         end
     end
+    local gate = forever and ns.db and ns.db.nativeGate == true
+    if heavy and gate then
+        for _, spec in ipairs(currentSpecs(allDots)) do
+            local twin = gatedTwin(spec)
+            if twin and not pcall(updateNativeDamage, entry, unit, enabled, twin, entries) then
+                local broken = entry.natives[twin.key]
+                if broken then
+                    broken.failed = true
+                    pcall(broken.container.Hide, broken.container)
+                end
+            end
+        end
+    end
     displayContainer(entry, entry, unit, enabled, refresh)
     for _, damage in pairs(entry.natives) do
-        -- Generic segments go dark with their setting; the container stays for when it is switched on again.
-        displayContainer(entry, damage, unit, enabled and not damage.failed and (not damage.spec.generic or allDots), refresh)
+        -- Generic segments go dark with their setting, the gated row with its own; the container stays for when it is
+        -- switched on again.
+        displayContainer(entry, damage, unit, enabled and not damage.failed
+            and (not damage.spec.generic or allDots) and (not damage.spec.gated or gate), refresh)
     end
 end
 
@@ -814,10 +864,10 @@ local function describe()
     local function add(text) lines[#lines + 1] = text end
     local db = ns.db or {}
     local ok, _, class = pcall(UnitClass, "player")
-    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, shown next to plain %s, class %s",
+    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, shown next to plain %s, gate %s, class %s",
         forever and "Forever" or "Retail", tostring(started), tostring(db.nativeDots ~= false),
         tostring(db.nativeAllDots == true), tostring(db.nativeStacks == true), tostring(db.nativeShowAll == true),
-        tostring(ok and not secret(class) and class or "?")))
+        tostring(db.nativeGate == true), tostring(ok and not secret(class) and class or "?")))
     for _, spec in ipairs(currentSpecs(db.nativeAllDots == true)) do
         local good, size = pcall(function() return spec.size and spec.size() end)
         add(string.format("  %s%s: size %s", spec.label, spec.generic and " (every DoT)" or "",
@@ -827,6 +877,14 @@ local function describe()
     for _, entry in pairs(byPlate) do
         plates = plates + 1
         for _ in pairs(entry.natives) do containers = containers + 1 end
+    end
+    if targetEntry then
+        for _, damage in pairs(targetEntry.natives) do
+            if damage.spec.gated then
+                add(string.format("  gate %s: plain size %s", damage.spec.label,
+                    damage.total and string.format("%.0f", damage.total) or "none"))
+            end
+        end
     end
     local onTarget, failed = 0, 0
     if targetEntry then for _ in pairs(targetEntry.natives) do onTarget = onTarget + 1 end end
