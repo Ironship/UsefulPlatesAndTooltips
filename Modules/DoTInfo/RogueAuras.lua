@@ -438,7 +438,7 @@ local function updatePoisonOffset(entry, unit, enabled)
 end
 
 -- What one application of the effect does over its whole duration, or nil when the segment has nothing to show.
-local function nativeTotal(unit, spec, enabled)
+local function nativeTotal(unit, spec, enabled, entries)
     if not enabled then return nil end
     if spec.setting and ns.db[spec.setting] == false then return nil end
     local total
@@ -454,8 +454,8 @@ local function nativeTotal(unit, spec, enabled)
     else total = spec.size and spec.size() end
     if type(total) ~= "number" or total ~= total or total <= 0 or total >= math.huge then return nil end
     if spec.stacked then total = total * MAX_STACKS end -- the bar's full width; no number: the stacks are hidden
-    if ns.dotBreakdownForUnit then
-        local entries = ns.dotBreakdownForUnit(unit)
+    entries = entries or (ns.dotBreakdownForUnit and ns.dotBreakdownForUnit(unit))
+    if entries then
         for _, effect in ipairs(entries) do
             -- Already drawn by the plain DoT segments.
             if (spec.familyID and effect.familyID == spec.familyID) or (spec.luaName and effect.name == spec.luaName) then
@@ -466,7 +466,7 @@ local function nativeTotal(unit, spec, enabled)
     return total
 end
 
-local function updateNativeDamage(entry, unit, enabled, spec)
+local function updateNativeDamage(entry, unit, enabled, spec, entries)
     local config, signature = poisonAppearance(entry, spec)
     if enabled and signature ~= entry.signatures[spec.key] and not (ask(InCombatLockdown) == true
         and ask(entry.parent.IsProtected, entry.parent) == true) then
@@ -481,7 +481,7 @@ local function updateNativeDamage(entry, unit, enabled, spec)
     end
     local damage = entry.natives[spec.key]
     if not damage or damage.failed then return end
-    local total = nativeTotal(unit, spec, enabled)
+    local total = nativeTotal(unit, spec, enabled, entries)
     local label = not spec.stacked and ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
         damage.formatter:SetBreakpoints({ total and label and {
@@ -587,12 +587,26 @@ local function displayContainer(entry, state, unit, enabled, refresh)
     end
 end
 
+-- Forever: every UNIT_AURA of the target or a plate runs the whole update for every entry. Looks, sizes and the list of
+-- plain DoTs are looked at about ten times a second per entry however many events arrive (right away when the unit,
+-- the switch or a forced refresh changes); only the native refresh below follows each event.
+local HEAVY_INTERVAL = 0.09
+local NO_SPECS = {}
+
 local function display(entry, unit, enabled, refresh)
     if not entry then return end
     if forever and ns.db and ns.db.nativeDots == false then enabled = false end
     local allDots = ns.db and ns.db.nativeAllDots == true
-    for _, spec in ipairs(currentSpecs(allDots)) do
-        local ok, err = pcall(updateNativeDamage, entry, unit, enabled, spec)
+    local now = GetTime()
+    local heavy = not forever or refresh == true or not entry.heavyAt or now - entry.heavyAt >= HEAVY_INTERVAL
+        or entry.heavyEnabled ~= enabled or entry.heavyUnit ~= unit
+    local entries
+    if heavy then
+        entry.heavyAt, entry.heavyEnabled, entry.heavyUnit = now, enabled, unit
+        if forever and enabled and ns.dotBreakdownForUnit then entries = ns.dotBreakdownForUnit(unit) end
+    end
+    for _, spec in ipairs(heavy and currentSpecs(allDots) or NO_SPECS) do
+        local ok, err = pcall(updateNativeDamage, entry, unit, enabled, spec, entries)
         if not ok then
             local broken = entry.natives[spec.key]
             if broken then
