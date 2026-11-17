@@ -211,6 +211,15 @@ end
 local GENERIC_SLICE_MS = 1.0
 local building, rebuildGeneric, lastAdvance = nil, false, nil
 local genericMaxSlice = 0
+-- SPELLS_CHANGED also arrives when nothing in the book changed (a warlock's pet summoned, for one: three builds in a
+-- session were seen); the list is only rebuilt when the spells in the book are not the same ones as last time.
+local lastBookSig, genericSkipped = nil, 0
+
+local function bookSignature(book)
+    local sum = 0
+    for _, id in ipairs(book) do sum = (sum * 31 + id) % 2147483647 end
+    return #book .. ":" .. sum
+end
 
 local function startGenericBuild()
     local covered = {}
@@ -233,6 +242,7 @@ local function finishGenericBuild()
             fallback = group.name, generic = true, size = function() return dotTotal(group.castIDs) end }
     end
     generic, combined = specs, nil
+    lastBookSig = building.sig
     genericMs, genericBuilds = building.ms, genericBuilds + 1
     building = nil
 end
@@ -242,8 +252,18 @@ local function advanceGeneric()
     local now = GetTime()
     if lastAdvance == now then return end
     lastAdvance = now
-    if not building and (not generic or rebuildGeneric) then
+    if not building and generic and rebuildGeneric then
         rebuildGeneric = false
+        local book = spellbookIDs()
+        local sig = bookSignature(book)
+        if sig == lastBookSig then
+            genericSkipped = genericSkipped + 1
+            return
+        end
+        startGenericBuild()
+        building.book, building.sig = book, sig
+        genericExamined = #book
+    elseif not building and not generic then
         startGenericBuild()
     end
     local b = building
@@ -251,6 +271,7 @@ local function advanceGeneric()
     local t0 = clock()
     if not b.book then
         b.book = spellbookIDs()
+        b.sig = bookSignature(b.book)
         genericExamined = #b.book
     end
     if type(b.sdi) ~= "table" or type(b.sdi.Compute) ~= "function" then b.index = #b.book + 1 end
@@ -799,8 +820,8 @@ local function describe()
             building.index - 1, #building.book, building.ms))
     end
     if genericMs then
-        add(string.format("  every-DoT list: %.1f ms in all (largest slice %.1f ms) from %d spellbook spells (built %d time(s))",
-            genericMs, genericMaxSlice, genericExamined, genericBuilds))
+        add(string.format("  every-DoT list: %.1f ms in all (largest slice %.1f ms) from %d spellbook spells (built %d time(s), %d skipped as unchanged)",
+            genericMs, genericMaxSlice, genericExamined, genericBuilds, genericSkipped))
     end
     for label, text in pairs(lastErrors) do add("  last error " .. label .. " - " .. text) end
     return lines
