@@ -454,6 +454,8 @@ local function nativeTotal(unit, spec, enabled, entries)
     else total = spec.size and spec.size() end
     if type(total) ~= "number" or total ~= total or total <= 0 or total >= math.huge then return nil end
     if spec.stacked then total = total * MAX_STACKS end -- the bar's full width; no number: the stacks are hidden
+    -- Diagnostic switch (nativeShowAll): draw the native segment even where the plain DoT of the same name is shown.
+    if forever and ns.db.nativeShowAll == true then return total end
     entries = entries or (ns.dotBreakdownForUnit and ns.dotBreakdownForUnit(unit))
     if entries then
         for _, effect in ipairs(entries) do
@@ -765,9 +767,9 @@ local function describe()
     local function add(text) lines[#lines + 1] = text end
     local db = ns.db or {}
     local ok, _, class = pcall(UnitClass, "player")
-    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, class %s",
+    add(string.format("native segments (%s): started %s, master %s, every DoT %s, stack text %s, shown next to plain %s, class %s",
         forever and "Forever" or "Retail", tostring(started), tostring(db.nativeDots ~= false),
-        tostring(db.nativeAllDots == true), tostring(db.nativeStacks == true),
+        tostring(db.nativeAllDots == true), tostring(db.nativeStacks == true), tostring(db.nativeShowAll == true),
         tostring(ok and not secret(class) and class or "?")))
     for _, spec in ipairs(currentSpecs(db.nativeAllDots == true)) do
         local good, size = pcall(function() return spec.size and spec.size() end)

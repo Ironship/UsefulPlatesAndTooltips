@@ -631,6 +631,11 @@ local function buildTabs()
             .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
             .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
             .. "Takes effect at once." })
+        behavior:checkbox("nativeShowAll", "Native next to plain segments (diagnostic)", { tooltip = "For checking the "
+            .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
+            .. "Corruption, for instance). With this on they are drawn anyway, after the plain segments, so you can compare "
+            .. "the real aura's time left with the addon's estimate. Cast a single DoT on a mob and watch both. Off by "
+            .. "default." })
         behavior:checkbox("nativeStacks", "Deadly Poison stack count", { tooltip = "A small number above the bar's left "
             .. "end with the stacks of your Deadly Poison on that mob (the game draws it, the addon cannot read it)." })
         behavior:checkbox("nativeAllDots", "Native segment for every DoT (experimental)", { tooltip = "Draws a segment from "
