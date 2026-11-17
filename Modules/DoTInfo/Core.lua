@@ -3186,7 +3186,7 @@ end
 function ns.stylePoisonSegment(timer, health, config)
     local style = findById(FILL_STYLES, config.fillTexture)
     local perDot = config.dotColors ~= "single"
-    local color = perDot and dotColor({ name = config.name, school = 8 }, config.dotColors) or nil
+    local color = perDot and dotColor({ name = config.name, school = config.school or 8 }, config.dotColors) or nil
     local r, g, b, a = colorOf(config.fillColor, config.fillOpacity)
     if color then r, g, b = color[1], color[2], color[3] end
     local poisonSpan = timer:GetStatusBarTexture()

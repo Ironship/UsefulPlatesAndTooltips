@@ -1,7 +1,9 @@
 -- Blizzard owns these aura icons, timers and stacks; Lua never reads their combat state.
 local _, BIT = ...
 local ns = BIT.Module("DoTInfo")
--- Retail keeps these hooks on ns.Retail; WoW: Forever (no ns.Retail) uses ns.RogueNative, which only draws Deadly Poison.
+-- Retail keeps these hooks on ns.Retail; WoW: Forever (no ns.Retail) uses ns.RogueNative, which draws the damage of
+-- Deadly Poison and of the proc/trap DoTs whose start Lua can only guess (Deep Wound, Ignite, Righteous Judgement,
+-- Immolation Trap, Wyvern Sting).
 -- Forever refuses addon code every read of an enemy's auras in combat (GetUnitAuras, GetAuraDataByIndex and
 -- GetUnitAuraInstanceIDs all throw "Auras cannot be accessed when secret while tainted"), so the native aura
 -- container is the only way to show the poison there.
@@ -92,7 +94,45 @@ local function poisonAmount()
     if type(total) == "number" and total > 0 and total < math.huge then return total end
 end
 
-local function poisonAppearance(entry)
+-- One native damage segment per spell: the aura that proves the DoT is on the mob (its real start, time left and
+-- stacks are drawn by Blizzard's container, Lua never reads them) and the damage Lua puts on it from the spell
+-- description and your stats (spec.size, the whole effect for one application). `luaName` is the name of the plain
+-- DoT Lua may also draw for it (then the native segment steps aside), `covers` the ProcDots guess it replaces.
+local function procSize(kind)
+    local procs = ns.ProcDots
+    return procs and procs.NativeSize and procs.NativeSize(kind) or nil
+end
+
+local SPECS
+if forever then
+    SPECS = {
+        ROGUE = { { key = "poison", slot = "deadlyDamage", label = "POISON", ids = spellIDs, school = 8, stacked = true,
+            familyID = 2818, nameID = 2818, fallback = "Deadly Poison", size = poisonAmount } },
+        WARRIOR = { { key = "deepWounds", slot = "deepWounds", label = "DEEP WOUNDS", ids = { [412609] = true },
+            school = 1, luaName = "Deep Wounds", nameID = 412609, fallback = "Deep Wounds", setting = "procDots",
+            size = function() return procSize("proc") end } },
+        MAGE = { { key = "ignite", slot = "ignite", label = "IGNITE", ids = { [412538] = true }, school = 4,
+            luaName = "Ignite", nameID = 412538, fallback = "Ignite", setting = "procDots",
+            size = function() return procSize("proc") end } },
+        PALADIN = { { key = "judgement", slot = "judgement", label = "JUDGEMENT", ids = { [440675] = true }, school = 2,
+            luaName = "Righteous Judgement", nameID = 440675, fallback = "Righteous Judgement", setting = "procDots",
+            size = function() return procSize("proc") end } },
+        HUNTER = {
+            { key = "trap", slot = "trap", label = "TRAP", ids = { [13797] = true, [14298] = true, [14299] = true,
+                [14300] = true, [14301] = true }, school = 4, covers = "nativeTraps", nameID = 13797,
+                fallback = "Immolation Trap", setting = "procDots", size = function() return procSize("trap") end },
+            { key = "wyvern", slot = "wyvern", label = "WYVERN", ids = { [24336] = true }, school = 8,
+                covers = "nativeDelayed", nameID = 24336, fallback = "Wyvern Sting", setting = "procDots",
+                size = function() return procSize("delayed") end },
+        },
+    }
+else
+    SPECS = { ROGUE = { { key = "poison", slot = "deadlyDamage", label = "POISON", ids = { [2818] = true }, school = 8,
+        familyID = 2818, nameID = 2818, fallback = "Deadly Poison", size = poisonAmount } } }
+end
+local activeSpecs = {}
+
+local function poisonAppearance(entry, spec)
     local config, parts = {}, {}
     local onPlate = entry.onPlate
     for _, key in ipairs({ "fillTexture", "fillColor", "fillOpacity", "dotColors", "outlineStyle",
@@ -105,23 +145,24 @@ local function poisonAppearance(entry)
         parts[#parts + 1] = tostring(config[key])
     end
     config.onPlate = onPlate
-    config.name = ask(C_Spell and C_Spell.GetSpellName, 2818) or "Deadly Poison"
+    config.name = ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.fallback
+    config.school = spec.school
     return config, table.concat(parts, "|")
 end
 
-local function createPoisonDamage(entry, config, signature)
+local function createNativeDamage(entry, spec, config, signature)
     local property = Enum and Enum.DurationTextBindingProperty
     local direction = Enum and Enum.StatusBarTimerDirection
     if type(entry.container.AddAuraSlot) ~= "function" or not property or not direction
         or type(property.RemainingPercent) ~= "number" or type(direction.RemainingTime) ~= "number"
         or not C_StringUtil or type(C_StringUtil.CreateNumericRuleFormatter) ~= "function" then
-        if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE POISON duration formatting unavailable") end
+        if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " duration formatting unavailable") end
         return
     end
     local scale, base, container, formatter, initialized, initializerError
     local ok, err = pcall(function()
         -- This plain HP scale stays outside restricted aura buttons. Its fill supplies native geometry.
-        for _, key in ipairs({ "poisonScale", "poisonBase" }) do
+        for _, key in ipairs({ spec.key .. "Scale", spec.key .. "Base" }) do
             if not entry[key] then
                 local bar = CreateFrame("StatusBar", nil, entry.parent, "DisableUntrustedLayoutScriptsTemplate")
                 bar:SetAllPoints(entry.bar)
@@ -132,14 +173,14 @@ local function createPoisonDamage(entry, config, signature)
                 entry[key] = bar
             end
         end
-        scale, base = entry.poisonScale, entry.poisonBase
+        scale, base = entry[spec.key .. "Scale"], entry[spec.key .. "Base"]
         container = CreateFrame("AuraContainer", nil, entry.parent, "CustomAuraContainerTemplate")
         container:SetSize(1, 1)
         container:SetPoint("BOTTOMLEFT", entry.bar, "TOPLEFT", 0, 4)
         formatter = C_StringUtil.CreateNumericRuleFormatter()
         formatter:SetBreakpoints({ { threshold = 0, format = "" } })
-        container:AddAuraSlot("deadlyDamage", "HARMFUL|PLAYER", {
-            candidateFilters = { includeSpellIDs = forever and spellIDs or { [2818] = true } },
+        container:AddAuraSlot(spec.slot, "HARMFUL|PLAYER", {
+            candidateFilters = { includeSpellIDs = spec.ids },
             initializeFrame = function(button)
                 -- The native factory swallows callback errors, so retain setup failure explicitly.
                 initialized, initializerError = pcall(function()
@@ -152,7 +193,7 @@ local function createPoisonDamage(entry, config, signature)
                     clip:SetClipsChildren(true)
                     local timer = CreateFrame("StatusBar", nil, clip, "DisableUntrustedLayoutScriptsTemplate")
                     local stacks
-                    if forever then
+                    if spec.stacked then
                         -- An invisible bar that fills with the stacks; the timer is as wide as that fill, so what it
                         -- draws is stacks x one application x the time left, without Lua reading either.
                         stacks = CreateFrame("StatusBar", nil, clip, "DisableUntrustedLayoutScriptsTemplate")
@@ -188,17 +229,15 @@ local function createPoisonDamage(entry, config, signature)
         if scale then pcall(scale.Hide, scale) end
         if container then pcall(container.SetEnabled, container, false); pcall(container.Hide, container) end
         if ns.TraceRogueAura then
-            ns.TraceRogueAura("NATIVE POISON setup failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
+            ns.TraceRogueAura("NATIVE " .. spec.label .. " setup failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
         end
         return
     end
-    if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE POISON damage display ready") end
-    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature }
+    if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " damage display ready") end
+    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature, spec = spec }
 end
 
-local function updatePoisonOffset(entry, unit, enabled)
-    local damage = entry and entry.poisonDamage
-    if not damage then return end
+local function updateNativeOffset(entry, unit, enabled, damage)
     local offset = enabled and ns.nativePoisonBase and ns.nativePoisonBase(unit, entry.parent, entry.bar) or 0
     if offset ~= damage.offset or damage.total ~= damage.offsetTotal then
         damage.base:SetValue(offset)
@@ -207,30 +246,47 @@ local function updatePoisonOffset(entry, unit, enabled)
     end
 end
 
-local function updatePoisonDamage(entry, unit, enabled)
-    local config, signature = poisonAppearance(entry)
-    if enabled and signature ~= entry.poisonSignature and not (ask(InCombatLockdown) == true
-        and ask(entry.parent.IsProtected, entry.parent) == true) then
-        -- Restricted descendants cannot be restyled; replace only the poison slot, not the aura icons.
-        local old = entry.poisonDamage
-        local replacement = createPoisonDamage(entry, config, signature)
-        if replacement then
-            if old then pcall(old.container.SetEnabled, old.container, false); pcall(old.container.Hide, old.container) end
-            entry.poisonDamage = replacement
-        end
-        entry.poisonSignature = signature
-    end
-    local damage = entry.poisonDamage
-    if not damage then return end
-    local total = enabled and poisonAmount() or nil
-    if forever and total then total = total * MAX_STACKS end -- the bar's full width; no number: the stacks are hidden
-    if enabled and ns.dotBreakdownForUnit then
+local function updatePoisonOffset(entry, unit, enabled)
+    if not entry or not entry.natives then return end
+    for _, damage in pairs(entry.natives) do updateNativeOffset(entry, unit, enabled, damage) end
+end
+
+-- What one application of the effect does over its whole duration, or nil when the segment has nothing to show.
+local function nativeTotal(unit, spec, enabled)
+    if not enabled then return nil end
+    if spec.setting and ns.db[spec.setting] == false then return nil end
+    local total = spec.size and spec.size()
+    if type(total) ~= "number" or total ~= total or total <= 0 or total >= math.huge then return nil end
+    if spec.stacked then total = total * MAX_STACKS end -- the bar's full width; no number: the stacks are hidden
+    if ns.dotBreakdownForUnit then
         local entries = ns.dotBreakdownForUnit(unit)
         for _, effect in ipairs(entries) do
-            if effect.familyID == 2818 then total = nil; break end -- Already drawn by the plain DoT segments.
+            -- Already drawn by the plain DoT segments.
+            if (spec.familyID and effect.familyID == spec.familyID) or (spec.luaName and effect.name == spec.luaName) then
+                return nil
+            end
         end
     end
-    local label = not forever and ns.db and ns.db.showLabel == true
+    return total
+end
+
+local function updateNativeDamage(entry, unit, enabled, spec)
+    local config, signature = poisonAppearance(entry, spec)
+    if enabled and signature ~= entry.signatures[spec.key] and not (ask(InCombatLockdown) == true
+        and ask(entry.parent.IsProtected, entry.parent) == true) then
+        -- Restricted descendants cannot be restyled; replace only the poison slot, not the aura icons.
+        local old = entry.natives[spec.key]
+        local replacement = createNativeDamage(entry, spec, config, signature)
+        if replacement then
+            if old then pcall(old.container.SetEnabled, old.container, false); pcall(old.container.Hide, old.container) end
+            entry.natives[spec.key] = replacement
+        end
+        entry.signatures[spec.key] = signature
+    end
+    local damage = entry.natives[spec.key]
+    if not damage then return end
+    local total = nativeTotal(unit, spec, enabled)
+    local label = not spec.stacked and ns.db and ns.db.showLabel == true
     if total ~= damage.total or label ~= damage.label then
         damage.formatter:SetBreakpoints({ total and label and {
             -- Duration text supplies 0..100 percent, unlike the timer bar's 0..1 fraction.
@@ -261,7 +317,7 @@ local function updatePoisonDamage(entry, unit, enabled)
             damage.width, damage.offset = width, nil
         end
     end
-    updatePoisonOffset(entry, unit, enabled)
+    updateNativeOffset(entry, unit, enabled, damage)
     -- shortcut: hidden full-bar geometry or poison above max HP clips early; replace when native uncapped sizing is available.
 end
 
@@ -279,12 +335,15 @@ local function create(parent, bar, onPlate)
         if type(strata) == "string" then container:SetFrameStrata(strata) end
         local level = ask(bar.GetFrameLevel, bar)
         container:SetFrameLevel(type(level) == "number" and level + 5 or 200)
-        container:AddAuraGroup("rogue", "HARMFUL|PLAYER", {
-            candidateFilters = { includeSpellIDs = spellIDs },
-            initializeFrame = initialize,
-            maxFrameCount = 8,
-            layout = { elementWidth = SIZE, elementHeight = SIZE, elementSpacing = GAP },
-        })
+        -- Forever draws only the damage segments: the icons would crowd the unit frames and plates.
+        if not forever then
+            container:AddAuraGroup("rogue", "HARMFUL|PLAYER", {
+                candidateFilters = { includeSpellIDs = spellIDs },
+                initializeFrame = initialize,
+                maxFrameCount = 8,
+                layout = { elementWidth = SIZE, elementHeight = SIZE, elementSpacing = GAP },
+            })
+        end
     end)
     if not ok then
         -- A failed initializer must not allocate another batch on every shared refresh.
@@ -295,7 +354,7 @@ local function create(parent, bar, onPlate)
         end
         return
     end
-    local entry = { container = container, parent = parent, bar = bar, onPlate = onPlate }
+    local entry = { container = container, parent = parent, bar = bar, onPlate = onPlate, natives = {}, signatures = {} }
     return entry
 end
 
@@ -334,15 +393,17 @@ end
 
 local function display(entry, unit, enabled, refresh)
     if not entry then return end
-    local ok, err = pcall(updatePoisonDamage, entry, unit, enabled)
-    if not ok and not entry.poisonError then
-        entry.poisonError = true
-        if ns.TraceRogueAura then
-            ns.TraceRogueAura("NATIVE POISON update failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
+    for _, spec in ipairs(activeSpecs) do
+        local ok, err = pcall(updateNativeDamage, entry, unit, enabled, spec)
+        if not ok and not entry.poisonError then
+            entry.poisonError = true
+            if ns.TraceRogueAura then
+                ns.TraceRogueAura("NATIVE " .. spec.label .. " update failed: " .. (type(err) == "string" and not secret(err) and err or "restricted"))
+            end
         end
     end
     displayContainer(entry, entry, unit, enabled, refresh)
-    if entry.poisonDamage then displayContainer(entry, entry.poisonDamage, unit, enabled, refresh) end
+    for _, damage in pairs(entry.natives) do displayContainer(entry, damage, unit, enabled, refresh) end
 end
 
 local function hostile(unit)
@@ -406,7 +467,7 @@ end
 function R.StartRogueAuras()
     if started or ns.off or not ns.db then return end
     local ok, _, class = pcall(UnitClass, "player")
-    if not ok or secret(class) or class ~= "ROGUE" then return end
+    if not ok or secret(class) or type(class) ~= "string" or not SPECS[class] then return end
     if not C_XMLUtil or type(C_XMLUtil.GetTemplateInfo) ~= "function" then return end
     if not events then
         events = CreateFrame("Frame")
@@ -445,6 +506,11 @@ function R.StartRogueAuras()
     end
     if ask(C_XMLUtil.GetTemplateInfo, "CustomAuraContainerTemplate") == nil then return end
     started = true
+    activeSpecs = SPECS[class]
+    -- The segment now draws what ProcDots would only guess from hits: it stops arming those guesses.
+    for _, spec in ipairs(activeSpecs) do
+        if spec.covers and ns.ProcDots then ns.ProcDots[spec.covers] = true end
+    end
     seedPlates()
     update(false)
 end

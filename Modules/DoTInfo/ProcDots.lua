@@ -51,6 +51,11 @@ local pending        -- an unattributed crit, kept for a moment: { key, unit, am
 local chains = {}    -- hits that may be a trap's ticks: [mob key] = { at = last, first = first, noisy = bool }
 local delayed = {}   -- DoTs cast at a mob that start later (Wyvern Sting): [mob key] = { spellID, name, total, ... }
 local delayedChains = {} -- the same kind of chain, for them
+local castLog = {}   -- the spell ids of your last damaging casts, oldest first (the crit an Ignite is sized from)
+-- The native aura segments (RogueAuras.lua) draw traps and delayed DoTs from the real aura: they set these flags and
+-- Lua stops guessing their start from the hits. The sizes are still taken from the cast (P.NativeSize).
+P.nativeTraps, P.nativeDelayed = false, false
+P.sizes = {}         -- ["trap" | "delayed"] = { total, duration, interval } of the last such cast
 
 local function isSecret(v)
     if type(issecretvalue) ~= "function" then return false end
@@ -138,6 +143,11 @@ function P.ArmTrap(spellID, name, desc, total, school, duration, statedInterval)
     if not enabled() then return true end -- switched off: the cast is still not a DoT on the target
     local now = GetTime()
     local interval = statedInterval or 3
+    P.sizes.trap = { total = total, duration = duration, interval = interval }
+    if P.nativeTraps then
+        armed, chains = nil, {}
+        return true -- the aura segment shows it from the real application
+    end
     local lifetime = type(desc) == "string" and not isSecret(desc) and tonumber(desc:match("[Tt]rap will exist for (%d+) min"))
     armed = { spellID = spellID, name = name, total = total, school = school, duration = duration,
         interval = interval, placedAt = now, expiresAt = now + (lifetime or 1) * 60 }
@@ -222,6 +232,8 @@ function P.ArmDelayed(key, spellID, name, total, school, duration, interval)
     if not I() or not key then return end
     if not enabled() then return end
     local now = GetTime()
+    P.sizes.delayed = { total = total, duration = duration, interval = interval }
+    if P.nativeDelayed then return end -- the aura segment shows it from the real application
     delayed[key] = { spellID = spellID, name = name, total = total, school = school, duration = duration,
         interval = interval, castAt = now, expiresAt = now + DELAYED_LIFETIME }
     delayedChains[key] = nil
@@ -328,6 +340,52 @@ local function light(s, key, amount, now)
     return true
 end
 
+-- What the native aura segment of a proc DoT, trap or delayed DoT is sized with (the whole effect for one
+-- application), or nil when it cannot be told. "trap" and "delayed" are the sizes of the last such cast; "proc" is
+-- Ignite, Deep Wound or Righteous Judgement from the talent and your stats, with no crit read from a hit (the client
+-- hides the amounts): a Deep Wound is a share of the main hand's average, an Ignite or Judgement a share of the crit
+-- the last matching cast would deal (the expected hit from SpellDamageInfo, times 1.5 for a spell, 2 for a melee hit).
+function P.NativeSize(kind)
+    if kind == "trap" or kind == "delayed" then
+        local size = P.sizes[kind]
+        return size and size.total or nil
+    end
+    local s = spec()
+    if not s then return nil end
+    local rank = rankOf(s)
+    if rank <= 0 then return nil end
+    local share = s.perRank * rank
+    if s.textPattern and s.runeID then
+        local ok, text = pcall(function() return C_Spell.GetSpellDescription(s.runeID) end)
+        if ok and type(text) == "string" and not isSecret(text) then
+            local pct = text:match(s.textPattern)
+            if tonumber(pct) then share = tonumber(pct) / 100 end
+        end
+    end
+    if s.basis ~= "hit" then
+        local weapon = mainHandAverage()
+        return weapon and weapon * share or nil
+    end
+    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+    if type(sdi) ~= "table" or type(sdi.Compute) ~= "function" then return nil end
+    for index = #castLog, 1, -1 do
+        local id = castLog[index]
+        local listed = not s.castSpells
+        for _, wanted in ipairs(s.castSpells or {}) do if wanted == id then listed = true end end
+        if listed then
+            local ok, view = pcall(sdi.Compute, id, false)
+            local direct = ok and type(view) == "table" and type(view.direct) == "table" and view.direct or nil
+            local school = type(view) == "table" and view.school
+            if direct and tonumber(direct.min) and tonumber(direct.max)
+                and (s.anySchool or type(school) ~= "number" or schoolMatches(s, school)) then
+                local crit = type(school) == "number" and school == PHYSICAL and 2 or 1.5
+                return (direct.min + direct.max) / 2 * crit * share
+            end
+        end
+    end
+    return nil
+end
+
 -- Whether a crit of this school on this mob may be yours.
 local castNameCache = {}
 local function castNames(s)
@@ -387,6 +445,10 @@ function P.NoteCast(key, spellID, name, desc)
     -- A cast with no readable recipient counts only when it deals damage: a self-buff must not open the window.
     if key or (type(desc) == "string" and not isSecret(desc) and desc:find("[Dd]amage")) then
         lastCast = { key = key, at = now, name = name }
+        if type(spellID) == "number" then
+            castLog[#castLog + 1] = spellID
+            if #castLog > 8 then table.remove(castLog, 1) end
+        end
     end
     for old, at in pairs(recent) do
         if now - at > 30 then recent[old] = nil end
