@@ -194,20 +194,68 @@ local function observe(unit, aura, filtered, signal, seen)
     else report(unit, "waiting for a readable effect application") end
 end
 
+-- One line per 15 s saying what this client lets addon code read from a unit's auras. Alpha diagnostics:
+-- the aura list can be refused in combat, and this shows which other reads are open.
+local probedAt
+local function probe(unit)
+    local now = GetTime()
+    if probedAt and now - probedAt < 15 then return end
+    probedAt = now
+    local parts = {}
+    local function try(label, fn, ...)
+        local ok, value = pcall(fn, ...)
+        local text
+        if not ok then text = "error " .. errorText(value)
+        elseif secret(value) then text = "secret"
+        elseif type(value) == "table" then
+            local fields = {}
+            for _, key in ipairs({ "spellId", "applications", "expirationTime", "sourceUnit" }) do
+                local okField, field = pcall(function() return value[key] end)
+                fields[#fields + 1] = key .. (okField and (secret(field) and "=secret" or "=" .. tostring(field)) or "=error")
+            end
+            text = "table " .. table.concat(fields, ",")
+        else text = tostring(value) end
+        parts[#parts + 1] = label .. ": " .. text
+    end
+    local aurasAPI, secrets = C_UnitAuras, C_Secrets
+    parts[#parts + 1] = "combat=" .. tostring(boolean(UnitAffectingCombat, "player"))
+    if secrets then
+        for _, name in ipairs({ "ShouldAurasBeSecret", "ShouldUnitAuraIndexBeSecret" }) do
+            if type(secrets[name]) == "function" then try(name, secrets[name], unit, 1) end
+        end
+        if type(secrets.GetSpellAuraSecrecy) == "function" then try("GetSpellAuraSecrecy(2818)", secrets.GetSpellAuraSecrecy, 2818) end
+    else parts[#parts + 1] = "C_Secrets=nil" end
+    if aurasAPI then
+        if type(aurasAPI.GetAuraDataByIndex) == "function" then
+            try("ByIndex(1)", aurasAPI.GetAuraDataByIndex, unit, 1, "HARMFUL|PLAYER")
+        end
+        if type(aurasAPI.GetUnitAuraBySpellID) == "function" then
+            try("BySpellID(2818)", aurasAPI.GetUnitAuraBySpellID, unit, 2818)
+        end
+        if type(aurasAPI.GetUnitAuraInstanceIDs) == "function" then
+            try("InstanceIDs", aurasAPI.GetUnitAuraInstanceIDs, unit, "HARMFUL|PLAYER")
+        end
+    end
+    ns.TraceRogueAura("ROGUE PROBE " .. unit .. " " .. table.concat(parts, " | "))
+end
+
 local function scan(unit)
     local seen = {}
     local ok, reason = pcall(function()
         if not C_UnitAuras then return "aura API unavailable" end
         local auras
-        if type(C_UnitAuras.GetUnitAuras) == "function" then
-            auras = C_UnitAuras.GetUnitAuras(unit, "HARMFUL|PLAYER")
-        elseif type(C_UnitAuras.GetAuraDataByIndex) == "function" then
+        -- The index reader is the one the rest of the addon uses; GetUnitAuras refuses tainted callers
+        -- while the aura list is secret ("Auras cannot be accessed when secret while tainted").
+        if type(C_UnitAuras.GetAuraDataByIndex) == "function" then
             auras = {}
             for index = 1, 255 do
                 local aura = C_UnitAuras.GetAuraDataByIndex(unit, index, "HARMFUL|PLAYER")
-                if not secret(aura) and aura == nil then break end
+                if secret(aura) then return "aura list hidden" end
+                if aura == nil then break end
                 auras[#auras + 1] = aura
             end
+        elseif type(C_UnitAuras.GetUnitAuras) == "function" then
+            auras = C_UnitAuras.GetUnitAuras(unit, "HARMFUL|PLAYER")
         else return "aura API unavailable" end
         if not plain(auras, "table") then return "aura list hidden" end
         local unavailable
@@ -215,7 +263,7 @@ local function scan(unit)
         return unavailable
     end)
     if not ok then reason = "aura access denied: " .. errorText(reason) end
-    if reason then report(unit, reason) end
+    if reason then report(unit, reason); pcall(probe, unit) end
     -- An idle, visible NPC has left combat even when Retail still restricts its aura list.
     -- Keep effects actually read in a partial scan; an unavailable scan alone never clears PvP/combat.
     local resetReason = idleNPC(unit) and (reason and "aura unavailable" or "aura absent") or nil
