@@ -176,7 +176,7 @@ local function buildSettings(parent)
   y = place(sliderRow(parent, "Opacity", "opacity", 10, 100, 5, "%", nil), y, 40)
 
   y = section(parent, y, "TRY IT")
-  y = place(buttonRow(parent, "Test on my bars", "Glow 6 s", function()
+  y = place(buttonRow(parent, "Simulate on my bars", "Glow 6 s", function()
     ns.Test(6)
   end, "Every button that holds one of the spells glows for six seconds, whatever your target is, so the "
     .. "look can be judged without waiting for a low-health enemy."), y)
@@ -340,7 +340,7 @@ local function buildPreview(pane)
   hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
   hint:SetJustifyH("LEFT")
   hint:SetText(BIT.L("The four buttons show the style, color, size and opacity as set. The glow on your action "
-    .. "bars appears only while the spell's condition holds. \"Test on my bars\" shows it on the real buttons."))
+    .. "bars appears only while the spell's condition holds. \"Simulate on my bars\" shows it on the real buttons."))
 
   pane.title = title
   pane.hint = hint

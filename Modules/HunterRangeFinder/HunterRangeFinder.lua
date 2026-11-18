@@ -1133,8 +1133,18 @@ local function sliderRow(parent, labelText, min, max, step, get, set, opts)
     return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, get, set, rowOpts(opts))
 end
 
+-- opts.up: the saved value counts down (negative = above the bar); the slider shows it the other way round
+-- (positive = up, like every other offset in the addon). Nothing saved changes.
 local function slider(parent, key, labelText, min, max, step, opts)
     opts = opts or {}
+    if opts.up then
+        return sliderRow(parent, labelText, 0 - max, 0 - min, step,
+            function() return 0 - (tonumber(db()[key]) or 0) end,
+            function(value)
+                db()[key] = 0 - value
+                changed()
+            end, opts)
+    end
     return sliderRow(parent, labelText, min, max, step,
         function() return db()[key] end,
         function(value)
@@ -1281,9 +1291,9 @@ local function buildTabs(parent, isHunter)
         { enabledIf = hunterOnly,
             tooltip = "The rail rides above the target's nameplate, like the ResourceDing dots. "
                 .. "It is hidden when that plate is not visible. Unchecked keeps the draggable screen position." })
-    parent.plateOffset = display:slider("plateOffset", "Vertical offset (- = above)", -80, 30, 1,
-        { enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
-            tooltip = "How far the rail sits from the plate's health bar. The same seat as the combo dots: top of the row, -offset under the bar." })
+    parent.plateOffset = display:slider("plateOffset", "Height above the bar", -80, 30, 1,
+        { up = true, enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
+            tooltip = "How high the rail sits above the plate's health bar. Positive is up, negative is under the bar. The same seat as the combo dots." })
     plateClashLine = display:note(BIT.L("Nameplate lanes"))
     refreshPlateClash()
     display:gap()
@@ -1294,26 +1304,26 @@ local function buildTabs(parent, isHunter)
         { tooltip = "Native Blizzard raid skull for the 5-8 yd dead zone. Unchecked hides it." })
     parent.meleeIcon = display:checkbox("showMeleeIcon", "Show Melee mark (native sword)",
         { tooltip = "Native Blizzard sword glyph for melee reach. Unchecked hides it." })
-    display.reset = function()
-        for _, key in ipairs(display.keys) do db()[key] = DEFAULTS[key] end
-        setLocked(DEFAULTS.locked)
-    end
-
-    local range = addTab(BIT.L("Range"))
-    parent.longRange = range:checkbox("longRange", "Extended range past 35 yd (Hawk Eye)",
+    display:gap()
+    parent.longRange = display:checkbox("longRange", "Extended range past 35 yd (Hawk Eye)",
         -- Once the spellbook has answered, the box shows that answer and a click could not change it.
         { enabledIf = function() return isHunter and detectedAutoMax == nil end,
             tooltip = "Seven dots instead of six. Auto-detected from Auto Shot's reach when the spellbook "
                 .. "answers; tick manually otherwise." })
-    range:info("Auto Shot's reach reads", function()
+    display:info("Auto Shot's reach reads", function()
         return detectedAutoMax and string.format(BIT.L("%s yd"), tostring(detectedAutoMax))
             or BIT.L("not answered by this client")
     end, { enabledIf = hunterOnly,
         tooltip = "Auto Shot's own maximum range, read from the spellbook. Past 35 yd the seventh dot exists." })
-    range:gap()
-    range:note(BIT.L("The bands are approximate item probes, never exact yards: 8-10, 10-15, 15-20, 20-25, "
+    display:gap()
+    display:note(BIT.L("The bands are approximate item probes, never exact yards: 8-10, 10-15, 15-20, 20-25, "
         .. "25-30 and 30-35 yd. MELEE is Wing Clip's reach; the 5-8 yd dead zone sits between melee and the "
         .. "first dot. /upt hunterprobe prints what the client answers for the probes."))
+
+    display.reset = function()
+        for _, key in ipairs(display.keys) do db()[key] = DEFAULTS[key] end
+        setLocked(DEFAULTS.locked)
+    end
 
     local appearance = addTab(BIT.L("Appearance"))
     local editor = BIT.UI.Appearance(appearance.inner, M.moduleName, CAPABILITIES, refreshAll, hunterLegacy)
@@ -1392,8 +1402,24 @@ local function buildLivePreview(pane)
     bandRow:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -6)
     pane.hunterBandRow = bandRow
 
+    -- SIMULATE: the target runs in from the far band to melee and into the dead zone.
+    local savedBand
+    local simulate = BIT.Looks.Simulate(pane, bandRow, {
+        x = 6, y = -8, length = 9,
+        text = "The target runs in through every band, from 35+ yd to melee and the dead zone.",
+        start = function() savedBand = previewBand end,
+        frame = function(t)
+            local index = math.min(#BAND_ORDER, math.floor(t) + 1)
+            -- far to near: MAX first, then Y35 down to Y10, then the dead zone and melee reach
+            local walk = { "MAX", "Y35", "Y30", "Y25", "Y20", "Y15", "Y10", "DEAD", "MELEE" }
+            setPreviewBand(walk[index])
+        end,
+        finish = function() setPreviewBand(savedBand or SAMPLE_BAND) end,
+    })
+    pane.hunterSimulate = simulate
+
     local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", bandRow, "BOTTOMLEFT", 6, -14)
+    hint:SetPoint("TOPLEFT", simulate, "BOTTOMLEFT", 0, -10)
     hint:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
     hint:SetJustifyH("LEFT")
     hint:SetText(BIT.L("Drawn by the same code as the live HUD, on a mock enemy nameplate. Six dots by "

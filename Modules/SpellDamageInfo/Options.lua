@@ -20,7 +20,7 @@ local ns = BIT.Module and BIT.Module("SpellDamageInfo") or BIT
 local L, Estimate = ns.L, ns.Estimate
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 660, 700
+local WINDOW_WIDTH, WINDOW_HEIGHT = 660, 780
 local HEADER_HEIGHT = 46
 local PREVIEW_WIDTH = 250
 local ROW_HEIGHT = BIT.Looks.ROW_HEIGHT
@@ -278,6 +278,25 @@ end
 
 local function numbersShown(settings) return settings.button ~= "off" end
 
+-- A small gold heading over a group of rows; its text follows the chosen language like the rows' labels.
+local function heading(parent, key)
+  local row = CreateFrame("Frame", nil, parent)
+  row:SetHeight(20)
+  row:SetWidth(LAYOUT.label + LAYOUT.control)
+  row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  row.label:SetPoint("LEFT", 6, 0)
+  local c = BIT.UI.COLOR.heading
+  row.label:SetTextColor(c[1], c[2], c[3])
+  localizedText(row.label, key)
+  local rule = row:CreateTexture(nil, "ARTWORK")
+  local d = BIT.UI.COLOR.divider
+  rule:SetColorTexture(d[1], d[2], d[3], d[4])
+  rule:SetHeight(1)
+  rule:SetPoint("LEFT", row.label, "RIGHT", 8, 0)
+  rule:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+  return row
+end
+
 local function buildSettings(area)
   local rows, y = {}, 0
   local function place(key, row)
@@ -285,6 +304,7 @@ local function buildSettings(area)
     y = y + (row.standard and row:GetHeight() or ROW_HEIGHT)
     rows[key] = row
   end
+  place("headNumbers", heading(area, "OPT_H_NUMBERS"))
   place("button", choice(area, "button", L.OPT_BUTTON, {
     { id = "total", label = L.OPT_BUTTON_TOTAL },
     { id = "direct", label = L.OPT_BUTTON_DIRECT },
@@ -306,17 +326,21 @@ local function buildSettings(area)
   place("skipUtilityBars", checkbox(area, "skipUtilityBars", L.OPT_SKIP_BARS,
     { tooltip = L.OPT_SKIP_BARS_TIP, enabledIf = numbersShown }))
   y = y + 8
+  place("headEstimate", heading(area, "OPT_H_ESTIMATE"))
   -- On Retail the descriptions already hold the player's stats, so both estimates stand down.
   local notRetail = function() return not ns.IsRetail() end
   place("estimate", checkbox(area, "estimate", L.OPT_ESTIMATE,
     { tooltip = L.OPT_ESTIMATE_TIP, retailNote = true, enabledIf = notRetail }))
   place("talents", checkbox(area, "talents", L.OPT_TALENTS,
     { tooltip = L.OPT_TALENTS_TIP, retailNote = true, enabledIf = notRetail }))
-  place("tooltip", checkbox(area, "tooltip", L.OPT_TOOLTIP, { tooltip = L.OPT_TOOLTIP_TIP }))
-  place("reduction", checkbox(area, "reduction", L.OPT_REDUCTION, { tooltip = L.OPT_REDUCTION_TIP }))
   place("weapon", checkbox(area, "weapon", L.OPT_WEAPON, { tooltip = L.OPT_WEAPON_TIP, retailNote = true, enabledIf = notRetail }))
+  place("reduction", checkbox(area, "reduction", L.OPT_REDUCTION, { tooltip = L.OPT_REDUCTION_TIP }))
+  y = y + 8
+  place("headTooltip", heading(area, "OPT_H_TOOLTIP"))
+  place("tooltip", checkbox(area, "tooltip", L.OPT_TOOLTIP, { tooltip = L.OPT_TOOLTIP_TIP }))
   y = y + 8
   -- which kinds of number the buttons show (the weapon and the red reduction numbers have their own boxes above)
+  place("headKinds", heading(area, "OPT_H_KINDS"))
   place("showDamage", checkbox(area, "showDamage", L.OPT_SHOW_DAMAGE, { tooltip = L.OPT_SHOW_DAMAGE_TIP, enabledIf = numbersShown }))
   place("showDot", checkbox(area, "showDot", L.OPT_SHOW_DOT, { tooltip = L.OPT_SHOW_DOT_TIP, enabledIf = numbersShown }))
   place("showHeal", checkbox(area, "showHeal", L.OPT_SHOW_HEAL, { tooltip = L.OPT_SHOW_HEAL_TIP, enabledIf = numbersShown }))
@@ -324,6 +348,7 @@ local function buildSettings(area)
   place("showMana", checkbox(area, "showMana", L.OPT_SHOW_MANA, { tooltip = L.OPT_SHOW_MANA_TIP, enabledIf = numbersShown }))
   place("showAbsorb", checkbox(area, "showAbsorb", L.OPT_SHOW_ABSORB, { tooltip = L.OPT_SHOW_ABSORB_TIP, enabledIf = numbersShown }))
   y = y + 8
+  place("headHistory", heading(area, "OPT_H_HISTORY"))
   place("useHistory", checkbox(area, "useHistory", L.OPT_HISTORY, { tooltip = L.OPT_HISTORY_TIP }))
   local forget = BIT.Looks.Rows.Button(area, L.OPT_HISTORY_ROW, L.OPT_HISTORY_CLEAR, function()
     if ns.History then ns.History.Clear() end

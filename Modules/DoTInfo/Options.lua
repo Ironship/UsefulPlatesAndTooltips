@@ -14,7 +14,8 @@ local ADDON_NAME, BIT = ...
 local ns = BIT.Module("DoTInfo")
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 626 -- two tab rows plus the longest page (Nameplates, 17 rows)
+local TAB_ROWS = ns.Retail and 2 or 3 -- three tabs per row; Forever has the Native auras tab as a seventh
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 626 + (TAB_ROWS - 2) * 26 -- tab rows plus the longest page (Nameplates, 17 rows)
 local HEADER_HEIGHT = 52 -- title bar: title, presets, close button
 local TAB_HEIGHT = 26
 local PREVIEW_WIDTH = 290
@@ -178,7 +179,7 @@ local function syncDisplayHost()
         if paused and simulation then
             simulation:Cancel()
             simulation = nil
-            window.simulateButton:SetText(BIT.L("Simulate fight"))
+            window.simulateButton:SetText(BIT.L("Simulate"))
         end
         ns.setDisplayHost((not paused) and window.host or nil)
         ns.setPlatePreview((not paused) and window.plateHost or nil, preview)
@@ -243,7 +244,7 @@ local function stopSimulation()
         simulation:Cancel()
         simulation = nil
     end
-    if window then window.simulateButton:SetText(BIT.L("Simulate fight")) end
+    if window then window.simulateButton:SetText(BIT.L("Simulate")) end
 end
 
 -- A scripted fight: a DoT lands, ticks, a second DoT lands and makes it lethal, ticks until the target dies.
@@ -356,52 +357,6 @@ local function actionRow(parent, labelText, buttonText, onClick, opts)
     return row
 end
 
--- A frame path (Core/Frames.lua): a text box, saved on Enter or leaving it, and a Pick button that takes the next
--- click on screen. kind: "bar" or "anchor". key: the Frames setting ("target", "icon", "focus", "plate").
-local function frameRow(parent, key, labelText, kind, opts)
-    opts = opts or {}
-    local row = makeRow(parent, labelText, opts)
-    local Frames = BIT.Frames
-    local box = CreateFrame("EditBox", nil, row, "BackdropTemplate")
-    box:SetSize(row.layout.control - (opts.noPick and 0 or 58), 22)
-    box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-    setBackdrop(box, 0.13)
-    box:SetFontObject("GameFontHighlightSmall")
-    box:SetTextInsets(6, 6, 0, 0)
-    box:SetAutoFocus(false)
-    local function save(value)
-        Frames.Set(key, value)
-        changed()
-    end
-    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-    box:SetScript("OnEscapePressed", function(self)
-        self:SetText(Frames.Get(key))
-        self:ClearFocus()
-    end)
-    box:SetScript("OnEditFocusLost", function(self)
-        if strtrim(self:GetText() or "") ~= Frames.Get(key) then save(self:GetText()) end
-    end)
-    local pick = (not opts.noPick) and pushButton(row, "Pick", 52, function()
-        ns.print(kind == "bar"
-            and BIT.L("Click the health bar (you may need to move this window). Right-click cancels.")
-            or BIT.L("Click where the kill icon should go (you may need to move this window). Right-click cancels."))
-        Frames.StartPick(kind, function(path)
-            box:SetText(path)
-            save(path)
-            ns.print(string.format(BIT.L("Picked %s."), path))
-        end)
-    end)
-    if pick then
-        pick:SetPoint("LEFT", box, "RIGHT", 6, 0)
-        box:SetWidth(row.layout.control - pick:GetWidth() - 6)
-    end
-    function row:Refresh()
-        if not box:HasFocus() then box:SetText(Frames.Get(key)) end
-        self:ApplyEnabled(box)
-    end
-    return row
-end
-
 ---------------------------------------------------------------------------
 -- Tabs
 ---------------------------------------------------------------------------
@@ -422,7 +377,7 @@ local function addTab(name)
     local area = window.settingsArea
     local tab = { keys = {}, y = 0 }
     tab.content = CreateFrame("Frame", nil, area)
-    tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40 - TAB_HEIGHT)
+    tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40 - (TAB_ROWS - 1) * TAB_HEIGHT)
     tab.content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, 40)
     tab.content:Hide()
 
@@ -452,8 +407,14 @@ local function addTab(name)
     function tab:slider(key, ...) return place(slider(self.content, key, ...), key) end
     function tab:choice(key, ...) return place(choice(self.content, key, ...), key) end
     function tab:action(...) return place(actionRow(self.content, ...)) end
-    function tab:frame(key, ...) return place(frameRow(self.content, key, ...)) end
     function tab:gap() self.y = self.y + 8 end
+    function tab:header(text) return place(BIT.UI.Header(self.content, text)) end
+    function tab:note(text)
+        local row = BIT.UI.Note(self.content, text, 470)
+        row:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, -tab.y)
+        tab.y = tab.y + row:GetHeight() + 8
+        return row
+    end
 
     table.insert(tabs, tab)
     return tab
@@ -490,6 +451,10 @@ local function hasOutline(settings) return settings.outlineStyle ~= "none" end
 local function singleColor(settings) return settings.dotColors == "single" end
 local function perDot(settings) return settings.dotColors ~= "single" end
 local function showsLabel(settings) return settings.showLabel end
+-- "Show damage marker" is the master of every unit (Core.lua, ns.markersFor): the focus and nameplate lists need it, and
+-- the kill icon rows need the kill icon.
+local function markersOn(settings) return settings.showMarkers end
+local function killOn(settings) return settings.showSkull end
 
 local function buildTabs()
     local lists = ns.lists
@@ -498,37 +463,44 @@ local function buildTabs()
     local icon = addTab("Kill icon")
     icon:checkbox("showSkull", "Show kill icon",
         { tooltip = "Shows an icon at the chosen position when your DoTs on the target will kill it." })
-    icon:choice("skullIcon", "Kill icon", lists.icons)
-    icon:slider("skullSize", "Icon size", 20, 128, 2)
-    icon:checkbox("swingKill", "Count one weapon hit", { tooltip = "A weapon icon shows when your DoTs plus one "
+    icon:choice("skullIcon", "Kill icon", lists.icons, { enabledIf = killOn })
+    icon:slider("skullSize", "Kill icon size", 12, 128, 1, { enabledIf = killOn })
+    icon:checkbox("swingKill", "Count one weapon hit", { enabledIf = killOn, tooltip = "A weapon icon shows when your DoTs plus one "
         .. "average hit of your best weapon attack (melee swing, wand or ranged shot) would kill; the kill icon "
         .. "itself still means the DoTs alone are enough. The hit is "
         .. "the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. "
         .. "The marker itself still shows only the DoTs." })
-    icon:slider("killMargin", "Kill margin", 50, 100, 5, { suffix = "%", tooltip = "The icon shows only when this "
+    icon:slider("killMargin", "Kill margin", 50, 100, 5, { suffix = "%", enabledIf = killOn, tooltip = "The icon shows only when this "
         .. "share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the "
         .. "icon; 100% compares the full estimate. The marker always shows the full estimate." })
-    icon:choice("skullPosition", "Icon position", {
+    icon:choice("skullPosition", "Kill icon position", {
         { id = "portrait", label = "Portrait" },
-        { id = "left", label = "Left of the health bar" },
-        { id = "right", label = "Right of the health bar" },
-        { id = "above", label = "Above the health bar" },
-        { id = "below", label = "Below the health bar" },
-    })
-    icon:checkbox("skullPulse", "Pulse", { tooltip = "Gently pulses the icon while it's showing." })
+        { id = "left", label = "Left of the bar" },
+        { id = "right", label = "Right of the bar" },
+        { id = "above", label = "Above the bar" },
+        { id = "below", label = "Below the bar" },
+    }, { enabledIf = killOn })
+    icon:checkbox("skullPulse", "Pulse", { enabledIf = killOn, tooltip = "Gently pulses the icon while it's showing." })
     icon:slider("skullOffsetX", "Icon horizontal offset", -60, 60, 1,
-        { tooltip = "Pixels right (+) or left (-) of the chosen position." })
+        { enabledIf = killOn, tooltip = "Pixels right (+) or left (-) of the chosen position." })
     icon:slider("skullOffsetY", "Icon vertical offset", -60, 60, 1,
-        { tooltip = "Pixels up (+) or down (-) from the chosen position." })
+        { enabledIf = killOn, tooltip = "Pixels up (+) or down (-) from the chosen position." })
+    icon:gap()
+    icon:note("Cast prediction has its own kill icon (Cast > Marker). If you use both, set both, or switch one off.")
 
     local marker = addTab("Marker")
     marker:checkbox("showMarkers", "Show damage marker", { tooltip = "Marks the damage your DoTs still have to "
         .. "deal on the target's health bar. If the health ends inside it, the target dies." })
     marker:checkbox("targetMarkers", "Show on target frame", { enabledIf = function(s) return s.showMarkers end,
         tooltip = "Keep this on to show the marker on your screen's target health bar. Plater changes nameplates, "
-        .. "not that frame; if you use a separate unit frame addon, set its bar under Behavior > Target health bar. "
+        .. "not that frame; if you use a separate unit frame addon, set its bar on the Frames page. "
         .. "Turn off to keep the marker on nameplates and the focus frame only. On Retail this also hides the rogue's "
         .. "aura icons above the target bar. The kill icon has its own switch in the Kill icon tab." })
+    marker:choice("focusMode", "Show on focus frame", lists.nameplateModes, { enabledIf = markersOn, tooltip = "Draws the same marker "
+        .. "(and optionally the kill icon) on your focus frame's health bar for your DoTs on the focused enemy, "
+        .. "in the nameplate look (Nameplates tab)." })
+    marker:choice("nameplateMode", "Show on nameplates", lists.nameplateModes, { enabledIf = markersOn, tooltip = "Draws a marker "
+        .. "(and optionally the kill icon) on every enemy nameplate with your DoTs on it, in its own look on the Nameplates tab." })
     marker:choice("dotColors", "DoT colors", lists.dotColors, { tooltip = "One color, or one segment per DoT "
         .. "with green poisons, purple curses/shadow damage and red bleeds. Rainbow gives each spell a separate color." })
     marker:choice("fillTexture", "Fill style", lists.fills)
@@ -538,23 +510,23 @@ local function buildTabs()
     marker:choice("fillDirection", "Fill direction", lists.plateFillDirections, { tooltip = "Which end of the "
         .. "target health bar the marker starts from. Follow health bar turns it around on a mirrored bar that "
         .. "drains the other way; choose Right to left if your unit frame addon is not recognized." })
-    marker:checkbox("segmentDividers", "Dividers between DoTs", { enabledIf = perDot })
+    marker:checkbox("segmentDividers", "Show dividers between DoTs", { enabledIf = perDot })
     marker:gap()
     marker:choice("outlineStyle", "Outline", lists.outlines)
     marker:choice("dashLength", "Dash length", lists.dashLengths, { enabledIf = isDashed })
     marker:slider("outlineThickness", "Outline thickness", 1, 8, 1, { enabledIf = hasOutline })
     marker:choice("outlineColor", "Outline color", lists.colors, { enabledIf = hasOutline })
-    marker:slider("outlineOpacity", "Outline opacity", 10, 100, 5, { suffix = "%", enabledIf = hasOutline })
+    marker:slider("outlineOpacity", "Outline opacity", 0, 100, 5, { suffix = "%", enabledIf = hasOutline })
 
     local effects = addTab("Effects")
     effects:checkbox("smoothMotion", "Smooth motion",
         { tooltip = "The marker grows in when it appears and glides to new values instead of jumping." })
     effects:checkbox("flashOnApply", "Flash on new DoT")
     effects:checkbox("showSpark", "Spark", { tooltip = "A bright flare on the marker's edge when a DoT lands." })
-    effects:checkbox("pulseOutline", "Pulse outline", { enabledIf = hasOutline })
+    effects:checkbox("pulseOutline", "Pulse the outline", { enabledIf = hasOutline })
     effects:gap()
     effects:checkbox("showGlow", "Glow", { enabledIf = hasOutline, tooltip = "Soft halo in the outline color." })
-    effects:slider("glowSize", "Glow size", 2, 16, 1,
+    effects:slider("glowSize", "Glow thickness", 2, 16, 1,
         { enabledIf = function(s) return hasOutline(s) and s.showGlow end })
     effects:checkbox("showShine", "Shine sweep")
     effects:slider("shineInterval", "Shine every", 2, 10, 1,
@@ -563,23 +535,19 @@ local function buildTabs()
         enabledIf = function(s) return s.fillTexture == "stripes" and singleColor(s) end })
 
     local text = addTab("Text")
-    text:checkbox("showLabel", "Show damage text",
+    text:checkbox("showLabel", "Show text",
         { tooltip = "Remaining DoT damage next to the health bar (a per-DoT breakdown with DoT colors)." })
     text:choice("labelPosition", "Text position", lists.labelPositions, { enabledIf = showsLabel })
     text:slider("labelSize", "Text size", 8, 20, 1, { enabledIf = showsLabel })
     text:choice("labelColor", "Text color", lists.colors, { enabledIf = showsLabel })
 
     -- Presets match both bars; these controls allow a separate nameplate look afterwards.
-    local platesOn = function(s) return s.nameplateMode ~= "off" end
-    local plateIcon = function(s) return s.nameplateMode == "markerIcon" end
+    -- The focus frame uses the nameplates' look and icon (Focus.lua), so these rows stay live while either shows.
+    local platesOn = function(s) return s.showMarkers and (s.nameplateMode ~= "off" or s.focusMode ~= "off") end
+    local plateIcon = function(s) return s.showMarkers and (s.nameplateMode == "markerIcon" or s.focusMode == "markerIcon") end
     local plateSingle = function(s) return platesOn(s) and s.plateDotColors == "single" end
     local plateOutline = function(s) return platesOn(s) and s.plateOutlineStyle ~= "none" end
     local plates = addTab("Nameplates")
-    plates:choice("nameplateMode", "Show on nameplates", lists.nameplateModes, { tooltip = "Draws a marker "
-        .. "(and optionally the kill icon) on every enemy nameplate with your DoTs on it, in its own look below." })
-    plates:choice("focusMode", "Show on focus frame", lists.nameplateModes, { tooltip = "Draws the same marker "
-        .. "(and optionally the kill icon) on your focus frame's health bar for your DoTs on the focused enemy, "
-        .. "in the nameplate look below." })
     plates:choice("plateIcon", "Kill icon", lists.icons, { enabledIf = plateIcon })
     plates:slider("nameplateIconSize", "Kill icon size", 12, 128, 1, { enabledIf = plateIcon })
     plates:choice("nameplateIconPosition", "Kill icon position", lists.nameplateIconPositions,
@@ -600,7 +568,7 @@ local function buildTabs()
         { enabledIf = function(s) return platesOn(s) and s.plateOutlineStyle == "dashed" end })
     plates:slider("plateOutlineThickness", "Outline thickness", 1, 3, 1, { enabledIf = plateOutline })
     plates:choice("plateOutlineColor", "Outline color", lists.colors, { enabledIf = plateOutline })
-    plates:slider("plateOutlineOpacity", "Outline opacity", 10, 100, 5, { suffix = "%", enabledIf = plateOutline })
+    plates:slider("plateOutlineOpacity", "Outline opacity", 0, 100, 5, { suffix = "%", enabledIf = plateOutline })
     plates.footer = pushButton(window.settingsArea, "Copy from Marker tab", 160, function()
         copyMarkerStyleToPlates()
         changed()
@@ -640,9 +608,6 @@ local function buildTabs()
     behavior:checkbox("estimateDuringCast", "Estimate during casting", { tooltip = "Shows a DoT with a cast time "
         .. "while you're still casting it. Once the cast lands the normal estimate takes over; an interrupted or "
         .. "failed cast removes it." })
-    behavior:checkbox("debug", "Echo trace log to chat",
-        { tooltip = ns.Retail and "Prints each DoT cast and damage estimate to chat."
-            or "Prints each DoT cast, matched tick and estimate to chat." })
     if ns.Retail then
         behavior:action("Retail damage estimate", "Info", function()
             ns.print(BIT.L("Rogue bleed and poison icons use WoW's aura timers. DoT damage is estimated from your casts and spell descriptions; dispels, immunities, procs and damage modifiers may change it."))
@@ -654,24 +619,53 @@ local function buildTabs()
         behavior:action("Forget learned sizes", "Reset", function() ns.resetLearnedTicks() end,
             { tooltip = "Forget the tick sizes learned from earlier casts." })
     end
-    -- Another addon's unit frames (Core/Frames.lua); shared with ShieldsInfo and HealPrediction.
+    -- Another addon's unit frames live on the hub's Frames page (Core/FramesPage.lua): they steer every marker.
     behavior:gap()
-    behavior:frame("target", "Target health bar", "bar", { tooltip = "For unit frame addons that replace "
-        .. "Blizzard's target frame (ElvUI, Shadowed Unit Frames, ...). Target something, click Pick, then click "
-        .. "its health bar; or type the frame's name (/fstack shows it), like ElvUF_Target.Health. For a bar that "
-        .. "drains the other way, see Fill direction on the Marker tab. Empty: Blizzard's, or EllesmereUI's or "
-        .. "X-Perl's when it shows its own. Shared with ShieldsInfo "
-        .. "and HealPrediction. Plater replaces nameplates, not the screen target frame; its nameplate marker is "
-        .. "handled separately." })
-    behavior:frame("icon", "Kill icon spot", "anchor", { tooltip = "Where the kill icon is centered (e.g. the "
-        .. "custom frame's portrait). Empty: Blizzard's portrait, or EllesmereUI's; with a custom health bar and no spot "
-        .. "the icon sits on that bar. Fine-tune with the offsets on the Kill icon tab." })
-    behavior:frame("focus", "Focus health bar", "bar", { tooltip = "The same for the focus frame. Empty: "
-        .. "Blizzard's, or EllesmereUI's when it shows its own." })
-    behavior:frame("plate", "Nameplate health bar", "bar", { noPick = true, tooltip = "Most nameplate addons' "
-        .. "bars are found automatically (Plater, EllesmereUI, Platynator, ...). If the marker does not show on "
-        .. "yours, type the keys from Blizzard's nameplate to its bar, like unitFrame.healthBar. /dotinfo plates "
-        .. "logs what each plate uses. Empty: automatic." })
+    behavior:action("Another unit frame addon", "Open Frames", function()
+        if BIT.OpenSettings then BIT.OpenSettings("Frames") end
+    end, { tooltip = "ElvUI, Shadowed Unit Frames and other unit frame addons: where their health bars are is set once "
+        .. "for every marker, on the Frames page." })
+    behavior:checkbox("debug", "Debug lines in chat",
+        { tooltip = ns.Retail and "Prints each DoT cast and damage estimate to chat."
+            or "Prints each DoT cast, matched tick and estimate to chat." })
+    if not ns.Retail then
+        -- WoW: Forever. Segments drawn by the game's own aura frames (RogueAuras.lua); a tab of their own so Behavior fits.
+        local native = addTab("Native auras")
+        native:header("Features")
+        native:checkbox("nativeDots", "Native aura segments", { tooltip = "Deadly Poison, Deep Wound, Ignite, "
+            .. "Righteous Judgement, Immolation Trap, Explosive Trap, Wyvern Sting and Flamestrike are drawn from the real "
+            .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
+            .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
+            .. "Takes effect at once." })
+        native:checkbox("nativeStacks", "Deadly Poison stack count", { enabledIf = function(s) return s.nativeDots end, tooltip = "A small number above the bar's left "
+            .. "end with the stacks of your Deadly Poison on that mob (the game draws it, the addon cannot read it)." })
+        native:checkbox("nativeAllDots", "Native segment for every DoT (experimental)", { tooltip = "Draws a segment from "
+            .. "the real aura (its start, time left and removal) for every damage over time you know, wherever Lua has no DoT "
+            .. "of its own on that mob: other mobs, mobs out of sight, effects nothing announces. The size comes from the "
+            .. "spell description and your stats. One or two extra aura frames per spell on every hostile nameplate: check "
+            .. "/upt perf before keeping it on. On by default in this beta. The spells of \"Native aura segments\" are drawn this "
+            .. "way whenever that option is on." })
+        native:header("Experiments (on by default in this beta)")
+        native:checkbox("nativeGateReplace", "Aura-gated segments on nameplates (experiment)", { enabledIf = function(s) return s.showMarkers and s.nameplateMode ~= "off" and s.plateDotColors ~= "single" end, tooltip = "The DoT "
+            .. "segments on nameplates are drawn by the game's own aura frames, with the length the addon calculates (they "
+            .. "still drop tick by tick), so a segment is shown only while the real aura is on the mob: when a mob resets "
+            .. "after you run away, a DoT is dispelled or resisted, it disappears at once instead of a few seconds later. "
+            .. "The addon never reads the aura. Only DoTs whose spell puts the aura on the target itself are drawn this "
+            .. "way (not Curse of Agony, Siphon Life, traps, poisons), and only with a colour per DoT (not \"One colour\"). "
+            .. "The kill icon and the damage number still use the addon's own numbers. On by default in this beta." })
+        native:checkbox("nativeGate", "Aura-gated segment on the target frame (experiment)", { tooltip = "An experiment: a second thin "
+            .. "row under the bar (cyan) as long as the addon's own remaining damage of a DoT it draws (so it drops tick by "
+            .. "tick like the segment on the bar), but shown only while the real aura is on the mob: the game shows and hides "
+            .. "it, the addon never reads the aura. Watch it when a mob resets after you run away, a DoT is dispelled or "
+            .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. On by "
+            .. "default in this beta." })
+        native:header("Diagnostics")
+        native:checkbox("nativeShowAll", "Show native next to plain segments", { enabledIf = function(s) return s.nativeDots or s.nativeAllDots or s.nativeGateReplace or s.nativeGate end, tooltip = "For checking the "
+            .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
+            .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "
+            .. "the bar, starting at its left edge, so you can compare their length and time left with the plain segment on "
+            .. "the bar. Cast a single DoT on a mob and watch both. Off by default." })
+    end
 end
 
 local function buildPreview(pane)
@@ -944,7 +938,7 @@ local function buildPreview(pane)
             tooltip = "Remaining damage of two sample DoTs, in % of the target's max health." })
     damage:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, 0)
 
-    window.simulateButton = pushButton(pane, "Simulate fight", 162, function()
+    window.simulateButton = pushButton(pane, "Simulate", 162, function()
         if simulation then stopSimulation() else startSimulation() end
     end)
     window.simulateButton:SetPoint("TOPLEFT", damage, "BOTTOMLEFT", 6, -10)
@@ -989,8 +983,8 @@ local function buildContent(top, anchor)
     local divider = area:CreateTexture(nil, "ARTWORK")
     divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))
     divider:SetHeight(1)
-    divider:SetPoint("TOPLEFT", 8, -34 - TAB_HEIGHT)
-    divider:SetPoint("TOPRIGHT", -8, -34 - TAB_HEIGHT)
+    divider:SetPoint("TOPLEFT", 8, -34 - (TAB_ROWS - 1) * TAB_HEIGHT)
+    divider:SetPoint("TOPRIGHT", -8, -34 - (TAB_ROWS - 1) * TAB_HEIGHT)
 
     buildTabs()
     local reset = pushButton(area, "Reset this tab", 120, function() resetTab(activeTab) end)

@@ -2631,11 +2631,11 @@ BIT.RegisterTab("StatsInfo", {
     -- re-seats its thumb on the stored value after any write.
     local tryIt = BIT.Looks.TryItHeader(pane, pane, 0, -10)
     local tryLayout = BIT.Looks.PREVIEW_LAYOUT
-    local fontSlider = Rows.Slider(pane, "Font size", 6, 24, 1,
+    local fontSlider = Rows.Slider(pane, "Font size", 6, 48, 1,
       styleGet("fontSize", 12), styleSet("fontSize"),
       { layout = tryLayout, suffix = " px",
         tooltip = "The size the preview's text is drawn in. The same field the shared appearance editor changes." })
-    local scaleSlider = Rows.Slider(pane, "Scale", 0.5, 2, 0.05,
+    local scaleSlider = Rows.Slider(pane, "Scale", 0.5, 3, 0.05,
       styleGet("scale", 1), styleSet("scale"),
       { layout = tryLayout, display = function(v) return string.format("%.2fx", v) end,
         tooltip = "Scales the preview's card, rows, icons and bag button. The same field the shared appearance editor changes." })

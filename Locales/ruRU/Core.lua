@@ -78,6 +78,9 @@ BIT.RegisterLocale("ruRU", {
     "Пока без перевода на этот язык показано строк: %d.",
   ["Unknown language %s. Use auto, en or one of: %s."] =
     "Неизвестный язык %s. Используйте auto, en или один из вариантов: %s.",
+  ["Auto (game language)"] = "Авто (язык игры)",
+  ["The language of the settings, tooltips and chat lines of this addon. It changes after a reload. Auto follows the game's language."] =
+    "Язык настроек, подсказок и строк чата этого аддона. Меняется после перезагрузки. «Авто» следует языку игры.",
   ["The language changes after /reload."] = "Язык изменится после команды /reload.",
   ["Language: %s. /upt lang auto, /upt lang en, /upt lang <code> (%s) or /upt lang missing."] =
     "Язык: %s. /upt lang auto, /upt lang en, /upt lang <code> (%s) или /upt lang missing.",
@@ -353,4 +356,154 @@ BIT.RegisterLocale("ruRU", {
   ["Flame (top to bottom)"] = "Пламя (сверху вниз)",
   ["Toxic"] = "Ядовитый",
   ["Steel blue"] = "Стальной синий",
+})
+
+-- The settings reorganisation (0.9.131-beta.5): the Frames page, the Show on blocks, shared labels and tips.
+BIT.RegisterLocale("ruRU", {
+  ["Only for another unit frame addon (ElvUI, Shadowed Unit Frames, ...) or custom nameplates: tell the addon where its health bars are. Empty rows are automatic. The markers of DoTs, Cast, Shields and Heals use these."] =
+    "Только для другого аддона рамок (ElvUI, Shadowed Unit Frames, ...) или своих табличек: укажите аддону, где находятся их полосы здоровья. Пустые строки работают автоматически. Эти значения используют маркеры вкладок «DoT», «Применение», «Щиты» и «Лечение».",
+  ["Where another unit frame addon's health bars are, for every marker the addon draws."] =
+    "Где находятся полосы здоровья другого аддона рамок, для каждого маркера аддона.",
+  ["The art of the fill: patterns, glass and bevel shadings, Blizzard's bar textures and every LibSharedMedia texture."] =
+    "Вид заливки: узоры, стеклянные и рельефные оттенки, текстуры полос Blizzard и любая текстура LibSharedMedia.",
+  ["The fill's color. A style with colors of its own ignores it."] =
+    "Цвет заливки. Стиль со своими цветами его игнорирует.",
+  ["How strongly the fill covers what is under it."] =
+    "Насколько сильно заливка закрывает то, что под ней.",
+  ["Which end of the bar the fill starts from."] =
+    "С какого края полосы начинается заливка.",
+  ["A hairline around the marker."] =
+    "Тонкая линия вокруг маркера.",
+  ["The color of the outline."] =
+    "Цвет контура.",
+  ["How strongly the outline shows."] =
+    "Насколько заметен контур.",
+  ["The width of the outline in pixels."] =
+    "Толщина контура в пикселях.",
+  ["The length of each dash of a dashed outline."] =
+    "Длина каждого штриха пунктирного контура.",
+  ["The size of the text in pixels."] =
+    "Размер текста в пикселях.",
+  ["The color of the text."] =
+    "Цвет текста.",
+  ["Where the text sits."] =
+    "Где расположен текст.",
+  ["How see-through everything of this part is."] =
+    "Насколько прозрачно всё в этой части.",
+  ["Makes everything of this part bigger or smaller."] =
+    "Увеличивает или уменьшает всё в этой части.",
+  ["The space between the parts, in pixels."] =
+    "Расстояние между частями в пикселях.",
+  ["How long the parts are, in pixels."] =
+    "Длина частей в пикселях.",
+  ["How thick the parts are, in pixels."] =
+    "Толщина частей в пикселях.",
+  ["The shape the parts are drawn in."] =
+    "Форма, в которой рисуются части.",
+  ["SHOW ON"] =
+    "ГДЕ ПОКАЗЫВАТЬ",
+  ["The target's own plate gets the same marker, with its own colors on the Nameplates tab; enemy bars are red."] =
+    "Табличка цели получает такой же маркер со своими цветами на вкладке «Таблички»; полосы противников красные.",
+  ["BEHAVIOR"] =
+    "ПОВЕДЕНИЕ",
+  ["MANA COST"] =
+    "СТОИМОСТЬ МАНЫ",
+  ["DoTs has its own kill icon (DoTs > Kill icon). If you use both, set both, or switch one off."] =
+    "У DoT есть свой значок убийства (DoT > Значок убийства). Если вы используете оба, настройте оба или отключите один.",
+  ["Cast prediction has its own kill icon (Cast > Marker). If you use both, set both, or switch one off."] =
+    "У прогноза каста есть свой значок убийства (Применение > Маркер). Если вы используете оба, настройте оба или отключите один.",
+  ["Keep this on to show the marker on your screen's target health bar. Plater changes nameplates, not that frame; if you use a separate unit frame addon, set its bar on the Frames page. Turn off to keep the marker on nameplates and the focus frame only. On Retail this also hides the rogue's aura icons above the target bar. The kill icon has its own switch in the Kill icon tab."] =
+    "Оставьте настройку включённой, чтобы маркер отображался на полосе здоровья цели на экране. Plater изменяет таблички, а не эту рамку; если вы используете отдельный аддон рамок, укажите его полосу на странице «Рамки». Отключите настройку, чтобы маркер оставался только на табличках и рамке фокуса. В Retail это также скрывает значки аур разбойника над полосой цели. У значка убийства отдельная настройка на вкладке «Значок убийства».",
+  ["Draws the same marker (and optionally the kill icon) on your focus frame's health bar for your DoTs on the focused enemy, in the nameplate look (Nameplates tab)."] =
+    "Отображает такой же маркер (и, при желании, значок убийства) на полосе здоровья рамки фокуса для ваших DoT на противнике в фокусе, в оформлении табличек (вкладка «Таблички»).",
+  ["Draws a marker (and optionally the kill icon) on every enemy nameplate with your DoTs on it, in its own look on the Nameplates tab."] =
+    "Отображает маркер (и, при желании, значок убийства) на каждой табличке противника с вашими DoT, в собственном оформлении на вкладке «Таблички».",
+  ["Show dividers between DoTs"] =
+    "Показывать разделители между DoT",
+  ["Glow thickness"] =
+    "Толщина свечения",
+  ["Another unit frame addon"] =
+    "Другой аддон рамок",
+  ["Open Frames"] =
+    "Открыть «Рамки»",
+  ["ElvUI, Shadowed Unit Frames and other unit frame addons: where their health bars are is set once for every marker, on the Frames page."] =
+    "ElvUI, Shadowed Unit Frames и другие аддоны рамок: где находятся их полосы здоровья, задаётся один раз для всех маркеров на странице «Рамки».",
+  ["Features"] =
+    "Функции",
+  ["Experiments (on by default in this beta)"] =
+    "Эксперименты (в этой бете включены по умолчанию)",
+  ["Aura-gated segments on nameplates (experiment)"] =
+    "Сегменты по ауре на табличках (эксперимент)",
+  ["Aura-gated segment on the target frame (experiment)"] =
+    "Сегмент по ауре на рамке цели (эксперимент)",
+  ["Diagnostics"] =
+    "Диагностика",
+  ["Show native next to plain segments"] =
+    "Показывать нативные рядом с обычными сегментами",
+  ["Show on player frame"] =
+    "Показывать на рамке игрока",
+  ["Show on target of target frame"] =
+    "Показывать на рамке цели цели",
+  ["The fill style of the band for the healing other healers have coming."] =
+    "Вид заливки полосы для лечения других целителей.",
+  ["The color of the band for the healing other healers have coming."] =
+    "Цвет полосы для лечения других целителей.",
+  ["How strongly the band for other healers' healing covers the bar."] =
+    "Насколько сильно полоса лечения других целителей закрывает полосу.",
+  ["The fill style of the segment for your heals over time."] =
+    "Вид заливки сегмента для вашего лечения со временем.",
+  ["The color of the segment for your heals over time."] =
+    "Цвет сегмента для вашего лечения со временем.",
+  ["How strongly the segment for your heals over time covers the bar."] =
+    "Насколько сильно сегмент вашего лечения со временем закрывает полосу.",
+  ["The Show on target frame option controls this sample; the other Show on options control live frames. The segment starts at the health edge (the green bar's end) and is cropped at the bar's right end when the heal would overheal."] =
+    "Параметр «Показывать на рамке цели» управляет этим образцом; остальные параметры «Показывать на…» управляют реальными рамками. Сегмент начинается от края здоровья (конец зелёной полосы) и обрезается у правого края полосы, если лечение будет избыточным.",
+  ["How high the rail sits above the plate's health bar. Positive is up, negative is under the bar. The same seat as the combo dots."] =
+    "Как высоко планка находится над полосой здоровья таблички. Положительное значение — вверх, отрицательное — под полосой. То же место, что у очков серии.",
+  ["Mark size"] =
+    "Размер метки",
+  ["Dot size (saved)"] =
+    "Размер точек (сохраняется)",
+  ["Size of the combo points and soul shards. This changes the saved setting, the same one as on the Combo tab."] =
+    "Размер очков серии и осколков души. Это меняет сохранённую настройку, ту же, что на вкладке «Серия».",
+  ["Height (saved)"] =
+    "Высота (сохраняется)",
+  ["Height of the resource in the selected tab. Positive is up, negative is under the bar. This changes the saved setting, the same one as on the Combo / Shards tab."] =
+    "Высота ресурса на выбранной вкладке. Положительное значение — вверх, отрицательное — под полосой. Это меняет сохранённую настройку, ту же, что на вкладке «Серия приёмов» / «Осколки».",
+  ["Dot height above the bar"] =
+    "Высота точек над полосой",
+  ["How high the dots sit above the health bar. Positive is up, negative is under the bar. The same seat as the hunter rail."] =
+    "Как высоко точки находятся над полосой здоровья. Положительное значение — вверх, отрицательное — под полосой. То же место, что у планки охотника.",
+  ["Shard height above the bar"] =
+    "Высота осколков над полосой",
+  ["How high the diamonds sit above the health bar. Positive is up, negative is under the bar; they move independently of the dots."] =
+    "Как высоко ромбы находятся над полосой здоровья. Положительное значение — вверх, отрицательное — под полосой; они двигаются независимо от точек.",
+  ["Show on"] =
+    "Показывать на",
+})
+
+-- Simulate (0.9.131-beta.6): the shared Simulate block, its scenes and names.
+BIT.RegisterLocale("ruRU", {
+  ["SIMULATE"] =
+    "СИМУЛЯЦИЯ",
+  ["Simulate"] =
+    "Симуляция",
+  ["Settings you change while it plays show at once."] =
+    "Настройки, которые вы меняете во время воспроизведения, действуют сразу.",
+  ["A cast lands and the health drops; the next one is lethal and shows the kill icon."] =
+    "Заклинание попадает, здоровье падает; следующее смертельно и показывает значок убийства.",
+  ["A heal is cast and lands, then its heal over time ticks down."] =
+    "Лечение применяется и достигает цели, затем его лечение со временем убывает.",
+  ["The target runs in through every band, from 35+ yd to melee and the dead zone."] =
+    "Цель подбегает через все полосы, от 35+ ярдов до ближнего боя и мёртвой зоны.",
+  ["Try: out of range"] =
+    "Проверка: вне зоны действия",
+  ["Try: no nameplate"] =
+    "Проверка: нет таблички",
+  ["The target steps in and out of range, then loses its nameplate."] =
+    "Цель входит в зону действия и выходит из неё, затем теряет табличку.",
+  ["The points come in one by one, then the finisher spends them."] =
+    "Очки накапливаются по одному, затем завершающий приём их тратит.",
+  ["Three hits land: the shield takes them first, then the health, and the shield breaks."] =
+    "Приходят три удара: сначала их принимает щит, потом здоровье, и щит ломается.",
 })

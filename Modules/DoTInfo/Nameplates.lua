@@ -35,10 +35,10 @@ ns.lists.nameplateModes = {
     { id = "markerIcon", label = "Marker and kill icon" },
 }
 ns.lists.nameplateIconPositions = {
-    { id = "right", label = "Right of the health bar" },
-    { id = "left",  label = "Left of the health bar" },
-    { id = "above", label = "Above the health bar" },
-    { id = "below", label = "Below the health bar" },
+    { id = "left",  label = "Left of the bar" },
+    { id = "right", label = "Right of the bar" },
+    { id = "above", label = "Above the bar" },
+    { id = "below", label = "Below the bar" },
 }
 ns.lists.plateFillDirections = {
     { id = "auto", label = "Follow health bar" },
@@ -250,6 +250,7 @@ local function applyStyle(w, db)
         reverse = ok and not isSecret(value) and value == true
     end
     if type(w.marker.SetReverseFill) ~= "function" then reverse = false end
+    w.reverse = reverse
     local signature = table.concat(parts, "|") .. "|" .. tostring(reverse)
     if signature == w.signature then return end
     w.signature = signature
@@ -340,7 +341,7 @@ end
 
 local function hideWidgets(w)
     w.displayDamage = 0
-    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
+    if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(w.plate) end
     w.marker:Hide()
     w.iconWindow:Hide()
     w.iconArmed = nil
@@ -356,10 +357,29 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
     local ok = pcall(function()
         w.marker:SetMinMaxValues(0, maxHealth)
         w.marker:SetValue(total)
+        -- Aura-gated segments (RogueAuras.lua): where each DoT segment sits, and which of them its aura-gated twin draws.
+        local gateApi = ns.RogueNative
+        local items = gateApi and gateApi.Covers and (w.gateItems or {}) or nil
+        if items then
+            w.gateItems = items
+            for _, item in pairs(items) do item.damage = 0 end
+        end
         local running = 0
         for i, segment in ipairs(w.segments) do
             local entry = entries[i]
+            local covered = false
             if i <= count then
+                if items and entry.name then
+                    local item = items[entry.name]
+                    if not item then
+                        item = {}
+                        items[entry.name] = item
+                    end
+                    item.offset, item.damage = running, entry.damage
+                    -- An estimate made while casting has no aura yet (the twin is shown by the game only once the
+                    -- DoT lands): keep drawing it.
+                    covered = not entry.provisional and gateApi.Covers(w.plate, entry.name)
+                end
                 running = running + entry.damage
                 -- The last segment also covers any DoTs beyond MAX_SEGMENTS.
                 if i == count then running = total end
@@ -368,12 +388,13 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
             end
             segment.bar:SetMinMaxValues(0, maxHealth)
             segment.bar:SetValue(i <= count and running or total)
-            segment.texture:SetShown(i <= count)
+            segment.texture:SetShown(i <= count and not covered)
             segment.divider:SetShown(db.segmentDividers and i < count or false)
             if segment.refresh then
                 segment.refresh:SetShown(i <= count and entry and entry.refreshDue and db.refreshCue ~= false or false)
             end
         end
+        if items then gateApi.SetPlan(w.plate, items, w.reverse) end
         local anyDue = false
         if db.refreshCue ~= false then
             for _, entry in ipairs(entries) do
@@ -391,7 +412,7 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
     end
     w.marker:SetShown(db.showMarkers and not iconOnly)
     w.displayDamage = db.showMarkers and not iconOnly and total or 0
-    if ns.Retail and ns.Retail.UpdatePoisonOffset then ns.Retail.UpdatePoisonOffset(w.plate) end
+    if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(w.plate) end
     -- UI-3: the kill icon is part of the marker set: with showMarkers off it
     -- must hide too, not linger alone on the plate.
     -- A window going hidden -> shown renders one frame with the icon bar's stale/unlaid-out fill (full width),

@@ -68,6 +68,50 @@ local function resolve()
   active, activeCode = code and packs[code] or nil, code or nil
 end
 
+-- The settings window's language button (Core/Settings.lua). Names are Latin on purpose: the game's font may lack the
+-- letters of another alphabet.
+local NAMES = { deDE = "Deutsch", ruRU = "Russian" }
+local SDI_CODES = { en = "en", deDE = "de", ruRU = "ru" } -- SpellDamageInfo's own switch knows these (and "auto")
+
+function BIT.LanguageList()
+  local list = { { id = "auto", label = BIT.L("Auto (game language)") }, { id = "en", label = "English" } }
+  for _, code in ipairs(codes) do list[#list + 1] = { id = code, label = NAMES[code] or code } end
+  return list
+end
+
+-- The saved choice as a list id: "auto", "en" or a language code.
+function BIT.LanguageChoice()
+  local saved = BIT.DB().language
+  if saved == nil then return "auto" end
+  local code = find(saved)
+  if code == false then return "en" end
+  return code or "auto"
+end
+
+-- What the button shows: the choice, and for "auto" the language that follows from the game.
+function BIT.LanguageLabel()
+  local choice = BIT.LanguageChoice()
+  if choice == "auto" then return "Auto (" .. (activeCode or "en") .. ")" end
+  for _, entry in ipairs(BIT.LanguageList()) do
+    if entry.id == choice then return entry.label end
+  end
+  return choice
+end
+
+-- Saves the choice for the addon and for SpellDamageInfo, which keeps its own interface-language switch. Both apply
+-- after /reload (the texts already in the windows are not rewritten).
+function BIT.SetLanguage(id)
+  BIT.DB().language = id ~= "auto" and id or nil
+  local sdi = id == "auto" and "auto" or SDI_CODES[id] or "en"
+  local ns = BIT.Module and BIT.Module("SpellDamageInfo")
+  local saved = type(ns) == "table" and type(ns.SetSetting) == "function" and pcall(ns.SetSetting, "interfaceLang", sdi)
+  if not saved then
+    -- the module may be switched off: its saved table is still there to write
+    local db = _G.UsefulPlatesAndTooltips_SpellDamageInfoDB
+    if type(db) == "table" then db.interfaceLang = sdi end
+  end
+end
+
 local function command(rest)
   local say = BIT.Say
   local word = (rest or ""):match("^%S+")
@@ -82,7 +126,8 @@ local function command(rest)
       say(string.format(BIT.L("Unknown language %s. Use auto, en or one of: %s."), word, table.concat(codes, ", ")))
       return
     end
-    BIT.DB().language = word:lower() ~= "auto" and word or nil
+    local code = find(word)
+    BIT.SetLanguage(word:lower() == "auto" and "auto" or code == false and "en" or code)
     say(BIT.L("The language changes after /reload."))
   else
     say(string.format(BIT.L("Language: %s. /upt lang auto, /upt lang en, /upt lang <code> (%s) or /upt lang missing."),

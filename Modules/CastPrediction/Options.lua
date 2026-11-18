@@ -129,17 +129,46 @@ local function place(row, y, height)
     return BIT.UI.PlaceRow(row, y, row.standard and row:GetHeight() or height or ROW_HEIGHT)
 end
 
+-- Which rows only mean something while another switch is on: they dim (and ignore the mouse) otherwise, by setting key.
+local function markerOn(s) return s.showMarker end
+-- the kill icon on the unit frames needs the frame switch too (Core.lua: no showTargetFrame, nothing is drawn), so these stay
+-- live while either the marker or the kill icon is on
+local function framesOn(s) return s.showMarker or s.showKillIcon end
+local function iconOn(s) return s.showKillIcon end
+local function outlineOn(s) return s.showMarker and s.outlineStyle ~= "none" end
+local function textOn(s) return s.showMarker and s.showLabel end
+local function platesOn(s) return s.showMarker and s.nameplateMode ~= "off" end
+local function plateOutlineOn(s) return platesOn(s) and s.plateOutlineStyle ~= "none" end
+-- the kill icon on the target frame is independent of the marker, the one on a nameplate is not (Core.lua)
+local function plateIconOn(s) return s.showMarker and s.showKillIcon and s.nameplateMode == "markerIcon" end
+local function finisherOn(s) return s.finisherPreview end
+local function manualOn(s) return s.manualPower end
+local WHEN = {
+    showTargetFrame = framesOn, showFocusFrame = framesOn, showPartyFrames = framesOn, showRaidFrames = framesOn,
+    nameplateMode = markerOn,
+    fillColor = markerOn, fillOpacity = markerOn, castTexture = markerOn, channelTexture = markerOn, outlineStyle = markerOn,
+    outlineColor = outlineOn, outlineOpacity = outlineOn, pulseOutline = outlineOn,
+    showKillSpellIcon = iconOn, killIcon = iconOn, killIconSize = iconOn, killIconPosition = iconOn,
+    killIconOffsetX = iconOn, killIconOffsetY = iconOn,
+    showLabel = markerOn, labelMode = textOn, labelPosition = textOn, labelSize = textOn, labelColor = textOn,
+    plateFillColor = platesOn, plateFillOpacity = platesOn, plateOutlineStyle = platesOn,
+    plateOutlineColor = plateOutlineOn, plateOutlineOpacity = plateOutlineOn,
+    plateIconSize = plateIconOn, plateIconPosition = plateIconOn, plateIconOffsetX = plateIconOn, plateIconOffsetY = plateIconOn,
+    finisherTexture = finisherOn, finisherColor = finisherOn, finisherOpacity = finisherOn,
+    manualPowerValue = manualOn,
+}
+
 local function checkRow(parent, labelText, key, tooltip)
     note(key)
     return BIT.Looks.Rows.Check(parent, labelText, function() return db()[key] end, function(value)
         db()[key] = value
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function sliderRow(parent, labelText, key, min, max, step, format, tooltip)
     note(key)
-    local opts = { tooltip = tooltip, settings = db }
+    local opts = { tooltip = tooltip, settings = db, enabledIf = WHEN[key] }
     if type(format) == "function" then opts.display = format elseif key:find("Opacity$") then opts.suffix = "%" end
     return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value)
         db()[key] = value
@@ -153,7 +182,7 @@ local function choiceRow(parent, labelText, key, list, tooltip)
     return BIT.Looks.Rows.Choice(parent, labelText, list, function() return db()[key] end, function(id)
         db()[key] = id
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
@@ -164,11 +193,11 @@ local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
 end
 
 -- A drop-down over a table of choices; get/set work on any value (Auto is the absence of a value).
-local function forceRow(parent, labelText, choices, get, set, tooltip)
+local function forceRow(parent, labelText, choices, get, set, tooltip, enabledIf)
     return BIT.Looks.Rows.Choice(parent, labelText, choices, function() return get() or "auto" end, function(id)
         set(id ~= "auto" and id or nil)
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = enabledIf })
 end
 
 -- One curated talent of the player's class: Auto (the client's tree answers) / Off / Max rank.
@@ -206,7 +235,7 @@ local function auraForceRow(parent, entry, tooltip)
         function(value)
             db().auraForce = db().auraForce or {}
             db().auraForce[entry.key] = value
-        end, tooltip)
+        end, tooltip, function(s) return s.useAuras end)
 end
 
 -- A section header, with room above it once there is something above it.
@@ -235,27 +264,32 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildMarkerTab(parent)
-    local y = section(parent, 0, "FRAMES")
+    local y = section(parent, 0, "SHOW ON")
     y = place(checkRow(parent, "Show on target frame", "showTargetFrame",
         "Show the prediction on the Blizzard or configured target frame."), y)
-    local retail = ns.Talents and ns.Talents.IsRetail and ns.Talents.IsRetail()
-    y = place(checkRow(parent, "Show mana cost on your mana bar", "showManaCost",
-        retail and "While you cast a spell with a cast time, marks its estimated mana cost on your mana bar."
-        or "While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. "
-            .. "This illustrates mana already spent, not another deduction."), y)
     y = place(checkRow(parent, "Show on focus frame", "showFocusFrame",
         "Also show the prediction on the focus frame when it represents the cast's target."), y)
     y = place(checkRow(parent, "Show on party frames", "showPartyFrames",
         "Show the prediction only if a party frame represents the cast's recipient. Ordinary damage casts target enemies, not party members."), y)
     y = place(checkRow(parent, "Show on raid frames", "showRaidFrames",
         "Show the prediction only if a raid frame represents the cast's recipient. Ordinary damage casts target enemies, not raid members."), y)
-    y = place(checkRow(parent, "Show on nameplates", "showNameplates",
-        "Show the prediction on the cast target's nameplate."), y)
+    y = place(choiceRow(parent, "Show on nameplates", "nameplateMode", {
+        { id = "off", label = "Off" },
+        { id = "marker", label = "Marker only" },
+        { id = "markerIcon", label = "Marker and kill icon" },
+    }, "The target's own plate gets the same marker, with its own colors on the Nameplates tab; enemy bars are red."), y)
+    y = section(parent, y, "BEHAVIOR")
     y = place(checkRow(parent, "Target beats mouseover", "targetOverMouseover",
         "For packs of mobs with the same name. With the mouse over a second mob of the pack, the addon "
         .. "can't tell which of the two your spell goes to and hides the prediction. With this on, your target "
         .. "(or focus, or the soft target when nothing is targeted) wins over the mob under the mouse. (If you cast with @mouseover macros, "
         .. "the prediction could then show on the wrong mob.)"), y)
+    local retail = ns.Talents and ns.Talents.IsRetail and ns.Talents.IsRetail()
+    y = section(parent, y, "MANA COST")
+    y = place(checkRow(parent, "Show mana cost on your mana bar", "showManaCost",
+        retail and "While you cast a spell with a cast time, marks its estimated mana cost on your mana bar."
+        or "While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. "
+            .. "This illustrates mana already spent, not another deduction."), y)
     y = section(parent, y, "THE MARKER")
     y = place(checkRow(parent, "Show the marker", "showMarker",
         "The predicted damage, drawn across enabled health bars while a cast is in flight."), y)
@@ -296,8 +330,9 @@ local function buildMarkerTab(parent)
         { id = "above", label = "Above the bar" },
         { id = "below", label = "Below the bar" },
     }, nil), y)
-    y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -60, 60, 1, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -60, 60, 1, nil, nil), y, 40)
+    y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -60, 60, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -60, 60, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
+    y = noteRow(parent, y, "DoTs has its own kill icon (DoTs > Kill icon). If you use both, set both, or switch one off.")
     y = section(parent, y, "FINISHER PREVIEW")
     y = place(choiceRow(parent, "Preview fill style", "finisherTexture", textureList(),
         "The fill of the finisher preview (Prediction tab), so it never reads as a real cast."), y)
@@ -332,11 +367,6 @@ end
 
 local function buildNameplateTab(parent)
     local y = section(parent, 0, "NAMEPLATES")
-    y = place(choiceRow(parent, "Nameplate style", "nameplateMode", {
-        { id = "off", label = "Off" },
-        { id = "marker", label = "Marker on the health bar" },
-        { id = "markerIcon", label = "Marker and kill icon" },
-    }, "The target's own plate gets the same marker, with its own colors; enemy bars are red."), y)
     y = place(choiceRow(parent, "Fill color", "plateFillColor", colorList(true), nil), y)
     y = place(sliderRow(parent, "Fill opacity", "plateFillOpacity", 0, 100, 5, nil, nil), y, 40)
     y = place(choiceRow(parent, "Outline", "plateOutlineStyle", {
@@ -345,15 +375,15 @@ local function buildNameplateTab(parent)
     }, nil), y)
     y = place(choiceRow(parent, "Outline color", "plateOutlineColor", colorList(), nil), y)
     y = place(sliderRow(parent, "Outline opacity", "plateOutlineOpacity", 0, 100, 5, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon size", "plateIconSize", 12, 128, 1, nil, nil), y, 40)
-    y = place(choiceRow(parent, "Icon position", "plateIconPosition", {
+    y = place(sliderRow(parent, "Kill icon size", "plateIconSize", 12, 128, 1, nil, nil), y, 40)
+    y = place(choiceRow(parent, "Kill icon position", "plateIconPosition", {
         { id = "left", label = "Left of the bar" },
+        { id = "right", label = "Right of the bar" },
         { id = "above", label = "Above the bar" },
         { id = "below", label = "Below the bar" },
-        { id = "right", label = "Right of the bar" },
     }, nil), y)
-    y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -40, 40, 1, nil, nil), y, 40)
+    y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -40, 40, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
     return y
 end
 
@@ -540,8 +570,42 @@ local function buildPreview(pane)
     end)
     pane.spellButton:SetPoint("RIGHT", spellRow, "RIGHT", 0, 0)
 
+    -- SIMULATE: a cast lands (the health drops by its estimate), then a lethal one shows the kill icon.
+    local function estimateOf(spell)
+        local estimate = db().estimate
+        return (estimate == "min" and spell.min or estimate == "max" and spell.max or (spell.min + spell.max) / 2)
+            / HEALTH_SCALE
+    end
+    local saved
+    local sim = BIT.Looks.Simulate(pane, spellRow, {
+        x = 0, y = -8, length = 8,
+        text = "A cast lands and the health drops; the next one is lethal and shows the kill icon.",
+        start = function() saved = { health = preview.health, spell = preview.spell } end,
+        frame = function(t)
+            local first, second = 1, 3 -- Frostbolt, Shadow Bolt
+            if t < 3 then
+                preview.spell, preview.health = first, 70
+            elseif t < 4 then
+                preview.spell = first
+                preview.health = 70 - estimateOf(SAMPLE_SPELLS[first]) * (t - 3)
+            elseif t < 7 then
+                preview.spell = second
+                preview.health = 70 - estimateOf(SAMPLE_SPELLS[first])
+            else
+                preview.spell, preview.health = second, 1
+            end
+            preview.health = math.max(1, math.floor(preview.health + 0.5))
+            updatePreview()
+        end,
+        finish = function()
+            if saved then preview.health, preview.spell = saved.health, saved.spell end
+            updatePreview()
+        end,
+    })
+    pane.simulate = sim
+
     local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", spellRow, "BOTTOMLEFT", 0, -10)
+    hint:SetPoint("TOPLEFT", sim, "BOTTOMLEFT", 0, -8)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
     hint:SetText(BIT.L("Same marker on mock frames; sample damage is illustrative. Raise target health to hide "

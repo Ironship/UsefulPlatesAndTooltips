@@ -284,17 +284,23 @@ end
 -- ClassicConsoleGamepadUI hides Blizzard's bars and draws its own slots (children of ClassicConsoleGamepadUIBar), each
 -- mirroring one native button in its `source` field. A glow on the native button would be invisible, so the slot
 -- hosts the glow as well.
+local mirrorKids = nil -- the frames under ClassicConsoleGamepadUIBar, listed once per collect
 local function mirrorSlots()
   local list = {}
   local root = _G.ClassicConsoleGamepadUIBar
-  if type(root) ~= "table" or type(root.GetChildren) ~= "function" then return list end
-  local ok, children = pcall(function() return { root:GetChildren() } end)
-  if not ok or type(children) ~= "table" then return list end
-  for _, child in ipairs(children) do
-    if type(child) == "table" and type(child.GetObjectType) == "function" then
-      local okSource, source = pcall(function() return child.source end)
-      if okSource and type(source) == "table" and not isSecret(source) then list[#list + 1] = { slot = child, source = source } end
+  if type(root) ~= "table" or type(root.GetChildren) ~= "function" then mirrorKids = nil return list end
+  if not mirrorKids then
+    local ok, children = pcall(function() return { root:GetChildren() } end)
+    mirrorKids = {}
+    if ok and type(children) == "table" then
+      for _, child in ipairs(children) do
+        if type(child) == "table" and type(child.GetObjectType) == "function" then mirrorKids[#mirrorKids + 1] = child end
+      end
     end
+  end
+  for _, child in ipairs(mirrorKids) do
+    local source = child.source
+    if type(source) == "table" and not isSecret(source) then list[#list + 1] = { slot = child, source = source } end
   end
   return list
 end
@@ -526,22 +532,53 @@ local function usableNow(spellID)
   return nil
 end
 
+-- One update pass asks the client about the target, about combat and about the target's health once, however many
+-- buttons carry a spell (ClassicConsoleGamepadUI's bars and the mirrored native bars make it a dozen or more).
+local pass = nil
+local function passState()
+  if not pass then pass = { alphaHas = {}, alphaVal = {} } end
+  return pass
+end
+
+local function targetInfo()
+  local t = passState()
+  if t.exists == nil then
+    t.exists = ask(UnitExists, "target") == true
+    if t.exists then
+      t.dead = ask(UnitIsDead, "target") == true
+      t.canAttack = ask(UnitCanAttack, "player", "target")
+      t.canAssist = ask(UnitCanAssist, "player", "target")
+      t.isSelf = ask(UnitIsUnit, "target", "player")
+    end
+  end
+  return t
+end
+
+local function inCombat()
+  local t = passState()
+  if not t.combatRead then
+    t.combatRead = true
+    t.combat = ask(UnitAffectingCombat, "player")
+  end
+  return t.combat
+end
+
 -- Is "target" a unit this rule is about? Unknown answers (a hidden value) do not rule a target out.
 local function targetFits(rule)
-  if ask(UnitExists, "target") ~= true then return false end
-  if ask(UnitIsDead, "target") == true then return false end
+  local t = targetInfo()
+  if not t.exists or t.dead then return false end
   if rule.target == "friend" then
-    if ask(UnitCanAssist, "player", "target") == false then return false end
-    if rule.notSelf and ask(UnitIsUnit, "target", "player") == true then return false end
+    if t.canAssist == false then return false end
+    if rule.notSelf and t.isSelf == true then return false end
   else
-    if ask(UnitCanAttack, "player", "target") == false then return false end
+    if t.canAttack == false then return false end
   end
   return true
 end
 
 -- The glow's opacity for the target's health: true and a number or a secret value, or false when nothing can
 -- be said. A secret value is never compared, not even with nil.
-local function healthAlpha(pct)
+local function healthAlphaUncached(pct)
   local level = opacity()
   local curve = curveFor(pct, level)
   if curve and type(UnitHealthPercent) == "function" then
@@ -557,6 +594,18 @@ local function healthAlpha(pct)
     end
   end
   return false
+end
+
+-- The answer for a share is kept for the rest of the update pass: Execute and its mirrors ask for the same one.
+local function healthAlpha(pct)
+  local t = passState()
+  local has = t.alphaHas[pct]
+  if has == nil then
+    local h, a = healthAlphaUncached(pct)
+    t.alphaHas[pct], t.alphaVal[pct] = h, a
+    return h, a
+  end
+  return has, t.alphaVal[pct]
 end
 ns.HealthAlpha = healthAlpha
 
@@ -583,6 +632,8 @@ local function buildLethalNames()
   end
 end
 
+local otherKeys = {} -- client name -> "~name", made once
+
 local function lethalKey(spellID)
   if ns.LethalSkipId[spellID] then return nil end
   local rec = ns.LethalById[spellID]
@@ -593,7 +644,9 @@ local function lethalKey(spellID)
   local hit = lethalNames[name]
   if hit == "skip" then return nil end
   if hit then return hit.name end
-  return "~" .. name
+  local key = otherKeys[name]
+  if not key then key = "~" .. name; otherKeys[name] = key end
+  return key
 end
 ns.LethalKey = lethalKey
 ns.SpellName = nameOf
@@ -619,11 +672,38 @@ local function predictDirect(spellID)
   return { min = min, max = max, value = value }
 end
 
+-- A spell's price is read from CastPrediction (it parses the spell's description) and kept: 20 seconds for a price,
+-- 8 for "no price" (a description the client had not loaded yet). The refresh is spread over scans: one scan
+-- spends about PRICE_SLICE_MS on it and asks for another at once when spells are left, so no single frame pays for
+-- the whole bar (reading every bar spell in one scan took about 9 ms).
+local PRICE_TTL, PRICE_TTL_NONE, PRICE_SLICE_MS = 20, 8, 1.5
+local priceCache = {} -- spell -> { pred (a table or false), at }
+function ns._pricesExpire() priceCache = {} end -- for a check that changes the prices by hand
+local clock = debugprofilestop or function() return (GetTime and GetTime() or 0) * 1000 end
+
+local function priceOf(spell, scan)
+  local c = priceCache[spell]
+  if c and scan.now - c.at < (c.pred and PRICE_TTL or PRICE_TTL_NONE) then return c.pred end
+  if scan.spent >= PRICE_SLICE_MS then
+    scan.more = true
+    return c and c.pred or false
+  end
+  local t0 = clock()
+  local pred = predictDirect(spell) or false
+  scan.spent = scan.spent + (clock() - t0)
+  if c then
+    c.pred, c.at = pred, scan.now
+  else
+    priceCache[spell] = { pred = pred, at = scan.now }
+  end
+  return pred
+end
+
 -- Whether the entry's rule opens a window, and with which opacity (a number or a secret value).
 local function windowFor(entry)
   local rule, c = entry.rule, cfg()
   if not rule or not ruleEnabled(rule) then return false end
-  if c.combatOnly and ask(UnitAffectingCombat, "player") == false then return false end
+  if c.combatOnly and inCombat() == false then return false end
   if not rule.target then
     if usableNow(entry.spell) == true then return true, opacity() end
     return false
@@ -671,7 +751,7 @@ end
 local function killWanted(entry)
   local c = cfg()
   if c.kill == false or not entry.kill then return false end
-  if c.combatOnly and ask(UnitAffectingCombat, "player") == false then return false end
+  if c.combatOnly and inCombat() == false then return false end
   if not targetFits(ENEMY) then return false end
   if c.needResources and usableNow(entry.spell) == false then return false end
   return true
@@ -726,7 +806,12 @@ local function updateKill(entry, testing)
   else
     -- (0, health) with the damage as the value: the fill is the damage's share of the health, full when it kills.
     -- The health may be a secret value; it only goes into the bar.
-    local okSet = pcall(function() d.bar:SetMinMaxValues(0, UnitHealth("target", false)) end)
+    local t = passState()
+    if t.healthRead == nil then
+      t.healthRead = true
+      t.healthOk, t.health = pcall(UnitHealth, "target", false)
+    end
+    local okSet = t.healthOk and pcall(d.bar.SetMinMaxValues, d.bar, 0, t.health)
     if not okSet then
       if d.on then hideDetector(d) end
       return
@@ -774,42 +859,59 @@ local function updateEntry(entry, testing)
 end
 
 local function updateAll()
+  pass = nil
   local testing = testUntil > (GetTime and GetTime() or 0)
   for _, entry in ipairs(active) do updateEntry(entry, testing) end
 end
 ns.Update = updateAll
 
+-- The bars are listed again when an event says they changed and otherwise every COLLECT_EVERY seconds (the list of
+-- LibActionButton libraries and the children of ClassicConsoleGamepadUI's bar do not change by themselves); what
+-- each known button holds is read on every scan.
+local collectDue, lastCollect = true, -100
+local COLLECT_EVERY = 10
+local dirtyScan = false -- also set by the events below
+
 local function rescan()
-  collectButtons()
+  local now = GetTime and GetTime() or 0
+  if collectDue or now - lastCollect >= COLLECT_EVERY then
+    collectDue, lastCollect = false, now
+    collectButtons()
+    mirrorKids = nil
+  end
   local list, by = {}, {}
-  local priced = {} -- spell -> its prediction or false, once per scan
+  local scan = { now = now, spent = 0, more = false }
   local wantKill = cfg().kill ~= false
-  local function consider(host, spell, name)
+  local function consider(host, spell, source, isSlot)
     if not spell then return end
     local rule = ruleFor(spell)
     local pred
     if wantKill then
       local key = lethalKey(spell)
       if key then
-        pred = priced[spell]
-        if pred == nil then pred = predictDirect(spell) or false; priced[spell] = pred end
+        pred = priceOf(spell, scan)
         if pred and key:sub(1, 1) == "~" and type(settings.lethalOther) == "table" then settings.lethalOther[key] = true end
         if pred and not lethalAllowed(key) then pred = false end
       end
     end
     if rule or pred then
+      local name
+      if isSlot then
+        name = "ClassicConsoleGamepadUI slot of " .. tostring(source:GetName() or "?")
+      else
+        name = tostring(host:GetName() or "button")
+      end
       local entry = { button = host, rule = rule, kill = pred or nil, spell = spell, name = name,
         group = rule and rule.group or "kill", label = rule and rule.key or "kill" }
       list[#list + 1] = entry
       by[host] = entry
     end
   end
-  for _, b in ipairs(buttons) do consider(b, buttonSpell(b), tostring(b:GetName() or "button")) end
+  for _, b in ipairs(buttons) do consider(b, buttonSpell(b), b, false) end
   for _, m in ipairs(mirrorSlots()) do
-    if not by[m.slot] then
-      consider(m.slot, buttonSpell(m.source), "ClassicConsoleGamepadUI slot of " .. tostring(m.source:GetName() or "?"))
-    end
+    if not by[m.slot] then consider(m.slot, buttonSpell(m.source), m.source, true) end
   end
+  if scan.more then dirtyScan = true end -- spells left to price: the next frame takes the next slice
   -- a button that no longer carries one of the spells loses its glow
   for b, set in pairs(glows) do
     if not by[b] then
@@ -848,11 +950,11 @@ ns.Rescan = rescan
 ---------------------------------------------------------------------------------------------
 
 local frame = CreateFrame("Frame")
-local dirtyScan, dirtyUpdate = false, false
+local dirtyUpdate = false
 local sinceUpdate, sinceScan = 0, 0
 local UPDATE_EVERY, SCAN_EVERY = 0.1, 2
 
-scheduleRescan = function() dirtyScan = true end
+scheduleRescan = function() dirtyScan, collectDue = true, true end
 
 local EVENTS = {
   "PLAYER_ENTERING_WORLD", "ACTIONBAR_SLOT_CHANGED", "ACTIONBAR_PAGE_CHANGED", "UPDATE_BONUS_ACTIONBAR",
@@ -911,7 +1013,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
   end
   if not settings then return end
   for _, e in ipairs(EVENTS) do
-    if event == e then dirtyScan = true return end
+    if event == e then dirtyScan, collectDue = true, true return end
   end
   dirtyUpdate = true
 end)
@@ -952,6 +1054,7 @@ end
 -- Every button that carries one of the spells glows for a few seconds, whatever the target and the game say.
 function ns.Test(seconds)
   if not settings then return 0 end
+  collectDue = true
   rescan()
   if #active == 0 then
     BIT.Say(BIT.L("TriggerGlow: none of its spells is on your action bars (Execute, Hammer of Wrath, Divine Grace, "
@@ -978,6 +1081,7 @@ function ns.Probe()
   local lines = {}
   local function add(s) lines[#lines + 1] = s end
   if not settings then add("TriggerGlow is switched off (/reload after switching it on).") return lines end
+  collectDue = true
   rescan()
   add(string.format("API: C_Spell.IsSpellUsable %s, UnitHealthPercent %s, C_CurveUtil %s, ActionButtonSpellAlertTemplate frame %s",
     (type(C_Spell) == "table" and type(C_Spell.IsSpellUsable) == "function") and "yes" or "no",

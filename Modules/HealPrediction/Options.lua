@@ -52,17 +52,27 @@ local function value(key)
     return v
 end
 
+-- Rows that only mean something while another switch is in a state: they dim otherwise, by setting key. The client's
+-- total (All healers) leaves no room for the other healers' band, and the heal-over-time rows need the HoT overlay.
+local function othersOn() return not value("allHealers") and value("showOthers") ~= false end
+local function hotsOn() return value("showHots") ~= false end
+local WHEN = {
+    showOthers = function() return not value("allHealers") end,
+    otherTexture = othersOn, otherColor = othersOn, otherOpacity = othersOn,
+    hotWhole = hotsOn, hotTexture = hotsOn, hotColor = hotsOn, hotOpacity = hotsOn,
+}
+
 local function checkRow(parent, labelText, key, tooltip)
     note(key)
     return BIT.Looks.Rows.Check(parent, labelText, function() return value(key) end, function(value)
         db()[key] = value
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function sliderRow(parent, labelText, key, min, max, step, format, tooltip, enabledIf)
     note(key)
-    local opts = { tooltip = tooltip, settings = db, enabledIf = enabledIf }
+    local opts = { tooltip = tooltip, settings = db, enabledIf = enabledIf or WHEN[key] }
     if type(format) == "function" then opts.display = format elseif key:find("Opacity$") or key == "heightPercent" then opts.suffix = "%" end
     return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return value(key) end, function(value)
         db()[key] = value
@@ -75,7 +85,7 @@ local function choiceRow(parent, labelText, key, list, tooltip)
     return BIT.Looks.Rows.Choice(parent, labelText, list, function() return value(key) end, function(id)
         db()[key] = id
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
@@ -103,16 +113,16 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildSettings(parent)
-    local y = section(parent, 0, "FRAMES")
-    y = place(checkRow(parent, "Target frame", "target",
+    local y = section(parent, 0, "SHOW ON")
+    y = place(checkRow(parent, "Show on player frame", "player", "Your own health bar."), y)
+    y = place(checkRow(parent, "Show on target frame", "target",
         "The segment starts where the target's green ends and reaches as far as the incoming heal will."), y)
-    y = place(checkRow(parent, "Player frame", "player", "Your own health bar."), y)
-    y = place(checkRow(parent, "Focus frame", "focus", "Incoming heals and your HoTs on your focus."), y)
-    y = place(checkRow(parent, "Target of target frame", "targettarget",
+    y = place(checkRow(parent, "Show on focus frame", "focus", "Incoming heals and your HoTs on your focus."), y)
+    y = place(checkRow(parent, "Show on target of target frame", "targettarget",
         "Blizzard's small target-of-target health bar, including when it shows you."), y)
-    y = place(checkRow(parent, "Party frames", "party",
+    y = place(checkRow(parent, "Show on party frames", "party",
         "Blizzard's classic party frames and the compact party members."), y)
-    y = place(checkRow(parent, "Raid frames", "raid",
+    y = place(checkRow(parent, "Show on raid frames", "raid",
         "The compact raid members (CompactRaidFrameContainer), including the EllesmereUI raid members."), y)
     y = section(parent, y, "THE NUMBERS")
     y = place(checkRow(parent, "All healers", "allHealers",
@@ -140,7 +150,7 @@ local function buildSettings(parent)
     y = place(sliderRow(parent, "Heal over time horizon", "hotHorizon", 1, 15, 1,
         function(value) return math.floor(value + 0.5) .. " s" end,
         "How many seconds of each heal over time are drawn ahead. Used only when Whole remaining effect is off.",
-        function(settings) return settings.hotWhole == false end), y, 40)
+        function() return hotsOn() and value("hotWhole") == false end), y, 40)
     y = section(parent, y, "THE SEGMENT")
     y = place(choiceRow(parent, "Fill style", "fillTexture", BIT.Looks.Textures(),
         "The fill of the incoming-heal segment: patterns, glass and bevel shadings, Blizzard's bar textures and every "
@@ -148,12 +158,18 @@ local function buildSettings(parent)
     y = place(choiceRow(parent, "Fill color", "fillColor", BIT.Looks.ColorList(),
         "The incoming-heal segment's own color, or Custom color... for any you like; absorbs keep ShieldsInfo's look."), y)
     y = place(sliderRow(parent, "Fill opacity", "fillOpacity", 0, 100, 5, nil, nil), y, 40)
-    y = place(choiceRow(parent, "Other healers' fill style", "otherTexture", BIT.Looks.Textures(), nil), y)
-    y = place(choiceRow(parent, "Other healers' fill color", "otherColor", BIT.Looks.ColorList(), nil), y)
-    y = place(sliderRow(parent, "Other healers' fill opacity", "otherOpacity", 0, 100, 5, nil, nil), y)
-    y = place(choiceRow(parent, "Heal over time fill style", "hotTexture", BIT.Looks.Textures(), nil), y)
-    y = place(choiceRow(parent, "Heal over time fill color", "hotColor", BIT.Looks.ColorList(), nil), y)
-    y = place(sliderRow(parent, "Heal over time fill opacity", "hotOpacity", 0, 100, 5, nil, nil), y)
+    y = place(choiceRow(parent, "Other healers' fill style", "otherTexture", BIT.Looks.Textures(),
+        "The fill style of the band for the healing other healers have coming."), y)
+    y = place(choiceRow(parent, "Other healers' fill color", "otherColor", BIT.Looks.ColorList(),
+        "The color of the band for the healing other healers have coming."), y)
+    y = place(sliderRow(parent, "Other healers' fill opacity", "otherOpacity", 0, 100, 5, nil,
+        "How strongly the band for other healers' healing covers the bar."), y)
+    y = place(choiceRow(parent, "Heal over time fill style", "hotTexture", BIT.Looks.Textures(),
+        "The fill style of the segment for your heals over time."), y)
+    y = place(choiceRow(parent, "Heal over time fill color", "hotColor", BIT.Looks.ColorList(),
+        "The color of the segment for your heals over time."), y)
+    y = place(sliderRow(parent, "Heal over time fill opacity", "hotOpacity", 0, 100, 5, nil,
+        "How strongly the segment for your heals over time covers the bar."), y)
     y = place(sliderRow(parent, "Height", "heightPercent", 15, 100, 5, nil,
         "How tall the segment is against the health bar; the top edge is the anchor."), y, 40)
     y = place(checkRow(parent, "Show a number", "showText",
@@ -195,10 +211,21 @@ local function buildPreview(pane)
     local scene = BIT.UI.Preview.Scene(pane, PREVIEW_WIDTH - 2 * SIDE, 122)
     scene:SetPoint("TOP", pane, "TOP", 0, -44)
 
-    local mock = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 60 })
-    mock.frame:SetPoint("CENTER", scene, "CENTER", 0, 0)
-    mock.bar:SetMinMaxValues(0, 100)
-    mock.bar:SetValue(60)
+    -- The frame the sample sits on: target, player or party, each with its own "Show on" switch.
+    local kits = {
+        target = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 60 }),
+        player = BIT.UI.Preview.PlayerFrame(scene, { name = "You", health = 60 }),
+        party = BIT.UI.Preview.PartyBar(scene, { name = "Kaya", width = 190, health = 60 }),
+    }
+    local FRAMES = { { id = "target", label = "Target" }, { id = "player", label = "Player" }, { id = "party", label = "Party" } }
+    local which = "target"
+    local mock = kits.target
+    for id, kit in pairs(kits) do
+        kit.frame:SetPoint("CENTER", scene, "CENTER", 0, 0)
+        kit.bar:SetMinMaxValues(0, 100)
+        kit.bar:SetValue(60)
+        kit.frame:SetShown(id == which)
+    end
 
     local state = { health = 60, heal = 25, others = 12 }
     local sampleHotTotal, sampleHotDuration = 30, 12
@@ -206,12 +233,37 @@ local function buildPreview(pane)
         mock.bar:SetValue(state.health)
         if mock.healthPercent then mock.healthPercent:SetText(string.format("%d%%", state.health)) end
         local horizon = ns.HotHorizon and ns.HotHorizon() or tonumber(db().hotHorizon) or 4
-        local hot = sampleHotTotal * math.min(horizon, sampleHotDuration) / sampleHotDuration
-        ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, hot)
+        -- hotRemaining: seconds of the sample HoT left (the Simulate scene runs it down; otherwise it is fresh)
+        local hot = sampleHotTotal * math.min(horizon, state.hotRemaining or sampleHotDuration) / sampleHotDuration
+        ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, hot, which)
+    end
+
+    -- FRAME: which mock carries the sample (the same switch as ShieldsInfo's preview).
+    local switch = CreateFrame("Frame", nil, pane)
+    switch:SetSize(PREVIEW_WIDTH - 2 * SIDE, 22)
+    switch:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -8)
+    local switchButtons = {}
+    local left = 0
+    for _, entry in ipairs(FRAMES) do
+        local label = BIT.L(entry.label)
+        local button = BIT.UI.Button(switch, label, 70, function()
+            if which == entry.id then return end
+            if ns.HideSample then ns.HideSample(mock.bar) end
+            kits[which].frame:Hide()
+            which, mock = entry.id, kits[entry.id]
+            mock.frame:Show()
+            for id, b in pairs(switchButtons) do b:SetAlpha(id == which and 1 or 0.55) end
+            redraw()
+        end)
+        button:SetHeight(20)
+        button:SetPoint("TOPLEFT", switch, "TOPLEFT", left, 0)
+        button:SetAlpha(entry.id == which and 1 or 0.55)
+        switchButtons[entry.id] = button
+        left = left + 74
     end
 
     -- The two sliders are the sample's own numbers, never settings.
-    local tryIt = BIT.Looks.TryItHeader(pane, scene)
+    local tryIt = BIT.Looks.TryItHeader(pane, switch)
     local healthSlider = BIT.Looks.PreviewSlider(pane, "Health", 1, 100,
         function() return state.health end,
         function(value)
@@ -227,11 +279,41 @@ local function buildPreview(pane)
         end)
     healSlider:SetPoint("TOPLEFT", healthSlider, "BOTTOMLEFT", 0, 0)
 
+    -- SIMULATE: a heal is cast (its segment grows, the other healers' band joins), lands, and its HoT runs down.
+    local saved
+    local sim = BIT.Looks.Simulate(pane, healSlider, {
+        x = 4, y = -10, length = 10,
+        text = "A heal is cast and lands, then its heal over time ticks down.",
+        start = function() saved = { health = state.health, heal = state.heal, others = state.others } end,
+        frame = function(t)
+            if t < 2.5 then
+                state.health, state.heal = 40, 25 * t / 2.5
+                state.others = t >= 1 and 12 or 0
+                state.hotRemaining = 0
+            else
+                local since = t - 2.5
+                state.heal, state.others = 0, 0
+                state.health = math.min(100, 65 + math.floor(since) * 3)
+                state.hotRemaining = math.max(0, sampleHotDuration - since)
+            end
+            state.health = math.floor(state.health + 0.5)
+            redraw()
+        end,
+        finish = function()
+            if saved then state.health, state.heal, state.others = saved.health, saved.heal, saved.others end
+            state.hotRemaining = nil
+            redraw()
+            if healthSlider.Refresh then healthSlider:Refresh() end
+            if healSlider.Refresh then healSlider:Refresh() end
+        end,
+    })
+    pane.simulate = sim
+
     local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", healSlider, "BOTTOMLEFT", 6, -12)
+    hint:SetPoint("TOPLEFT", sim, "BOTTOMLEFT", 2, -8)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
-    hint:SetText(BIT.L("The Target frame option controls this sample; the other frame options control live frames. "
+    hint:SetText(BIT.L("The Show on target frame option controls this sample; the other Show on options control live frames. "
         .. "The segment starts at the health edge (the green bar's "
         .. "end) and is cropped at the bar's right end when the heal would overheal."))
 

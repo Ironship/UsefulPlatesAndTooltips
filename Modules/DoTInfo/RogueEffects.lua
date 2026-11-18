@@ -35,6 +35,12 @@ local function plain(value, kind)
     return not secret(value) and type(value) == kind
 end
 
+-- The error text of a failed pcall for the trace (a secret or non-string error says only that).
+local function errorText(err)
+    if type(err) ~= "string" or secret(err) then return "restricted" end
+    return (err:gsub("%s+", " "):sub(1, 200))
+end
+
 local function boolean(fn, unit)
     if type(fn) ~= "function" then return end
     local ok, value = pcall(fn, unit)
@@ -189,6 +195,10 @@ local function observe(unit, aura, filtered, signal, seen)
 end
 
 local function scan(unit)
+    -- WoW: Forever refuses addon code every read of an enemy's auras in combat (alpha logs: GetUnitAuras,
+    -- GetAuraDataByIndex and GetUnitAuraInstanceIDs all throw), so a scan in combat can only fail. Deadly Poison
+    -- is drawn by the native aura container (RogueAuras.lua) there; out of combat the scans below still work.
+    if not retail and boolean(UnitAffectingCombat, "player") ~= false then return end
     local seen = {}
     local ok, reason = pcall(function()
         if not C_UnitAuras then return "aura API unavailable" end
@@ -199,7 +209,8 @@ local function scan(unit)
             auras = {}
             for index = 1, 255 do
                 local aura = C_UnitAuras.GetAuraDataByIndex(unit, index, "HARMFUL|PLAYER")
-                if not secret(aura) and aura == nil then break end
+                if secret(aura) then return "aura list hidden" end
+                if aura == nil then break end
                 auras[#auras + 1] = aura
             end
         else return "aura API unavailable" end
@@ -208,7 +219,7 @@ local function scan(unit)
         for _, aura in ipairs(auras) do unavailable = observe(unit, aura, true, false, seen) or unavailable end
         return unavailable
     end)
-    if not ok then reason = "aura access denied" end
+    if not ok then reason = "aura access denied: " .. errorText(reason) end
     if reason then report(unit, reason) end
     -- An idle, visible NPC has left combat even when Retail still restricts its aura list.
     -- Keep effects actually read in a partial scan; an unavailable scan alone never clears PvP/combat.
@@ -274,8 +285,11 @@ local function update(unit, updateInfo)
         ns.RemoveRogueAuras(unit, nil, ids)
         return unavailable
     end)
-    if not ok then reason = "aura access denied" end
-    if reason then scan(unit) end
+    if not ok then reason = "aura update error: " .. errorText(reason) end
+    if reason then
+        report(unit, reason)
+        scan(unit)
+    end
 end
 
 function E.Start(unitKey)

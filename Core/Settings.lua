@@ -32,6 +32,34 @@ local SHORT_LABEL = {
   TriggerGlow = "Glow",
 }
 
+-- The hub's tab order: the prediction modules and the bar overlays first, then the item/number helpers, the tool page last.
+-- A module that is not listed (a new one) follows in load order, before the tool pages.
+local HUB_ORDER = {
+  "SpellDamageInfo", "CastPrediction", "DoTInfo", "HealPrediction", "ShieldsInfo", "TriggerGlow",
+  "StatsInfo", "ResourceDing", "Range", "HunterRangeFinder",
+}
+
+-- One name per module: the tab label is also the name in "Enable ...", the reset question and the tab tooltip.
+local function pageName(name, tab)
+  return BIT.L(SHORT_LABEL[name] or (tab and tab.title) or name)
+end
+
+local function hubOrder()
+  local list, seen = {}, {}
+  for _, name in ipairs(HUB_ORDER) do
+    if BIT.tabs[name] then list[#list + 1] = name; seen[name] = true end
+  end
+  local tools = {}
+  for _, name in ipairs(BIT.order) do
+    if not seen[name] then
+      if BIT.tabs[name] and BIT.tabs[name].plain then tools[#tools + 1] = name else list[#list + 1] = name end
+      seen[name] = true
+    end
+  end
+  for _, name in ipairs(tools) do list[#list + 1] = name end
+  return list
+end
+
 local window
 local tabButtons, pages = {}, {}
 local parkedPages = {} -- retain one off page and one prepared page per module
@@ -706,7 +734,7 @@ local function confirmResetModule(name)
     timeout = 0, whileDead = true, hideOnEscape = true,
   }
   local tab = BIT.tabs[name]
-  StaticPopup_Show("UPT_RESET_MODULE", BIT.L(tab.title or name), nil, name)
+  StaticPopup_Show("UPT_RESET_MODULE", pageName(name, tab), nil, name)
 end
 
 local function buildPage(name)
@@ -719,7 +747,7 @@ local function buildPage(name)
 
   -- A plain tab (Debug) is a tool page, not a part: no Enable box, and it is always built.
   if not tab.plain then
-  page.switch = UI.Check(page, string.format(BIT.L("Enable %s"), BIT.L(tab.title or name)),
+  page.switch = UI.Check(page, string.format(BIT.L("Enable %s"), pageName(name, tab)),
     function() return BIT.IsSwitchedOn(name) end,
     function(v)
       BIT.SetSwitchedOn(name, v)
@@ -883,13 +911,45 @@ local function createWindow()
   end
   close:SetScript("OnClick", function() window:Hide() end)
 
-  for _, name in ipairs(BIT.order) do
+  -- The language of the settings, tooltips and chat lines. Its own label is not translated on purpose: whoever lands in a
+  -- language they cannot read must still find it. The change applies after a reload, offered next to it.
+  local language = UI.Button(window, "", 150, function(self)
+    local Looks = BIT.Looks
+    if not (Looks and Looks.PickList) then return end
+    Looks.PickList(self, BIT.LanguageList(), BIT.LanguageChoice(), function(id)
+      BIT.SetLanguage(id)
+      self:SetText("Language: " .. BIT.LanguageLabel())
+      window.languageReload:Show()
+    end)
+  end)
+  language:SetHeight(20)
+  language:SetPoint("TOPRIGHT", close, "TOPLEFT", -4, -3)
+  language:SetText("Language: " .. BIT.LanguageLabel())
+  language:HookScript("OnEnter", function(self)
+    if not GameTooltip then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:SetText("Language", 1, 1, 1)
+    GameTooltip:AddLine(BIT.L("The language of the settings, tooltips and chat lines of this addon. It changes after a "
+      .. "reload. Auto follows the game's language."), 0.9, 0.9, 0.9, true)
+    GameTooltip:Show()
+  end)
+  language:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+  window.languageButton = language
+  local reload = UI.Button(window, "Reload UI", 100, function()
+    if type(ReloadUI) == "function" then ReloadUI() end
+  end)
+  reload:SetHeight(20)
+  reload:SetPoint("TOPRIGHT", language, "TOPLEFT", -4, 0)
+  reload:Hide()
+  window.languageReload = reload
+
+  for _, name in ipairs(hubOrder()) do
     local tab = BIT.tabs[name] or {}
     local extra
     if name == "HunterRangeFinder" and playerClass() ~= "HUNTER" then
       extra = BIT.L("Hunter only. Settings are here for an alt.")
     end
-    addTabButton(name, BIT.L(SHORT_LABEL[name] or tab.title or name), BIT.L(tab.title or name), BIT.L(tab.summary), extra)
+    addTabButton(name, pageName(name, tab), pageName(name, tab), BIT.L(tab.summary), extra)
   end
   layoutTabs()
   window.baseHeight = HEADER_HEIGHT + TAB_HEIGHT * tabRows + SWITCH_HEIGHT + h + MARGIN
@@ -929,9 +989,9 @@ local function createWindow()
     pad.Attach(window, function(self, key)
       if key == "PAD2" then self:Hide(); return true end
       if key == "PADLSHOULDER" or key == "PADRSHOULDER" then
-        local index = 1
-        for i, name in ipairs(BIT.order) do if name == current then index = i end end
-        selectTab(BIT.order[(index - 1 + (key == "PADLSHOULDER" and -1 or 1)) % #BIT.order + 1])
+        local index, order = 1, hubOrder()
+        for i, name in ipairs(order) do if name == current then index = i end end
+        selectTab(order[(index - 1 + (key == "PADLSHOULDER" and -1 or 1)) % #order + 1])
         return true
       end
       return pad.Navigate(self, key)
@@ -962,7 +1022,7 @@ function BIT.OpenSettings(name)
     window:Hide()
     return
   end
-  selectTab(current or BIT.order[1])
+  selectTab(current or hubOrder()[1])
   window:Show()
 end
 

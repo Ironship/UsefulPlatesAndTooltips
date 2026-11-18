@@ -75,7 +75,14 @@ local function checkbox(parent, key, labelText, opts)
     function(value) applySetting(key, value) end, opts)
 end
 
+-- opts.up: the saved value counts down (negative = above the bar), the slider shows it the other way round
+-- (positive = up, like every other offset in the addon). Nothing saved changes.
 local function slider(parent, key, labelText, min, max, step, opts)
+  if opts and opts.up then
+    return sliderRow(parent, labelText, 0 - max, 0 - min, step,
+      function() return 0 - (Addon.db[key] or 0) end,
+      function(value) applySetting(key, 0 - value) end, opts)
+  end
   return sliderRow(parent, labelText, min, max, step,
     function() return Addon.db[key] end,
     function(value) applySetting(key, value) end, opts)
@@ -320,15 +327,15 @@ local function buildLivePreview(pane)
     { layout = PREVIEW_LAYOUT, tooltip = "How many combo points or soul shards the sample shows." })
   scene.pointsControl = points
   points:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -6)
-  local size = sliderRow(pane, "Size", 8, 24, 1,
+  local size = sliderRow(pane, "Dot size (saved)", 8, 24, 1,
     function() return Addon.db.dotSize end,
     function(value) applySetting("dotSize", value) end,
-    { layout = PREVIEW_LAYOUT, tooltip = "Size of the combo points and soul shards." })
+    { layout = PREVIEW_LAYOUT, tooltip = "Size of the combo points and soul shards. This changes the saved setting, the same one as on the Combo tab." })
   size:SetPoint("TOPLEFT", points, "BOTTOMLEFT", 0, 0)
-  local offset = sliderRow(pane, "Vertical offset", -80, 30, 1,
-    function() return Addon.db[previewOffsetKey()] end,
-    function(value) applySetting(previewOffsetKey(), value) end,
-    { layout = PREVIEW_LAYOUT, tooltip = "Offset for the resource in the selected tab." })
+  local offset = sliderRow(pane, "Height (saved)", -30, 80, 1,
+    function() return 0 - (Addon.db[previewOffsetKey()] or 0) end,
+    function(value) applySetting(previewOffsetKey(), 0 - value) end,
+    { layout = PREVIEW_LAYOUT, tooltip = "Height of the resource in the selected tab. Positive is up, negative is under the bar. This changes the saved setting, the same one as on the Combo / Shards tab." })
   offset:SetPoint("TOPLEFT", size, "BOTTOMLEFT", 0, 0)
   local diamonds = checkboxRow(pane, "Shard diamonds",
     function() return Addon.db.shardDiamonds end,
@@ -336,6 +343,24 @@ local function buildLivePreview(pane)
     { layout = PREVIEW_LAYOUT, tooltip = "Purple diamonds under the target, the same setting as the Shards tab." })
   diamonds:SetPoint("TOPLEFT", offset, "BOTTOMLEFT", 0, 0)
   scene.diamondsControl = diamonds
+
+  -- SIMULATE: the points come in one by one, then the finisher spends them.
+  local savedPoints
+  local simulate = BIT.Looks.Simulate(pane, diamonds, {
+    x = 6, y = -8, length = 8,
+    text = "The points come in one by one, then the finisher spends them.",
+    start = function() savedPoints = previewState.points end,
+    frame = function(t)
+      local step = math.floor(t / 1)
+      previewState.points = step > MAX_POINTS and 0 or math.min(MAX_POINTS, step)
+      updateLivePreview()
+    end,
+    finish = function()
+      previewState.points = savedPoints
+      refreshControls()
+      updateLivePreview()
+    end,
+  })
 
   local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", 12, 8)
@@ -444,9 +469,9 @@ local function buildTabs()
   dots:checkbox("dots", "Show the points as dots under the target's nameplate",
     { tooltip = "Your class resource as circles below the target's health bar. Warlocks use these when shard diamonds are off." })
   dots:slider("dotSize", "Dot / diamond size", 8, 24, 1,
-    { tooltip = "How big the circles and the shard diamonds are." })
-  dots:slider("dotOffset", "Dot vertical offset (- = above)", -80, 30, 1,
-    { tooltip = "How far the dots sit from the health bar. The same seat as the hunter rail: top of the row, -offset under the bar." })
+    { enabledIf = function(db) return db.dots or db.shardDiamonds end, tooltip = "How big the circles and the shard diamonds are." })
+  dots:slider("dotOffset", "Dot height above the bar", -80, 30, 1,
+    { up = true, enabledIf = function(db) return db.dots end, tooltip = "How high the dots sit above the health bar. Positive is up, negative is under the bar. The same seat as the hunter rail." })
   plateClashRow = dots:note(BIT.L("Nameplate lanes"))
   if plateClashRow and plateClashRow.text and BIT.Plate and type(BIT.Plate.ClashText) == "function" then
     plateClashRow.text:SetText(BIT.Plate.ClashText())
@@ -458,8 +483,8 @@ local function buildTabs()
     { tooltip = "One cue for a new whole Soul Shard: player power on Retail, bag items on Classic. This also announces the last shard when the bar fills." })
   shards:checkbox("shardDiamonds", "Purple diamonds under the target",
     { tooltip = "Each Soul Shard as a purple diamond below the target's health bar." })
-  shards:slider("shardOffset", "Shard vertical offset (- = above)", -80, 30, 1,
-    { tooltip = "How far the diamonds sit from the health bar; they move independently of the dots." })
+  shards:slider("shardOffset", "Shard height above the bar", -80, 30, 1,
+    { up = true, enabledIf = function(db) return db.shardDiamonds end, tooltip = "How high the diamonds sit above the health bar. Positive is up, negative is under the bar; they move independently of the dots." })
   shards:gap()
 
   local mana = addTab("Mana")
@@ -741,7 +766,7 @@ BIT.RegisterTab("ResourceDing", {
   title = "ResourceDing",
   summary = "A sound when your combo points are full, and the points as dots under the target; for "
     .. "casters a sound when mana climbs to a level, and for warlocks one on each Soul Shard.",
-  width = 760, height = 470,
+  width = 760, height = 500,
   build = function(parent) Addon.CreateSettingsPanel(parent) end,
 })
 BIT.tabWords.ding = "ResourceDing"
