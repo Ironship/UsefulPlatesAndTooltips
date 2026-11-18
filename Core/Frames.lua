@@ -51,6 +51,21 @@ function Frames.Set(key, path)
   saved.frames[key] = strtrim(path or "")
 end
 
+-- Every path empty again: the addon finds Blizzard's (or the other addon's own) frames by itself. Returns how many paths
+-- were set.
+function Frames.Reset()
+  if type(BIT.DB) ~= "function" then return 0 end
+  local saved = BIT.DB()
+  local paths = type(saved) == "table" and saved.frames
+  if type(paths) ~= "table" then return 0 end
+  local cleared = 0
+  for key in pairs(KEYS) do
+    if type(paths[key]) == "string" and strtrim(paths[key]) ~= "" then cleared = cleared + 1 end
+    paths[key] = nil
+  end
+  return cleared
+end
+
 -- Frame path -> the frame (or texture), or nil if it does not exist (yet: some addons build frames late).
 function Frames.Resolve(path)
   if type(path) ~= "string" then return nil end
@@ -148,6 +163,36 @@ function Frames.PathOf(region)
   end
 end
 
+-- Blizzard's Camelot unit frames keep StatusBars of their own size beside the health bar, inside the same container
+-- (TempMaxHealthLoss, the absorb and heal prediction bars). They are not where health is drawn and are often invisible,
+-- but the picker found them first (the smallest StatusBar under the mouse), and a mark on one never shows.
+local OVERLAY_BARS = { "tempmaxhealthloss", "absorb", "prediction" }
+
+function Frames.IsOverlayBar(bar)
+  for _, source in ipairs({ plain(bar, "GetParentKey") or false, plain(bar, "GetName") or false }) do
+    if type(source) == "string" then
+      source = source:lower()
+      for _, word in ipairs(OVERLAY_BARS) do
+        if source:find(word, 1, true) then return true end
+      end
+    end
+  end
+  return false
+end
+
+-- The health bar itself for one of those overlay bars (a path saved by an earlier pick keeps working), else `bar`.
+function Frames.HealthBarOf(bar)
+  if type(bar) ~= "table" or not Frames.IsOverlayBar(bar) then return bar end
+  local parent = plain(bar, "GetParent")
+  if type(parent) ~= "table" then return bar end
+  local ok, real = pcall(function() return parent.HealthBar or parent.healthBar or parent.Health end)
+  if ok and type(real) == "table" and real ~= bar and plain(real, "GetObjectType") == "StatusBar"
+    and not Frames.IsOverlayBar(real) then
+    return real
+  end
+  return bar
+end
+
 -- Stop at the owning unit frame for layering; shared UI roots include unrelated frames.
 -- Without a unit, retain the top-level ancestor for the frame picker.
 function Frames.Root(region, unit)
@@ -223,6 +268,7 @@ local function findCandidate(kind)
   local best, bestArea
   local function consider(region, isBar)
     if kind == "bar" and not isBar then return end
+    if kind == "bar" and Frames.IsOverlayBar(region) then return end
     local width, height = areaUnderMouse(region)
     if not width then return end
     if kind == "anchor" and (width < MIN_ANCHOR_SIZE or height < MIN_ANCHOR_SIZE) then return end

@@ -47,6 +47,8 @@ local function unitFrameBase(unit)
     local path = Frames.Get(key)
     if path ~= "" then
       local bar = Frames.Resolve(path)
+      -- a path saved from a pick that landed on an overlay bar of the same frame (TempMaxHealthLoss, absorb) means its health bar
+      if bar and Frames.HealthBarOf then bar = Frames.HealthBarOf(bar) end
       if bar then
         -- A replacement frame that is hidden (no target, switched off) hides the marks with it.
         if not Frames.Shown(bar) then return end

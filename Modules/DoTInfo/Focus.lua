@@ -26,7 +26,10 @@ end
 
 local host = CreateFrame("Frame", nil, UIParent)
 host:SetAllPoints(UIParent)
-local widgets
+local widgets, lastBar
+
+-- For /dotinfo marker: the focus widgets and the bar they were last drawn on.
+function ns.focusState() return widgets, lastBar end
 
 -- The look the nameplates use, except the mode.
 local focusLook = setmetatable({}, { __index = function(_, key)
@@ -127,14 +130,32 @@ local function updateLayering(w, bar, now)
     w.iconBar:SetFrameLevel(math.min(topLevel + 3, MAX_LEVEL - 1))
 end
 
+-- The marker can only be moved onto the focus bar out of combat, and a marker that stays on the screen is never drawn on
+-- the Forever unit frames. The first DoT on the focus comes in a fight, so the widgets are made and hung on the bar
+-- before that, whenever it is safe (as the target frame's marker is at login). Hidden until there is something to show.
+local function prepare()
+    if InCombatLockdown() then return end
+    local _, bar = BIT.Plate.UnitFrame("focus")
+    if type(bar) ~= "table" then return end
+    local hang = ns.db.markerParent ~= "screen" and bar or nil
+    if widgets and widgets.healthBar == bar and widgets.hungOn == hang then return end
+    -- the first call only makes the widgets, the second moves the marker onto the bar
+    widgets = ns.barMarker.widgetsFor(host, bar, hang)
+    if widgets.hungOn ~= hang then widgets = ns.barMarker.widgetsFor(host, bar, hang) end
+    widgets.pinned = true
+    hide()
+end
+
 local function refresh()
     local db = ns.db
     if not db or not ns.barMarker then return end
     if db.focusMode == "off" then return hide() end
+    prepare()
     local okExists, exists = pcall(UnitExists, "focus")
     if not okExists or isSecret(exists) or not exists or dead() then return hide() end
     local _, bar = BIT.Plate.UnitFrame("focus")
     if type(bar) ~= "table" or not shown(bar) then return hide() end
+    lastBar = bar
     local entries, total = ns.dotBreakdownForUnit("focus")
     if total <= 0 then return hide() end
     -- the marker hangs on the focus bar itself (as on the target frame, see Core.lua applyMarkerParent)

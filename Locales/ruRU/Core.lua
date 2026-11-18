@@ -506,4 +506,9 @@ BIT.RegisterLocale("ruRU", {
     "Очки накапливаются по одному, затем завершающий приём их тратит.",
   ["Three hits land: the shield takes them first, then the health, and the shield breaks."] =
     "Приходят три удара: сначала их принимает щит, потом здоровье, и щит ломается.",
+  ["Reset frames"] = "Сбросить рамки",
+  ["Frames reset: %d paths cleared, the addon finds the frames by itself again."] =
+    "Рамки сброшены: очищено путей: %d, аддон снова находит рамки сам.",
+  ["Frames: no path was set, the addon already finds the frames by itself."] =
+    "Рамки: ни один путь не был задан, аддон уже находит рамки сам.",
 })
