@@ -371,6 +371,23 @@ local function poisonAppearance(entry, spec)
     return config, table.concat(parts, "|")
 end
 
+-- Lays a native segment's geometry bar over the bar the player sees: the HealthBar frame, or, where that is taller
+-- (Blizzard's Camelot frames: 3 above and 2 below its container), the container's top and bottom, as the plain markers
+-- do. A segment over the whole frame stuck out above and below the bar and made its outline flicker. Retail keeps its
+-- own placement. Returns the inset used, to be looked at again later.
+local function fitToBar(entry, geometry)
+    local top, bottom = 0, 0
+    if forever and BIT.Plate and BIT.Plate.BarInset then top, bottom = BIT.Plate.BarInset(entry.bar) end
+    geometry:ClearAllPoints()
+    if top == 0 and bottom == 0 then
+        geometry:SetAllPoints(entry.bar)
+    else
+        geometry:SetPoint("TOPLEFT", entry.bar, "TOPLEFT", 0, -top)
+        geometry:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, bottom)
+    end
+    return top, bottom
+end
+
 local function createNativeDamage(entry, spec, config, signature)
     local property = Enum and Enum.DurationTextBindingProperty
     local direction = Enum and Enum.StatusBarTimerDirection
@@ -397,15 +414,16 @@ local function createNativeDamage(entry, spec, config, signature)
         scale, base = entry[spec.key .. "Scale"], entry[spec.key .. "Base"]
         -- Diagnostic (nativeShowAll): the native segment gets its own thin row under the bar and starts at its left edge, so
         -- its length can be compared by eye with the plain segment of the same DoT on the bar.
+        local insetTop, insetBottom = 0, 0
         lane = forever and ((spec.gated == true and not gateReplace()) or (not spec.gated and ns.db.nativeShowAll == true))
         local rowTop = -(LANE_GAP + (spec.gated and 1 or 0) * (LANE_HEIGHT + LANE_GAP))
         if forever then -- Retail's bars are only ever placed when they are made
             for _, geometry in ipairs({ scale, base }) do
-                geometry:ClearAllPoints()
                 if lane then
+                    geometry:ClearAllPoints()
                     geometry:SetPoint("TOPLEFT", entry.bar, "BOTTOMLEFT", 0, rowTop)
                     geometry:SetPoint("BOTTOMRIGHT", entry.bar, "BOTTOMRIGHT", 0, rowTop - LANE_HEIGHT)
-                else geometry:SetAllPoints(entry.bar) end
+                else insetTop, insetBottom = fitToBar(entry, geometry) end
             end
         end
         container = CreateFrame("AuraContainer", nil, entry.parent, "CustomAuraContainerTemplate")
@@ -430,7 +448,7 @@ local function createNativeDamage(entry, spec, config, signature)
                     button:SetPoint("BOTTOMRIGHT", scale:GetStatusBarTexture(), "BOTTOMRIGHT")
                     local clip = CreateFrame("Frame", nil, button, "DisableUntrustedLayoutScriptsTemplate")
                     local padding = (config.glowSize or 0) + (config.outlineThickness or 1)
-                    local frame = lane and base or entry.bar
+                    local frame = forever and base or entry.bar -- Forever: the fitted bar (the lane, or the visible bar)
                     clip:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, padding)
                     clip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -padding)
                     clip:SetClipsChildren(true)
@@ -495,7 +513,8 @@ local function createNativeDamage(entry, spec, config, signature)
         return
     end
     if ns.TraceRogueAura then ns.TraceRogueAura("NATIVE " .. spec.label .. " damage display ready") end
-    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature, spec = spec, lane = lane }
+    return { container = container, scale = scale, base = base, formatter = formatter, signature = signature, spec = spec, lane = lane,
+        insetTop = insetTop, insetBottom = insetBottom }
 end
 
 local function updateNativeOffset(entry, unit, enabled, damage)
@@ -616,6 +635,14 @@ local function updateNativeDamage(entry, unit, enabled, spec, entries)
         local maximum = UnitHealthMax(unit)
         damage.scale:SetMinMaxValues(0, maximum)
         damage.base:SetMinMaxValues(0, maximum)
+        if forever and not damage.lane and BIT.Plate and BIT.Plate.BarInset then
+            -- The frame may not have been laid out when the segment was made: the inset is asked again (cached 1 s).
+            local top, bottom = BIT.Plate.BarInset(entry.bar)
+            if top ~= damage.insetTop or bottom ~= damage.insetBottom then
+                damage.insetTop, damage.insetBottom = fitToBar(entry, damage.base)
+                if not damage.width then damage.scale:SetAllPoints(damage.base) end
+            end
+        end
         local width = ask(entry.bar.GetWidth, entry.bar)
         local barScale = ask(entry.bar.GetEffectiveScale, entry.bar)
         local ownScale = ask(damage.scale.GetEffectiveScale, damage.scale)
@@ -631,7 +658,7 @@ local function updateNativeDamage(entry, unit, enabled, spec, entries)
                 damage.scale:SetPoint("TOPLEFT", damage.base:GetStatusBarTexture(), "TOPRIGHT")
                 damage.scale:SetPoint("BOTTOMLEFT", damage.base:GetStatusBarTexture(), "BOTTOMRIGHT")
                 damage.scale:SetWidth(width)
-            else damage.scale:SetAllPoints(damage.lane and damage.base or entry.bar) end
+            else damage.scale:SetAllPoints((forever or damage.lane) and damage.base or entry.bar) end
             damage.width, damage.offset = width, nil
         end
     end
