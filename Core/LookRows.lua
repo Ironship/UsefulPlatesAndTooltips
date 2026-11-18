@@ -23,6 +23,29 @@ local Rows = {}
 Looks.Rows = Rows
 
 Looks.LAYOUT = { label = 200, control = 220 }        -- every settings row
+
+-- The look rows are the same in every module, so a row that is given no tooltip of its own gets the one for its label.
+Looks.COMMON_TIPS = {
+    ["Fill style"] = "The art of the fill: patterns, glass and bevel shadings, Blizzard's bar textures and every LibSharedMedia texture.",
+    ["Fill color"] = "The fill's color. A style with colors of its own ignores it.",
+    ["Fill opacity"] = "How strongly the fill covers what is under it.",
+    ["Fill direction"] = "Which end of the bar the fill starts from.",
+    ["Outline"] = "A hairline around the marker.",
+    ["Outline color"] = "The color of the outline.",
+    ["Outline opacity"] = "How strongly the outline shows.",
+    ["Outline thickness"] = "The width of the outline in pixels.",
+    ["Dash length"] = "The length of each dash of a dashed outline.",
+    ["Text size"] = "The size of the text in pixels.",
+    ["Text color"] = "The color of the text.",
+    ["Text position"] = "Where the text sits.",
+    ["Opacity"] = "How see-through everything of this part is.",
+    ["Scale"] = "Makes everything of this part bigger or smaller.",
+    ["Font size"] = "The size of the text in pixels.",
+    ["Gap"] = "The space between the parts, in pixels.",
+    ["Length"] = "How long the parts are, in pixels.",
+    ["Thickness"] = "How thick the parts are, in pixels.",
+    ["Shape"] = "The shape the parts are drawn in.",
+}
 Looks.PREVIEW_LAYOUT = { label = 96, control = 140 } -- the rows of a live preview's TRY IT block
 Looks.ROW_HEIGHT = 26
 local DISABLED_ALPHA = 0.35
@@ -42,6 +65,9 @@ local function makeRow(parent, labelText, opts)
     if BIT.UI and BIT.UI.FitRow then BIT.UI.FitRow(row, Looks.ROW_HEIGHT) end -- a long label wraps and the row grows
     row.enabledIf = opts.enabledIf
     row.settings = opts.settings
+    if not opts.tooltip and not opts.tooltipFor and not opts.localize then
+        opts = setmetatable({ tooltip = Looks.COMMON_TIPS[labelText] }, { __index = opts })
+    end
     if opts.tooltip or opts.tooltipFor then
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)

@@ -408,6 +408,13 @@ local function addTab(name)
     function tab:choice(key, ...) return place(choice(self.content, key, ...), key) end
     function tab:action(...) return place(actionRow(self.content, ...)) end
     function tab:gap() self.y = self.y + 8 end
+    function tab:header(text) return place(BIT.UI.Header(self.content, text)) end
+    function tab:note(text)
+        local row = BIT.UI.Note(self.content, text, 470)
+        row:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, -tab.y)
+        tab.y = tab.y + row:GetHeight() + 8
+        return row
+    end
 
     table.insert(tabs, tab)
     return tab
@@ -474,6 +481,8 @@ local function buildTabs()
         { tooltip = "Pixels right (+) or left (-) of the chosen position." })
     icon:slider("skullOffsetY", "Icon vertical offset", -60, 60, 1,
         { tooltip = "Pixels up (+) or down (-) from the chosen position." })
+    icon:gap()
+    icon:note("Cast prediction has its own kill icon (Cast > Marker). If you use both, set both, or switch one off.")
 
     local marker = addTab("Marker")
     marker:checkbox("showMarkers", "Show damage marker", { tooltip = "Marks the damage your DoTs still have to "
@@ -513,7 +522,7 @@ local function buildTabs()
     effects:checkbox("pulseOutline", "Pulse the outline", { enabledIf = hasOutline })
     effects:gap()
     effects:checkbox("showGlow", "Glow", { enabledIf = hasOutline, tooltip = "Soft halo in the outline color." })
-    effects:slider("glowSize", "Glow size", 2, 16, 1,
+    effects:slider("glowSize", "Glow thickness", 2, 16, 1,
         { enabledIf = function(s) return hasOutline(s) and s.showGlow end })
     effects:checkbox("showShine", "Shine sweep")
     effects:slider("shineInterval", "Shine every", 2, 10, 1,
@@ -617,29 +626,12 @@ local function buildTabs()
     if not ns.Retail then
         -- WoW: Forever. Segments drawn by the game's own aura frames (RogueAuras.lua); a tab of their own so Behavior fits.
         local native = addTab("Native auras")
+        native:header("Features")
         native:checkbox("nativeDots", "Native aura segments", { tooltip = "Deadly Poison, Deep Wound, Ignite, "
             .. "Righteous Judgement, Immolation Trap, Explosive Trap, Wyvern Sting and Flamestrike are drawn from the real "
             .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
             .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
             .. "Takes effect at once." })
-        native:checkbox("nativeGateReplace", "Aura-gated DoT segments on nameplates (experiment)", { tooltip = "The DoT "
-            .. "segments on nameplates are drawn by the game's own aura frames, with the length the addon calculates (they "
-            .. "still drop tick by tick), so a segment is shown only while the real aura is on the mob: when a mob resets "
-            .. "after you run away, a DoT is dispelled or resisted, it disappears at once instead of a few seconds later. "
-            .. "The addon never reads the aura. Only DoTs whose spell puts the aura on the target itself are drawn this "
-            .. "way (not Curse of Agony, Siphon Life, traps, poisons), and only with a colour per DoT (not \"One colour\"). "
-            .. "The kill icon and the damage number still use the addon's own numbers. On by default in this beta." })
-        native:checkbox("nativeGate", "Aura-gated plain segment (experiment)", { tooltip = "An experiment: a second thin "
-            .. "row under the bar (cyan) as long as the addon's own remaining damage of a DoT it draws (so it drops tick by "
-            .. "tick like the segment on the bar), but shown only while the real aura is on the mob: the game shows and hides "
-            .. "it, the addon never reads the aura. Watch it when a mob resets after you run away, a DoT is dispelled or "
-            .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. On by "
-            .. "default in this beta." })
-        native:checkbox("nativeShowAll", "Native next to plain segments (diagnostic)", { tooltip = "For checking the "
-            .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
-            .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "
-            .. "the bar, starting at its left edge, so you can compare their length and time left with the plain segment on "
-            .. "the bar. Cast a single DoT on a mob and watch both. Off by default." })
         native:checkbox("nativeStacks", "Deadly Poison stack count", { tooltip = "A small number above the bar's left "
             .. "end with the stacks of your Deadly Poison on that mob (the game draws it, the addon cannot read it)." })
         native:checkbox("nativeAllDots", "Native segment for every DoT (experimental)", { tooltip = "Draws a segment from "
@@ -648,6 +640,26 @@ local function buildTabs()
             .. "spell description and your stats. One or two extra aura frames per spell on every hostile nameplate: check "
             .. "/upt perf before keeping it on. On by default in this beta. The spells of \"Native aura segments\" are drawn this "
             .. "way whenever that option is on." })
+        native:header("Experiments (on by default in this beta)")
+        native:checkbox("nativeGateReplace", "Aura-gated segments on nameplates (experiment)", { tooltip = "The DoT "
+            .. "segments on nameplates are drawn by the game's own aura frames, with the length the addon calculates (they "
+            .. "still drop tick by tick), so a segment is shown only while the real aura is on the mob: when a mob resets "
+            .. "after you run away, a DoT is dispelled or resisted, it disappears at once instead of a few seconds later. "
+            .. "The addon never reads the aura. Only DoTs whose spell puts the aura on the target itself are drawn this "
+            .. "way (not Curse of Agony, Siphon Life, traps, poisons), and only with a colour per DoT (not \"One colour\"). "
+            .. "The kill icon and the damage number still use the addon's own numbers. On by default in this beta." })
+        native:checkbox("nativeGate", "Aura-gated segment on the target frame (experiment)", { tooltip = "An experiment: a second thin "
+            .. "row under the bar (cyan) as long as the addon's own remaining damage of a DoT it draws (so it drops tick by "
+            .. "tick like the segment on the bar), but shown only while the real aura is on the mob: the game shows and hides "
+            .. "it, the addon never reads the aura. Watch it when a mob resets after you run away, a DoT is dispelled or "
+            .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. On by "
+            .. "default in this beta." })
+        native:header("Diagnostics")
+        native:checkbox("nativeShowAll", "Show native next to plain segments", { tooltip = "For checking the "
+            .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
+            .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "
+            .. "the bar, starting at its left edge, so you can compare their length and time left with the plain segment on "
+            .. "the bar. Cast a single DoT on a mob and watch both. Off by default." })
     end
 end
 

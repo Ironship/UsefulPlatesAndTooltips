@@ -905,7 +905,7 @@ local function buildTabs()
       .. "the target frame instead." })
   iconTab:gap()
   local shown = function(s) return s.showIn or s.showOut end
-  iconTab:slider("size", "Size", 12, 64, 2,
+  iconTab:slider("size", "Mark size", 12, 64, 2,
     { enabledIf = shown, tooltip = "The mark's size in pixels." })
   iconTab:slider("offset", "Height above the bar", -20, 80, 1,
     { enabledIf = shown, tooltip = "Pixels above the nameplate's health bar: over the row of "

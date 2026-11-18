@@ -1304,26 +1304,26 @@ local function buildTabs(parent, isHunter)
         { tooltip = "Native Blizzard raid skull for the 5-8 yd dead zone. Unchecked hides it." })
     parent.meleeIcon = display:checkbox("showMeleeIcon", "Show Melee mark (native sword)",
         { tooltip = "Native Blizzard sword glyph for melee reach. Unchecked hides it." })
-    display.reset = function()
-        for _, key in ipairs(display.keys) do db()[key] = DEFAULTS[key] end
-        setLocked(DEFAULTS.locked)
-    end
-
-    local range = addTab(BIT.L("Range"))
-    parent.longRange = range:checkbox("longRange", "Extended range past 35 yd (Hawk Eye)",
+    display:gap()
+    parent.longRange = display:checkbox("longRange", "Extended range past 35 yd (Hawk Eye)",
         -- Once the spellbook has answered, the box shows that answer and a click could not change it.
         { enabledIf = function() return isHunter and detectedAutoMax == nil end,
             tooltip = "Seven dots instead of six. Auto-detected from Auto Shot's reach when the spellbook "
                 .. "answers; tick manually otherwise." })
-    range:info("Auto Shot's reach reads", function()
+    display:info("Auto Shot's reach reads", function()
         return detectedAutoMax and string.format(BIT.L("%s yd"), tostring(detectedAutoMax))
             or BIT.L("not answered by this client")
     end, { enabledIf = hunterOnly,
         tooltip = "Auto Shot's own maximum range, read from the spellbook. Past 35 yd the seventh dot exists." })
-    range:gap()
-    range:note(BIT.L("The bands are approximate item probes, never exact yards: 8-10, 10-15, 15-20, 20-25, "
+    display:gap()
+    display:note(BIT.L("The bands are approximate item probes, never exact yards: 8-10, 10-15, 15-20, 20-25, "
         .. "25-30 and 30-35 yd. MELEE is Wing Clip's reach; the 5-8 yd dead zone sits between melee and the "
         .. "first dot. /upt hunterprobe prints what the client answers for the probes."))
+
+    display.reset = function()
+        for _, key in ipairs(display.keys) do db()[key] = DEFAULTS[key] end
+        setLocked(DEFAULTS.locked)
+    end
 
     local appearance = addTab(BIT.L("Appearance"))
     local editor = BIT.UI.Appearance(appearance.inner, M.moduleName, CAPABILITIES, refreshAll, hunterLegacy)

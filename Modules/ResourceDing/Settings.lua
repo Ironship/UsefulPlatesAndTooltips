@@ -327,7 +327,7 @@ local function buildLivePreview(pane)
     { layout = PREVIEW_LAYOUT, tooltip = "How many combo points or soul shards the sample shows." })
   scene.pointsControl = points
   points:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -6)
-  local size = sliderRow(pane, "Size (saved)", 8, 24, 1,
+  local size = sliderRow(pane, "Dot size (saved)", 8, 24, 1,
     function() return Addon.db.dotSize end,
     function(value) applySetting("dotSize", value) end,
     { layout = PREVIEW_LAYOUT, tooltip = "Size of the combo points and soul shards. This changes the saved setting, the same one as on the Combo tab." })

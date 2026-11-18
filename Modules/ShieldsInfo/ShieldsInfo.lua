@@ -1333,7 +1333,7 @@ local function buildLivePreview(pane)
 end
 
 ---------------------------------------------------------------------------------------------
--- The right column: Frames, Fill and Effects, with "Reset this tab" under them.
+-- The right column: Show on, Fill and Appearance, with "Reset this tab" under them.
 ---------------------------------------------------------------------------------------------
 
 local function buildTabs(area)
@@ -1341,7 +1341,7 @@ local function buildTabs(area)
   M._checks = checks
 
   -- Frames: the saved switches, exactly the four the runtime reads.
-  local frames = addTab(BIT.L("Frames"), area)
+  local frames = addTab(BIT.L("Show on"), area)
   local function toggle(key, labelText, tooltip)
     local row = checkbox(frames.inner, key, labelText, { tooltip = tooltip })
     frames:add(row, ROW_HEIGHT, key)
@@ -1352,17 +1352,17 @@ local function buildTabs(area)
     end
     return row
   end
-  toggle("player", "On your player frame",
+  toggle("player", "Show on player frame",
     "The shield over your own health bar.")
-  toggle("target", "On your target frame",
+  toggle("target", "Show on target frame",
     "The shield over your target's health bar.")
-  toggle("focus", "On your focus frame",
+  toggle("focus", "Show on focus frame",
     "The shield over your focus's health bar.")
-  toggle("party", "On party frames",
+  toggle("party", "Show on party frames",
     "The shields over classic and compact party member frames.")
-  toggle("raid", "On raid frames",
+  toggle("raid", "Show on raid frames",
     "The shields over compact raid member frames.")
-  toggle("nameplates", "On nameplates",
+  toggle("nameplates", "Show on nameplates",
     "The shields over every accessible nameplate.")
   frames:gap()
   local numberOn = function(s) return s.showNumber end
@@ -1421,7 +1421,7 @@ local function buildTabs(area)
   -- Effects: room for the future (glow, flash), with the shared appearance editor today.
   -- The editor is taller than the tab area: it lives in the tab's scroll child and the tab
   -- scrolls to it (addTab), so "Reset this tab" and the window's bottom stay in view.
-  local effects = addTab(BIT.L("Effects"), area)
+  local effects = addTab(BIT.L("Appearance"), area)
   local note = effects.inner:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   note:SetPoint("TOPLEFT", effects.inner, "TOPLEFT", 0, 0)
   note:SetWidth(400)

@@ -103,16 +103,16 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildSettings(parent)
-    local y = section(parent, 0, "FRAMES")
-    y = place(checkRow(parent, "Target frame", "target",
+    local y = section(parent, 0, "SHOW ON")
+    y = place(checkRow(parent, "Show on player frame", "player", "Your own health bar."), y)
+    y = place(checkRow(parent, "Show on target frame", "target",
         "The segment starts where the target's green ends and reaches as far as the incoming heal will."), y)
-    y = place(checkRow(parent, "Player frame", "player", "Your own health bar."), y)
-    y = place(checkRow(parent, "Focus frame", "focus", "Incoming heals and your HoTs on your focus."), y)
-    y = place(checkRow(parent, "Target of target frame", "targettarget",
+    y = place(checkRow(parent, "Show on focus frame", "focus", "Incoming heals and your HoTs on your focus."), y)
+    y = place(checkRow(parent, "Show on target of target frame", "targettarget",
         "Blizzard's small target-of-target health bar, including when it shows you."), y)
-    y = place(checkRow(parent, "Party frames", "party",
+    y = place(checkRow(parent, "Show on party frames", "party",
         "Blizzard's classic party frames and the compact party members."), y)
-    y = place(checkRow(parent, "Raid frames", "raid",
+    y = place(checkRow(parent, "Show on raid frames", "raid",
         "The compact raid members (CompactRaidFrameContainer), including the EllesmereUI raid members."), y)
     y = section(parent, y, "THE NUMBERS")
     y = place(checkRow(parent, "All healers", "allHealers",
@@ -148,12 +148,18 @@ local function buildSettings(parent)
     y = place(choiceRow(parent, "Fill color", "fillColor", BIT.Looks.ColorList(),
         "The incoming-heal segment's own color, or Custom color... for any you like; absorbs keep ShieldsInfo's look."), y)
     y = place(sliderRow(parent, "Fill opacity", "fillOpacity", 0, 100, 5, nil, nil), y, 40)
-    y = place(choiceRow(parent, "Other healers' fill style", "otherTexture", BIT.Looks.Textures(), nil), y)
-    y = place(choiceRow(parent, "Other healers' fill color", "otherColor", BIT.Looks.ColorList(), nil), y)
-    y = place(sliderRow(parent, "Other healers' fill opacity", "otherOpacity", 0, 100, 5, nil, nil), y)
-    y = place(choiceRow(parent, "Heal over time fill style", "hotTexture", BIT.Looks.Textures(), nil), y)
-    y = place(choiceRow(parent, "Heal over time fill color", "hotColor", BIT.Looks.ColorList(), nil), y)
-    y = place(sliderRow(parent, "Heal over time fill opacity", "hotOpacity", 0, 100, 5, nil, nil), y)
+    y = place(choiceRow(parent, "Other healers' fill style", "otherTexture", BIT.Looks.Textures(),
+        "The fill style of the band for the healing other healers have coming."), y)
+    y = place(choiceRow(parent, "Other healers' fill color", "otherColor", BIT.Looks.ColorList(),
+        "The color of the band for the healing other healers have coming."), y)
+    y = place(sliderRow(parent, "Other healers' fill opacity", "otherOpacity", 0, 100, 5, nil,
+        "How strongly the band for other healers' healing covers the bar."), y)
+    y = place(choiceRow(parent, "Heal over time fill style", "hotTexture", BIT.Looks.Textures(),
+        "The fill style of the segment for your heals over time."), y)
+    y = place(choiceRow(parent, "Heal over time fill color", "hotColor", BIT.Looks.ColorList(),
+        "The color of the segment for your heals over time."), y)
+    y = place(sliderRow(parent, "Heal over time fill opacity", "hotOpacity", 0, 100, 5, nil,
+        "How strongly the segment for your heals over time covers the bar."), y)
     y = place(sliderRow(parent, "Height", "heightPercent", 15, 100, 5, nil,
         "How tall the segment is against the health bar; the top edge is the anchor."), y, 40)
     y = place(checkRow(parent, "Show a number", "showText",
@@ -231,7 +237,7 @@ local function buildPreview(pane)
     hint:SetPoint("TOPLEFT", healSlider, "BOTTOMLEFT", 6, -12)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
-    hint:SetText(BIT.L("The Target frame option controls this sample; the other frame options control live frames. "
+    hint:SetText(BIT.L("The Show on target frame option controls this sample; the other Show on options control live frames. "
         .. "The segment starts at the health edge (the green bar's "
         .. "end) and is cropped at the bar's right end when the heal would overheal."))
 

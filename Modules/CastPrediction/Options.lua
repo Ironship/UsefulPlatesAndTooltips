@@ -303,6 +303,7 @@ local function buildMarkerTab(parent)
     }, nil), y)
     y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -60, 60, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
     y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -60, 60, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
+    y = noteRow(parent, y, "DoTs has its own kill icon (DoTs > Kill icon). If you use both, set both, or switch one off.")
     y = section(parent, y, "FINISHER PREVIEW")
     y = place(choiceRow(parent, "Preview fill style", "finisherTexture", textureList(),
         "The fill of the finisher preview (Prediction tab), so it never reads as a real cast."), y)
