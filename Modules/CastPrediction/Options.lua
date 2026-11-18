@@ -129,17 +129,42 @@ local function place(row, y, height)
     return BIT.UI.PlaceRow(row, y, row.standard and row:GetHeight() or height or ROW_HEIGHT)
 end
 
+-- Which rows only mean something while another switch is on: they dim (and ignore the mouse) otherwise, by setting key.
+local function markerOn(s) return s.showMarker end
+local function iconOn(s) return s.showKillIcon end
+local function outlineOn(s) return s.showMarker and s.outlineStyle ~= "none" end
+local function textOn(s) return s.showMarker and s.showLabel end
+local function platesOn(s) return s.showMarker and s.nameplateMode ~= "off" end
+local function plateOutlineOn(s) return platesOn(s) and s.plateOutlineStyle ~= "none" end
+local function plateIconOn(s) return s.showKillIcon and s.nameplateMode == "markerIcon" end
+local function finisherOn(s) return s.finisherPreview end
+local function manualOn(s) return s.manualPower end
+local WHEN = {
+    showTargetFrame = markerOn, showFocusFrame = markerOn, showPartyFrames = markerOn, showRaidFrames = markerOn,
+    nameplateMode = markerOn,
+    fillColor = markerOn, fillOpacity = markerOn, castTexture = markerOn, channelTexture = markerOn, outlineStyle = markerOn,
+    outlineColor = outlineOn, outlineOpacity = outlineOn, pulseOutline = outlineOn,
+    showKillSpellIcon = iconOn, killIcon = iconOn, killIconSize = iconOn, killIconPosition = iconOn,
+    killIconOffsetX = iconOn, killIconOffsetY = iconOn,
+    showLabel = markerOn, labelMode = textOn, labelPosition = textOn, labelSize = textOn, labelColor = textOn,
+    plateFillColor = platesOn, plateFillOpacity = platesOn, plateOutlineStyle = platesOn,
+    plateOutlineColor = plateOutlineOn, plateOutlineOpacity = plateOutlineOn,
+    plateIconSize = plateIconOn, plateIconPosition = plateIconOn, plateIconOffsetX = plateIconOn, plateIconOffsetY = plateIconOn,
+    finisherTexture = finisherOn, finisherColor = finisherOn, finisherOpacity = finisherOn,
+    manualPowerValue = manualOn,
+}
+
 local function checkRow(parent, labelText, key, tooltip)
     note(key)
     return BIT.Looks.Rows.Check(parent, labelText, function() return db()[key] end, function(value)
         db()[key] = value
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function sliderRow(parent, labelText, key, min, max, step, format, tooltip)
     note(key)
-    local opts = { tooltip = tooltip, settings = db }
+    local opts = { tooltip = tooltip, settings = db, enabledIf = WHEN[key] }
     if type(format) == "function" then opts.display = format elseif key:find("Opacity$") then opts.suffix = "%" end
     return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return db()[key] end, function(value)
         db()[key] = value
@@ -153,7 +178,7 @@ local function choiceRow(parent, labelText, key, list, tooltip)
     return BIT.Looks.Rows.Choice(parent, labelText, list, function() return db()[key] end, function(id)
         db()[key] = id
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
@@ -164,11 +189,11 @@ local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
 end
 
 -- A drop-down over a table of choices; get/set work on any value (Auto is the absence of a value).
-local function forceRow(parent, labelText, choices, get, set, tooltip)
+local function forceRow(parent, labelText, choices, get, set, tooltip, enabledIf)
     return BIT.Looks.Rows.Choice(parent, labelText, choices, function() return get() or "auto" end, function(id)
         set(id ~= "auto" and id or nil)
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = enabledIf })
 end
 
 -- One curated talent of the player's class: Auto (the client's tree answers) / Off / Max rank.
@@ -206,7 +231,7 @@ local function auraForceRow(parent, entry, tooltip)
         function(value)
             db().auraForce = db().auraForce or {}
             db().auraForce[entry.key] = value
-        end, tooltip)
+        end, tooltip, function(s) return s.useAuras end)
 end
 
 -- A section header, with room above it once there is something above it.
@@ -519,7 +544,7 @@ local function buildPreview(pane)
     -- TRY IT: the preview's own numbers, never settings.
     local tryIt = BIT.Looks.TryItHeader(pane, scene)
 
-    local healthSlider = BIT.Looks.PreviewSlider(pane, "Target health", 0, 100,
+    local healthSlider = BIT.Looks.PreviewSlider(pane, "Target health", 1, 100,
         function() return preview.health end,
         function(value)
             preview.health = math.max(1, math.min(100, math.floor(value + 0.5)))

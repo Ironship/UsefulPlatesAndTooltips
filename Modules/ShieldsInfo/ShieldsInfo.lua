@@ -1367,7 +1367,8 @@ local function buildTabs(area)
   frames:gap()
   local numberOn = function(s) return s.showNumber end
   frames:add(checkbox(frames.inner, "showNumber", "Show the absorb number",
-    { tooltip = "How much absorb is left, as a number on the player, target and focus health bars. "
+    { enabledIf = function(s) return s.player ~= false or s.target ~= false or s.focus ~= false end,
+      tooltip = "How much absorb is left, as a number on the player, target and focus health bars. "
       .. "It also shows in combat. Party, raid and nameplate bars are too small for it." }), ROW_HEIGHT, "showNumber")
   frames:add(BIT.Looks.Rows.Choice(frames.inner, "Number position", {
     { id = "left", label = "Left end of the bar" },

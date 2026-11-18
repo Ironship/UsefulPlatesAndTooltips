@@ -901,7 +901,7 @@ local function buildTabs()
     { tooltip = "The mark sits beside the target frame instead of above the target's nameplate. "
       .. "Without a target frame on screen it stays above the nameplate." })
   iconTab:checkbox("besideFrame", "Beside the target frame without a nameplate",
-    { tooltip = "Without a nameplate (nameplates off, the target off screen) the mark sits beside "
+    { enabledIf = function(s) return not s.frameFirst end, tooltip = "Without a nameplate (nameplates off, the target off screen) the mark sits beside "
       .. "the target frame instead." })
   iconTab:gap()
   local shown = function(s) return s.showIn or s.showOut end

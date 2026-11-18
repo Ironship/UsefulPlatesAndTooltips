@@ -451,9 +451,9 @@ local function buildTabs()
   dots:checkbox("dots", "Show the points as dots under the target's nameplate",
     { tooltip = "Your class resource as circles below the target's health bar. Warlocks use these when shard diamonds are off." })
   dots:slider("dotSize", "Dot / diamond size", 8, 24, 1,
-    { tooltip = "How big the circles and the shard diamonds are." })
+    { enabledIf = function(db) return db.dots or db.shardDiamonds end, tooltip = "How big the circles and the shard diamonds are." })
   dots:slider("dotOffset", "Dot height above the bar", -80, 30, 1,
-    { up = true, tooltip = "How high the dots sit above the health bar. Positive is up, negative is under the bar. The same seat as the hunter rail." })
+    { up = true, enabledIf = function(db) return db.dots end, tooltip = "How high the dots sit above the health bar. Positive is up, negative is under the bar. The same seat as the hunter rail." })
   plateClashRow = dots:note(BIT.L("Nameplate lanes"))
   if plateClashRow and plateClashRow.text and BIT.Plate and type(BIT.Plate.ClashText) == "function" then
     plateClashRow.text:SetText(BIT.Plate.ClashText())
@@ -466,7 +466,7 @@ local function buildTabs()
   shards:checkbox("shardDiamonds", "Purple diamonds under the target",
     { tooltip = "Each Soul Shard as a purple diamond below the target's health bar." })
   shards:slider("shardOffset", "Shard height above the bar", -80, 30, 1,
-    { up = true, tooltip = "How high the diamonds sit above the health bar. Positive is up, negative is under the bar; they move independently of the dots." })
+    { up = true, enabledIf = function(db) return db.shardDiamonds end, tooltip = "How high the diamonds sit above the health bar. Positive is up, negative is under the bar; they move independently of the dots." })
   shards:gap()
 
   local mana = addTab("Mana")

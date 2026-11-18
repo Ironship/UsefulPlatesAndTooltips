@@ -451,6 +451,10 @@ local function hasOutline(settings) return settings.outlineStyle ~= "none" end
 local function singleColor(settings) return settings.dotColors == "single" end
 local function perDot(settings) return settings.dotColors ~= "single" end
 local function showsLabel(settings) return settings.showLabel end
+-- "Show damage marker" is the master of every unit (Core.lua, ns.markersFor): the focus and nameplate lists need it, and
+-- the kill icon rows need the kill icon.
+local function markersOn(settings) return settings.showMarkers end
+local function killOn(settings) return settings.showSkull end
 
 local function buildTabs()
     local lists = ns.lists
@@ -459,14 +463,14 @@ local function buildTabs()
     local icon = addTab("Kill icon")
     icon:checkbox("showSkull", "Show kill icon",
         { tooltip = "Shows an icon at the chosen position when your DoTs on the target will kill it." })
-    icon:choice("skullIcon", "Kill icon", lists.icons)
-    icon:slider("skullSize", "Kill icon size", 12, 128, 1)
-    icon:checkbox("swingKill", "Count one weapon hit", { tooltip = "A weapon icon shows when your DoTs plus one "
+    icon:choice("skullIcon", "Kill icon", lists.icons, { enabledIf = killOn })
+    icon:slider("skullSize", "Kill icon size", 12, 128, 1, { enabledIf = killOn })
+    icon:checkbox("swingKill", "Count one weapon hit", { enabledIf = killOn, tooltip = "A weapon icon shows when your DoTs plus one "
         .. "average hit of your best weapon attack (melee swing, wand or ranged shot) would kill; the kill icon "
         .. "itself still means the DoTs alone are enough. The hit is "
         .. "the character sheet's average: armor, misses and crits are not counted, and the Kill margin applies. "
         .. "The marker itself still shows only the DoTs." })
-    icon:slider("killMargin", "Kill margin", 50, 100, 5, { suffix = "%", tooltip = "The icon shows only when this "
+    icon:slider("killMargin", "Kill margin", 50, 100, 5, { suffix = "%", enabledIf = killOn, tooltip = "The icon shows only when this "
         .. "share of the estimated DoT damage is enough to kill. Lower it if mobs that heal or regenerate survive the "
         .. "icon; 100% compares the full estimate. The marker always shows the full estimate." })
     icon:choice("skullPosition", "Kill icon position", {
@@ -475,12 +479,12 @@ local function buildTabs()
         { id = "right", label = "Right of the bar" },
         { id = "above", label = "Above the bar" },
         { id = "below", label = "Below the bar" },
-    })
-    icon:checkbox("skullPulse", "Pulse", { tooltip = "Gently pulses the icon while it's showing." })
+    }, { enabledIf = killOn })
+    icon:checkbox("skullPulse", "Pulse", { enabledIf = killOn, tooltip = "Gently pulses the icon while it's showing." })
     icon:slider("skullOffsetX", "Icon horizontal offset", -60, 60, 1,
-        { tooltip = "Pixels right (+) or left (-) of the chosen position." })
+        { enabledIf = killOn, tooltip = "Pixels right (+) or left (-) of the chosen position." })
     icon:slider("skullOffsetY", "Icon vertical offset", -60, 60, 1,
-        { tooltip = "Pixels up (+) or down (-) from the chosen position." })
+        { enabledIf = killOn, tooltip = "Pixels up (+) or down (-) from the chosen position." })
     icon:gap()
     icon:note("Cast prediction has its own kill icon (Cast > Marker). If you use both, set both, or switch one off.")
 
@@ -492,10 +496,10 @@ local function buildTabs()
         .. "not that frame; if you use a separate unit frame addon, set its bar on the Frames page. "
         .. "Turn off to keep the marker on nameplates and the focus frame only. On Retail this also hides the rogue's "
         .. "aura icons above the target bar. The kill icon has its own switch in the Kill icon tab." })
-    marker:choice("focusMode", "Show on focus frame", lists.nameplateModes, { tooltip = "Draws the same marker "
+    marker:choice("focusMode", "Show on focus frame", lists.nameplateModes, { enabledIf = markersOn, tooltip = "Draws the same marker "
         .. "(and optionally the kill icon) on your focus frame's health bar for your DoTs on the focused enemy, "
         .. "in the nameplate look (Nameplates tab)." })
-    marker:choice("nameplateMode", "Show on nameplates", lists.nameplateModes, { tooltip = "Draws a marker "
+    marker:choice("nameplateMode", "Show on nameplates", lists.nameplateModes, { enabledIf = markersOn, tooltip = "Draws a marker "
         .. "(and optionally the kill icon) on every enemy nameplate with your DoTs on it, in its own look on the Nameplates tab." })
     marker:choice("dotColors", "DoT colors", lists.dotColors, { tooltip = "One color, or one segment per DoT "
         .. "with green poisons, purple curses/shadow damage and red bleeds. Rainbow gives each spell a separate color." })
@@ -538,8 +542,9 @@ local function buildTabs()
     text:choice("labelColor", "Text color", lists.colors, { enabledIf = showsLabel })
 
     -- Presets match both bars; these controls allow a separate nameplate look afterwards.
-    local platesOn = function(s) return s.nameplateMode ~= "off" end
-    local plateIcon = function(s) return s.nameplateMode == "markerIcon" end
+    -- The focus frame uses the nameplates' look and icon (Focus.lua), so these rows stay live while either shows.
+    local platesOn = function(s) return s.showMarkers and (s.nameplateMode ~= "off" or s.focusMode ~= "off") end
+    local plateIcon = function(s) return s.showMarkers and (s.nameplateMode == "markerIcon" or s.focusMode == "markerIcon") end
     local plateSingle = function(s) return platesOn(s) and s.plateDotColors == "single" end
     local plateOutline = function(s) return platesOn(s) and s.plateOutlineStyle ~= "none" end
     local plates = addTab("Nameplates")
@@ -632,7 +637,7 @@ local function buildTabs()
             .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
             .. "stats. Switch it off to go back to the plain estimates (the old guesses for traps and Wyvern Sting return). "
             .. "Takes effect at once." })
-        native:checkbox("nativeStacks", "Deadly Poison stack count", { tooltip = "A small number above the bar's left "
+        native:checkbox("nativeStacks", "Deadly Poison stack count", { enabledIf = function(s) return s.nativeDots end, tooltip = "A small number above the bar's left "
             .. "end with the stacks of your Deadly Poison on that mob (the game draws it, the addon cannot read it)." })
         native:checkbox("nativeAllDots", "Native segment for every DoT (experimental)", { tooltip = "Draws a segment from "
             .. "the real aura (its start, time left and removal) for every damage over time you know, wherever Lua has no DoT "
@@ -641,7 +646,7 @@ local function buildTabs()
             .. "/upt perf before keeping it on. On by default in this beta. The spells of \"Native aura segments\" are drawn this "
             .. "way whenever that option is on." })
         native:header("Experiments (on by default in this beta)")
-        native:checkbox("nativeGateReplace", "Aura-gated segments on nameplates (experiment)", { tooltip = "The DoT "
+        native:checkbox("nativeGateReplace", "Aura-gated segments on nameplates (experiment)", { enabledIf = function(s) return s.showMarkers and s.nameplateMode ~= "off" and s.plateDotColors ~= "single" end, tooltip = "The DoT "
             .. "segments on nameplates are drawn by the game's own aura frames, with the length the addon calculates (they "
             .. "still drop tick by tick), so a segment is shown only while the real aura is on the mob: when a mob resets "
             .. "after you run away, a DoT is dispelled or resisted, it disappears at once instead of a few seconds later. "
@@ -655,7 +660,7 @@ local function buildTabs()
             .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. On by "
             .. "default in this beta." })
         native:header("Diagnostics")
-        native:checkbox("nativeShowAll", "Show native next to plain segments", { tooltip = "For checking the "
+        native:checkbox("nativeShowAll", "Show native next to plain segments", { enabledIf = function(s) return s.nativeDots or s.nativeAllDots end, tooltip = "For checking the "
             .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
             .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "
             .. "the bar, starting at its left edge, so you can compare their length and time left with the plain segment on "

@@ -52,17 +52,27 @@ local function value(key)
     return v
 end
 
+-- Rows that only mean something while another switch is in a state: they dim otherwise, by setting key. The client's
+-- total (All healers) leaves no room for the other healers' band, and the heal-over-time rows need the HoT overlay.
+local function othersOn() return not value("allHealers") and value("showOthers") ~= false end
+local function hotsOn() return value("showHots") ~= false end
+local WHEN = {
+    showOthers = function() return not value("allHealers") end,
+    otherTexture = othersOn, otherColor = othersOn, otherOpacity = othersOn,
+    hotWhole = hotsOn, hotTexture = hotsOn, hotColor = hotsOn, hotOpacity = hotsOn,
+}
+
 local function checkRow(parent, labelText, key, tooltip)
     note(key)
     return BIT.Looks.Rows.Check(parent, labelText, function() return value(key) end, function(value)
         db()[key] = value
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function sliderRow(parent, labelText, key, min, max, step, format, tooltip, enabledIf)
     note(key)
-    local opts = { tooltip = tooltip, settings = db, enabledIf = enabledIf }
+    local opts = { tooltip = tooltip, settings = db, enabledIf = enabledIf or WHEN[key] }
     if type(format) == "function" then opts.display = format elseif key:find("Opacity$") or key == "heightPercent" then opts.suffix = "%" end
     return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, function() return value(key) end, function(value)
         db()[key] = value
@@ -75,7 +85,7 @@ local function choiceRow(parent, labelText, key, list, tooltip)
     return BIT.Looks.Rows.Choice(parent, labelText, list, function() return value(key) end, function(id)
         db()[key] = id
         changed()
-    end, { tooltip = tooltip, settings = db })
+    end, { tooltip = tooltip, settings = db, enabledIf = WHEN[key] })
 end
 
 local function buttonRow(parent, labelText, buttonText, onClick, tooltip)
@@ -140,7 +150,7 @@ local function buildSettings(parent)
     y = place(sliderRow(parent, "Heal over time horizon", "hotHorizon", 1, 15, 1,
         function(value) return math.floor(value + 0.5) .. " s" end,
         "How many seconds of each heal over time are drawn ahead. Used only when Whole remaining effect is off.",
-        function(settings) return settings.hotWhole == false end), y, 40)
+        function() return hotsOn() and value("hotWhole") == false end), y, 40)
     y = section(parent, y, "THE SEGMENT")
     y = place(choiceRow(parent, "Fill style", "fillTexture", BIT.Looks.Textures(),
         "The fill of the incoming-heal segment: patterns, glass and bevel shadings, Blizzard's bar textures and every "
