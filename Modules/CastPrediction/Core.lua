@@ -2149,6 +2149,12 @@ function ns.ensureDB()
         settings.fillColor, settings.plateFillColor = "school", "school"
         settings.markerStyleVersion = 2
     end
+    -- "Nameplate style: Off" and the "Show on nameplates" box were two switches for one thing; the style is the one now.
+    if settings.nameplatesOneSwitch ~= 1 then
+        if settings.showNameplates == false then settings.nameplateMode = "off" end
+        if settings.nameplateMode == "off" then settings.showNameplates = true end
+        settings.nameplatesOneSwitch = 1
+    end
     if type(settings.learned) ~= "table" then settings.learned = {} end
     -- Factors learned before the talent engine (0.9.91) made up for talents the prediction did not know; with the
     -- engine the same talents would count twice until the hits had taught the factor again.

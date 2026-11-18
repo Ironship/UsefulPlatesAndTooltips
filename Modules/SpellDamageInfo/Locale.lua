@@ -111,6 +111,11 @@ Locales.en = {
   -- options window
   OPT_LANGUAGE = "Language",
   OPT_LANGUAGE_TIP = "Addon interface language: Auto follows the game text language, or choose English, German or Russian.",
+  OPT_H_NUMBERS = "Numbers on the buttons",
+  OPT_H_ESTIMATE = "What the numbers include",
+  OPT_H_TOOLTIP = "Tooltip",
+  OPT_H_KINDS = "What to show",
+  OPT_H_HISTORY = "History",
   OPT_PREVIEW = "Live preview",
   OPT_OFF_SAMPLE = "SpellDamageInfo sample (not your buttons)",
   OPT_PREVIEW_HINT = "Sample spells with 50 spell power and a 2.6 sec weapon hitting for 120, drawn by the same code as the numbers on your action bars.",
@@ -282,6 +287,11 @@ Locales.de = {
   -- options window
   OPT_LANGUAGE = "Sprache",
   OPT_LANGUAGE_TIP = "Sprache der Addon-Oberfl\195\164che: Auto folgt der Textsprache des Spiels, oder w\195\164hlt English, Deutsch oder Russisch.",
+  OPT_H_NUMBERS = "Zahlen auf den Tasten",
+  OPT_H_ESTIMATE = "Was die Zahlen enthalten",
+  OPT_H_TOOLTIP = "Tooltip",
+  OPT_H_KINDS = "Was angezeigt wird",
+  OPT_H_HISTORY = "Verlauf",
   OPT_PREVIEW = "Vorschau",
   OPT_OFF_SAMPLE = "SpellDamageInfo-Beispiel (nicht Eure Tasten)",
   OPT_PREVIEW_HINT = "Beispielzauber mit 50 Zaubermacht und einer 2,6-Sek.-Waffe mit 120 Schaden pro Treffer, gezeichnet vom selben Code wie die Zahlen auf Euren Aktionsleisten.",

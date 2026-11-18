@@ -235,27 +235,32 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildMarkerTab(parent)
-    local y = section(parent, 0, "FRAMES")
+    local y = section(parent, 0, "SHOW ON")
     y = place(checkRow(parent, "Show on target frame", "showTargetFrame",
         "Show the prediction on the Blizzard or configured target frame."), y)
-    local retail = ns.Talents and ns.Talents.IsRetail and ns.Talents.IsRetail()
-    y = place(checkRow(parent, "Show mana cost on your mana bar", "showManaCost",
-        retail and "While you cast a spell with a cast time, marks its estimated mana cost on your mana bar."
-        or "While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. "
-            .. "This illustrates mana already spent, not another deduction."), y)
     y = place(checkRow(parent, "Show on focus frame", "showFocusFrame",
         "Also show the prediction on the focus frame when it represents the cast's target."), y)
     y = place(checkRow(parent, "Show on party frames", "showPartyFrames",
         "Show the prediction only if a party frame represents the cast's recipient. Ordinary damage casts target enemies, not party members."), y)
     y = place(checkRow(parent, "Show on raid frames", "showRaidFrames",
         "Show the prediction only if a raid frame represents the cast's recipient. Ordinary damage casts target enemies, not raid members."), y)
-    y = place(checkRow(parent, "Show on nameplates", "showNameplates",
-        "Show the prediction on the cast target's nameplate."), y)
+    y = place(choiceRow(parent, "Show on nameplates", "nameplateMode", {
+        { id = "off", label = "Off" },
+        { id = "marker", label = "Marker only" },
+        { id = "markerIcon", label = "Marker and kill icon" },
+    }, "The target's own plate gets the same marker, with its own colors on the Nameplates tab; enemy bars are red."), y)
+    y = section(parent, y, "BEHAVIOR")
     y = place(checkRow(parent, "Target beats mouseover", "targetOverMouseover",
         "For packs of mobs with the same name. With the mouse over a second mob of the pack, the addon "
         .. "can't tell which of the two your spell goes to and hides the prediction. With this on, your target "
         .. "(or focus, or the soft target when nothing is targeted) wins over the mob under the mouse. (If you cast with @mouseover macros, "
         .. "the prediction could then show on the wrong mob.)"), y)
+    local retail = ns.Talents and ns.Talents.IsRetail and ns.Talents.IsRetail()
+    y = section(parent, y, "MANA COST")
+    y = place(checkRow(parent, "Show mana cost on your mana bar", "showManaCost",
+        retail and "While you cast a spell with a cast time, marks its estimated mana cost on your mana bar."
+        or "While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. "
+            .. "This illustrates mana already spent, not another deduction."), y)
     y = section(parent, y, "THE MARKER")
     y = place(checkRow(parent, "Show the marker", "showMarker",
         "The predicted damage, drawn across enabled health bars while a cast is in flight."), y)
@@ -332,11 +337,6 @@ end
 
 local function buildNameplateTab(parent)
     local y = section(parent, 0, "NAMEPLATES")
-    y = place(choiceRow(parent, "Nameplate style", "nameplateMode", {
-        { id = "off", label = "Off" },
-        { id = "marker", label = "Marker on the health bar" },
-        { id = "markerIcon", label = "Marker and kill icon" },
-    }, "The target's own plate gets the same marker, with its own colors; enemy bars are red."), y)
     y = place(choiceRow(parent, "Fill color", "plateFillColor", colorList(true), nil), y)
     y = place(sliderRow(parent, "Fill opacity", "plateFillOpacity", 0, 100, 5, nil, nil), y, 40)
     y = place(choiceRow(parent, "Outline", "plateOutlineStyle", {
@@ -345,12 +345,12 @@ local function buildNameplateTab(parent)
     }, nil), y)
     y = place(choiceRow(parent, "Outline color", "plateOutlineColor", colorList(), nil), y)
     y = place(sliderRow(parent, "Outline opacity", "plateOutlineOpacity", 0, 100, 5, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon size", "plateIconSize", 12, 128, 1, nil, nil), y, 40)
-    y = place(choiceRow(parent, "Icon position", "plateIconPosition", {
+    y = place(sliderRow(parent, "Kill icon size", "plateIconSize", 12, 128, 1, nil, nil), y, 40)
+    y = place(choiceRow(parent, "Kill icon position", "plateIconPosition", {
         { id = "left", label = "Left of the bar" },
+        { id = "right", label = "Right of the bar" },
         { id = "above", label = "Above the bar" },
         { id = "below", label = "Below the bar" },
-        { id = "right", label = "Right of the bar" },
     }, nil), y)
     y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
     y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -40, 40, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
@@ -518,7 +518,7 @@ local function buildPreview(pane)
     -- TRY IT: the preview's own numbers, never settings.
     local tryIt = BIT.Looks.TryItHeader(pane, scene)
 
-    local healthSlider = BIT.Looks.PreviewSlider(pane, "Target health", 1, 100,
+    local healthSlider = BIT.Looks.PreviewSlider(pane, "Target health", 0, 100,
         function() return preview.health end,
         function(value)
             preview.health = math.max(1, math.min(100, math.floor(value + 0.5)))

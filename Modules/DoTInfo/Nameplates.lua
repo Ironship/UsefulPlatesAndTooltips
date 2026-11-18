@@ -35,10 +35,10 @@ ns.lists.nameplateModes = {
     { id = "markerIcon", label = "Marker and kill icon" },
 }
 ns.lists.nameplateIconPositions = {
-    { id = "right", label = "Right of the health bar" },
-    { id = "left",  label = "Left of the health bar" },
-    { id = "above", label = "Above the health bar" },
-    { id = "below", label = "Below the health bar" },
+    { id = "left",  label = "Left of the bar" },
+    { id = "right", label = "Right of the bar" },
+    { id = "above", label = "Above the bar" },
+    { id = "below", label = "Below the bar" },
 }
 ns.lists.plateFillDirections = {
     { id = "auto", label = "Follow health bar" },
