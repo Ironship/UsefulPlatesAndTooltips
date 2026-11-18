@@ -883,6 +883,38 @@ local function createWindow()
   end
   close:SetScript("OnClick", function() window:Hide() end)
 
+  -- The language of the settings, tooltips and chat lines. Its own label is not translated on purpose: whoever lands in a
+  -- language they cannot read must still find it. The change applies after a reload, offered next to it.
+  local language = UI.Button(window, "", 150, function(self)
+    local Looks = BIT.Looks
+    if not (Looks and Looks.PickList) then return end
+    Looks.PickList(self, BIT.LanguageList(), BIT.LanguageChoice(), function(id)
+      BIT.SetLanguage(id)
+      self:SetText("Language: " .. BIT.LanguageLabel())
+      window.languageReload:Show()
+    end)
+  end)
+  language:SetHeight(20)
+  language:SetPoint("TOPRIGHT", close, "TOPLEFT", -4, -3)
+  language:SetText("Language: " .. BIT.LanguageLabel())
+  language:HookScript("OnEnter", function(self)
+    if not GameTooltip then return end
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:SetText("Language", 1, 1, 1)
+    GameTooltip:AddLine(BIT.L("The language of the settings, tooltips and chat lines of this addon. It changes after a "
+      .. "reload. Auto follows the game's language."), 0.9, 0.9, 0.9, true)
+    GameTooltip:Show()
+  end)
+  language:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+  window.languageButton = language
+  local reload = UI.Button(window, "Reload UI", 100, function()
+    if type(ReloadUI) == "function" then ReloadUI() end
+  end)
+  reload:SetHeight(20)
+  reload:SetPoint("TOPRIGHT", language, "TOPLEFT", -4, 0)
+  reload:Hide()
+  window.languageReload = reload
+
   for _, name in ipairs(BIT.order) do
     local tab = BIT.tabs[name] or {}
     local extra

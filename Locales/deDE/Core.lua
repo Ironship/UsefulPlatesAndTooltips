@@ -77,6 +77,9 @@ BIT.RegisterLocale("deDE", {
   ["%d texts shown so far have no translation in this language."] =
     "%d bisher angezeigte Texte haben in dieser Sprache keine Übersetzung.",
   ["Unknown language %s. Use auto, en or one of: %s."] = "Unbekannte Sprache %s. Nutzt auto, en oder eine von: %s.",
+  ["Auto (game language)"] = "Auto (Spielsprache)",
+  ["The language of the settings, tooltips and chat lines of this addon. It changes after a reload. Auto follows the game's language."] =
+    "Die Sprache der Einstellungen, Tooltips und Chatzeilen dieses Addons. Sie ändert sich nach einem Neuladen. Auto folgt der Sprache des Spiels.",
   ["The language changes after /reload."] = "Die Sprache ändert sich nach /reload.",
   ["Language: %s. /upt lang auto, /upt lang en, /upt lang <code> (%s) or /upt lang missing."] =
     "Sprache: %s. /upt lang auto, /upt lang en, /upt lang <Code> (%s) oder /upt lang missing.",

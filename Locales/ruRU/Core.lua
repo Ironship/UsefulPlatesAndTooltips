@@ -78,6 +78,9 @@ BIT.RegisterLocale("ruRU", {
     "Пока без перевода на этот язык показано строк: %d.",
   ["Unknown language %s. Use auto, en or one of: %s."] =
     "Неизвестный язык %s. Используйте auto, en или один из вариантов: %s.",
+  ["Auto (game language)"] = "Авто (язык игры)",
+  ["The language of the settings, tooltips and chat lines of this addon. It changes after a reload. Auto follows the game's language."] =
+    "Язык настроек, подсказок и строк чата этого аддона. Меняется после перезагрузки. «Авто» следует языку игры.",
   ["The language changes after /reload."] = "Язык изменится после команды /reload.",
   ["Language: %s. /upt lang auto, /upt lang en, /upt lang <code> (%s) or /upt lang missing."] =
     "Язык: %s. /upt lang auto, /upt lang en, /upt lang <code> (%s) или /upt lang missing.",
