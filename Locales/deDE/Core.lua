@@ -480,3 +480,29 @@ BIT.RegisterLocale("deDE", {
   ["Show on"] =
     "Anzeigen auf",
 })
+
+-- Simulate (0.9.131-beta.6): the shared Simulate block, its scenes and names.
+BIT.RegisterLocale("deDE", {
+  ["SIMULATE"] =
+    "SIMULIEREN",
+  ["Simulate"] =
+    "Simulieren",
+  ["Settings you change while it plays show at once."] =
+    "Einstellungen, die Ihr währenddessen ändert, wirken sofort.",
+  ["A cast lands and the health drops; the next one is lethal and shows the kill icon."] =
+    "Ein Zauber trifft und die Gesundheit sinkt; der nächste ist tödlich und zeigt das Kill-Symbol.",
+  ["A heal is cast and lands, then its heal over time ticks down."] =
+    "Eine Heilung wird gewirkt und landet, danach tickt ihre Heilung über Zeit herunter.",
+  ["The target runs in through every band, from 35+ yd to melee and the dead zone."] =
+    "Das Ziel läuft durch jedes Band, von 35+ yd bis in den Nahkampf und die tote Zone.",
+  ["Try: out of range"] =
+    "Testen: außer Reichweite",
+  ["Try: no nameplate"] =
+    "Testen: keine Namensplakette",
+  ["The target steps in and out of range, then loses its nameplate."] =
+    "Das Ziel tritt in und aus der Reichweite und verliert dann seine Namensplakette.",
+  ["The points come in one by one, then the finisher spends them."] =
+    "Die Punkte kommen einzeln, dann verbraucht sie der Finisher.",
+  ["Three hits land: the shield takes them first, then the health, and the shield breaks."] =
+    "Drei Treffer landen: Der Schild nimmt sie zuerst, dann die Gesundheit, und der Schild bricht.",
+})

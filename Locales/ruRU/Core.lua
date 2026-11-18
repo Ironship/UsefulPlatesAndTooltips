@@ -481,3 +481,29 @@ BIT.RegisterLocale("ruRU", {
   ["Show on"] =
     "Показывать на",
 })
+
+-- Simulate (0.9.131-beta.6): the shared Simulate block, its scenes and names.
+BIT.RegisterLocale("ruRU", {
+  ["SIMULATE"] =
+    "СИМУЛЯЦИЯ",
+  ["Simulate"] =
+    "Симуляция",
+  ["Settings you change while it plays show at once."] =
+    "Настройки, которые вы меняете во время воспроизведения, действуют сразу.",
+  ["A cast lands and the health drops; the next one is lethal and shows the kill icon."] =
+    "Заклинание попадает, здоровье падает; следующее смертельно и показывает значок убийства.",
+  ["A heal is cast and lands, then its heal over time ticks down."] =
+    "Лечение применяется и достигает цели, затем его лечение со временем убывает.",
+  ["The target runs in through every band, from 35+ yd to melee and the dead zone."] =
+    "Цель подбегает через все полосы, от 35+ ярдов до ближнего боя и мёртвой зоны.",
+  ["Try: out of range"] =
+    "Проверка: вне зоны действия",
+  ["Try: no nameplate"] =
+    "Проверка: нет таблички",
+  ["The target steps in and out of range, then loses its nameplate."] =
+    "Цель входит в зону действия и выходит из неё, затем теряет табличку.",
+  ["The points come in one by one, then the finisher spends them."] =
+    "Очки накапливаются по одному, затем завершающий приём их тратит.",
+  ["Three hits land: the shield takes them first, then the health, and the shield breaks."] =
+    "Приходят три удара: сначала их принимает щит, потом здоровье, и щит ломается.",
+})
