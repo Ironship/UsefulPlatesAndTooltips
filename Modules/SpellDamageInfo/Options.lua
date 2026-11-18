@@ -155,6 +155,7 @@ local function set(key, value)
     ns.SetSetting(key, value)
     ns.SetInterfaceAndRefreshL(value)
     say(L.OPT_LANG_CHANGED)
+    if BIT.SetLanguageFromSDI then BIT.SetLanguageFromSDI(value) end -- the rest of the addon follows (after /reload)
   else
     ns.SetSetting(key, value)
   end
