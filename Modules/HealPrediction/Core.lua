@@ -724,11 +724,12 @@ if BIT.RegisterCommand then
 end
 
 -- The settings tab's sample: the very same overlay, on a mock bar, with plain numbers.
-function ns.DrawSample(healthBar, maxHealth, heal, others, hot)
+-- flag: the setting that switches this frame on ("target" by default; "player", "party" ... for the preview's other mocks)
+function ns.DrawSample(healthBar, maxHealth, heal, others, hot, flag)
     if not settings then return false end
     local o = overlayFor(healthBar)
     if not o then return false end
-    if settings.target == false then
+    if settings[flag or "target"] == false then
         hideOverlay(o)
         return true
     end

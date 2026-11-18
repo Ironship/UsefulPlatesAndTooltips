@@ -1402,8 +1402,24 @@ local function buildLivePreview(pane)
     bandRow:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -6)
     pane.hunterBandRow = bandRow
 
+    -- SIMULATE: the target runs in from the far band to melee and into the dead zone.
+    local savedBand
+    local simulate = BIT.Looks.Simulate(pane, bandRow, {
+        x = 6, y = -8, length = 9,
+        text = "The target runs in through every band, from 35+ yd to melee and the dead zone.",
+        start = function() savedBand = previewBand end,
+        frame = function(t)
+            local index = math.min(#BAND_ORDER, math.floor(t) + 1)
+            -- far to near: MAX first, then Y35 down to Y10, then the dead zone and melee reach
+            local walk = { "MAX", "Y35", "Y30", "Y25", "Y20", "Y15", "Y10", "DEAD", "MELEE" }
+            setPreviewBand(walk[index])
+        end,
+        finish = function() setPreviewBand(savedBand or SAMPLE_BAND) end,
+    })
+    pane.hunterSimulate = simulate
+
     local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", bandRow, "BOTTOMLEFT", 6, -14)
+    hint:SetPoint("TOPLEFT", simulate, "BOTTOMLEFT", 0, -10)
     hint:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
     hint:SetJustifyH("LEFT")
     hint:SetText(BIT.L("Drawn by the same code as the live HUD, on a mock enemy nameplate. Six dots by "

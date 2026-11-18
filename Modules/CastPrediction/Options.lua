@@ -567,8 +567,42 @@ local function buildPreview(pane)
     end)
     pane.spellButton:SetPoint("RIGHT", spellRow, "RIGHT", 0, 0)
 
+    -- SIMULATE: a cast lands (the health drops by its estimate), then a lethal one shows the kill icon.
+    local function estimateOf(spell)
+        local estimate = db().estimate
+        return (estimate == "min" and spell.min or estimate == "max" and spell.max or (spell.min + spell.max) / 2)
+            / HEALTH_SCALE
+    end
+    local saved
+    local sim = BIT.Looks.Simulate(pane, spellRow, {
+        x = 0, y = -8, length = 8,
+        text = "A cast lands and the health drops; the next one is lethal and shows the kill icon.",
+        start = function() saved = { health = preview.health, spell = preview.spell } end,
+        frame = function(t)
+            local first, second = 1, 3 -- Frostbolt, Shadow Bolt
+            if t < 3 then
+                preview.spell, preview.health = first, 70
+            elseif t < 4 then
+                preview.spell = first
+                preview.health = 70 - estimateOf(SAMPLE_SPELLS[first]) * (t - 3)
+            elseif t < 7 then
+                preview.spell = second
+                preview.health = 70 - estimateOf(SAMPLE_SPELLS[first])
+            else
+                preview.spell, preview.health = second, 1
+            end
+            preview.health = math.max(1, math.floor(preview.health + 0.5))
+            updatePreview()
+        end,
+        finish = function()
+            if saved then preview.health, preview.spell = saved.health, saved.spell end
+            updatePreview()
+        end,
+    })
+    pane.simulate = sim
+
     local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", spellRow, "BOTTOMLEFT", 0, -10)
+    hint:SetPoint("TOPLEFT", sim, "BOTTOMLEFT", 0, -8)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
     hint:SetText(BIT.L("Same marker on mock frames; sample damage is illustrative. Raise target health to hide "

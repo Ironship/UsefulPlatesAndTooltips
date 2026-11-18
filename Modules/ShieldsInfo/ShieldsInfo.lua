@@ -913,7 +913,7 @@ local DISABLED_ALPHA = 0.35
 -- its own page scroll, the same as Range's tab. Shorter (the 460 a review once settled on)
 -- leaves the page a stub shorter than the window and the Effects tab still cannot fit its
 -- editor -- that one scrolls inside its tab instead (addTab below).
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 470
+local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 500
 
 -- The preview's own numbers (plain sample data, in % of SAMPLE_MAX) and the mock the frame
 -- switch shows. The sample starts at SAMPLE_ABSORB; the sliders move health and absorb only,
@@ -1288,8 +1288,28 @@ local function buildLivePreview(pane)
   absorb:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, 0)
   M._previewRows = { health = health, absorb = absorb }
 
+  -- SIMULATE: hits land on the shield, which takes them first, then the health; the shield breaks.
+  local saved
+  local simulate = BIT.Looks.Simulate(pane, absorb, {
+    x = 6, y = -8, length = 8,
+    text = "Three hits land: the shield takes them first, then the health, and the shield breaks.",
+    start = function() saved = { health = preview.health, absorb = preview.absorb } end,
+    frame = function(t)
+      local hits = (t >= 1 and 1 or 0) + (t >= 2.5 and 1 or 0) + (t >= 4 and 1 or 0)
+      local damage = hits * 15
+      preview.absorb = math.max(0, 40 - damage)
+      preview.health = math.max(0, 70 - math.max(0, damage - 40))
+      changed()
+    end,
+    finish = function()
+      if saved then preview.health, preview.absorb = saved.health, saved.absorb end
+      changed()
+    end,
+  })
+  M._simulate = simulate
+
   local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("TOPLEFT", absorb, "BOTTOMLEFT", 6, -12)
+  hint:SetPoint("TOPLEFT", simulate, "BOTTOMLEFT", 0, -10)
   hint:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
   hint:SetJustifyH("LEFT")
   hint:SetText(BIT.L("The preview paints a fixed sample with the same painter as the live overlays; "

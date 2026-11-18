@@ -179,7 +179,7 @@ local function syncDisplayHost()
         if paused and simulation then
             simulation:Cancel()
             simulation = nil
-            window.simulateButton:SetText(BIT.L("Simulate fight"))
+            window.simulateButton:SetText(BIT.L("Simulate"))
         end
         ns.setDisplayHost((not paused) and window.host or nil)
         ns.setPlatePreview((not paused) and window.plateHost or nil, preview)
@@ -244,7 +244,7 @@ local function stopSimulation()
         simulation:Cancel()
         simulation = nil
     end
-    if window then window.simulateButton:SetText(BIT.L("Simulate fight")) end
+    if window then window.simulateButton:SetText(BIT.L("Simulate")) end
 end
 
 -- A scripted fight: a DoT lands, ticks, a second DoT lands and makes it lethal, ticks until the target dies.
@@ -938,7 +938,7 @@ local function buildPreview(pane)
             tooltip = "Remaining damage of two sample DoTs, in % of the target's max health." })
     damage:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, 0)
 
-    window.simulateButton = pushButton(pane, "Simulate fight", 162, function()
+    window.simulateButton = pushButton(pane, "Simulate", 162, function()
         if simulation then stopSimulation() else startSimulation() end
     end)
     window.simulateButton:SetPoint("TOPLEFT", damage, "BOTTOMLEFT", 6, -10)

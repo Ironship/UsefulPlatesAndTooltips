@@ -847,23 +847,40 @@ local function buildLivePreview(pane)
 
   -- Try it: the preview's own state, not a setting.
   local tryIt = header(BIT.L("TRY IT"), window.previewState, 12)
-  local toggle = checkboxRow(pane, "Simulate: out of range",
+  local toggle = checkboxRow(pane, "Try: out of range",
     function() return preview.out end,
     function(v) preview.out = v; changed() end,
     { layout = PREVIEW_LAYOUT,
       tooltip = "The preview only: the red X while it is checked, the green checkmark while it is not." })
   toggle:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -4)
-  local noPlate = checkboxRow(pane, "Simulate: no nameplate",
+  local noPlate = checkboxRow(pane, "Try: no nameplate",
     function() return preview.noPlate end,
     function(v) preview.noPlate = v; changed() end,
     { layout = PREVIEW_LAYOUT,
       tooltip = "Preview the target without a visible nameplate." })
   noPlate:SetPoint("TOPLEFT", toggle, "BOTTOMLEFT", 0, 0)
 
+  -- SIMULATE: the target steps in and out of range, then loses its nameplate.
+  local saved
+  local simulate = BIT.Looks.Simulate(pane, noPlate, {
+    x = 6, y = -6, length = 7,
+    text = "The target steps in and out of range, then loses its nameplate.",
+    start = function() saved = { out = preview.out, noPlate = preview.noPlate } end,
+    frame = function(t)
+      preview.noPlate = t >= 5
+      preview.out = t < 5 and math.floor(t / 1.25) % 2 == 1 or false
+      changed()
+    end,
+    finish = function()
+      if saved then preview.out, preview.noPlate = saved.out, saved.noPlate end
+      changed()
+    end,
+  })
+
   -- The action bar button the module dims.
   local barCard = CreateFrame("Frame", nil, pane, "BackdropTemplate")
   barCard:SetSize(CARD_WIDTH, 56)
-  barCard:SetPoint("TOPLEFT", noPlate, "BOTTOMLEFT", 6, -10)
+  barCard:SetPoint("TOPLEFT", simulate, "BOTTOMLEFT", 0, -8)
   setBackdrop(barCard, 0.07)
   local button = CreateFrame("Frame", nil, barCard, "BackdropTemplate")
   button:SetSize(36, 36)

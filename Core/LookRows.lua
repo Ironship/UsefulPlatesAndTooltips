@@ -331,6 +331,77 @@ function Looks.TryItHeader(parent, anchor, x, y)
     return text
 end
 
+-- The "SIMULATE" block under a preview's TRY IT sliders: one button that plays a short scripted scene on the preview (the
+-- way DoTInfo's Simulate fight does), so the timing options show what they do. The module gives the scene:
+--   spec.text     one line saying what happens (the button's tooltip)
+--   spec.length   seconds
+--   spec.start()  (optional) put the preview in its first state
+--   spec.frame(t) the preview at second t
+--   spec.finish() put the sliders' own values back (called on the end, on Stop, in combat, when the page is hidden)
+-- Settings changed while it plays show at once. Returns the block: anchor what comes next to its BOTTOMLEFT.
+local SIMULATE_STEP = 0.1
+function Looks.Simulate(pane, anchor, spec)
+    local block = CreateFrame("Frame", nil, pane)
+    block:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", spec.x or 4, spec.y or -12)
+    block:SetPoint("RIGHT", pane, "RIGHT", -12, 0)
+    block:SetHeight(24)
+    local head = block:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    head:SetPoint("TOPLEFT", 0, 0)
+    head:SetText(BIT.L("SIMULATE"))
+    head:SetTextColor(1, 0.82, 0)
+    local ticker, startedAt
+    local button
+    local function inCombat()
+        return (type(InCombatLockdown) == "function" and InCombatLockdown()) and true or false
+    end
+    local function stop()
+        if ticker then
+            ticker:Cancel()
+            ticker = nil
+            if spec.finish then pcall(spec.finish) end
+        end
+        if button then button:SetText(BIT.L("Simulate")) end
+    end
+    local function start()
+        if inCombat() then return end
+        stop()
+        if spec.start then pcall(spec.start) end
+        startedAt = GetTime()
+        ticker = C_Timer.NewTicker(SIMULATE_STEP, function()
+            local t = GetTime() - startedAt
+            if t >= spec.length then stop() return end
+            local ok = pcall(spec.frame, t)
+            if not ok then stop() end
+        end)
+        pcall(spec.frame, 0)
+        button:SetText(BIT.L("Stop"))
+    end
+    button = BIT.UI.Button(block, BIT.L("Simulate"), 100, function()
+        if ticker then stop() else start() end
+    end)
+    button:SetHeight(20)
+    button:SetPoint("TOPRIGHT", 0, 3)
+    -- what the scene shows is the tooltip: the preview columns are full
+    button:HookScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(BIT.L("Simulate"), 1, 0.82, 0)
+        GameTooltip:AddLine(BIT.L(spec.text), 1, 1, 1, true)
+        GameTooltip:AddLine(BIT.L("Settings you change while it plays show at once."), 0.8, 0.8, 0.8, true)
+        GameTooltip:Show()
+    end)
+    button:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    block:RegisterEvent("PLAYER_REGEN_DISABLED")
+    block:RegisterEvent("PLAYER_REGEN_ENABLED")
+    block:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then stop() end
+        button:SetEnabled(not inCombat())
+    end)
+    block:HookScript("OnHide", stop)
+    block.Stop = stop
+    block.button = button
+    return block
+end
+
 -- A preview slider: the same inline row as everywhere else, in the narrower preview geometry, shown as a percentage.
 function Looks.PreviewSlider(parent, labelText, min, max, get, set)
     return Rows.Slider(parent, labelText, min, max, 1, get, set, { layout = Looks.PREVIEW_LAYOUT, suffix = "%" })

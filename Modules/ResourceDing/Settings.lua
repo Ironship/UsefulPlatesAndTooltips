@@ -344,6 +344,24 @@ local function buildLivePreview(pane)
   diamonds:SetPoint("TOPLEFT", offset, "BOTTOMLEFT", 0, 0)
   scene.diamondsControl = diamonds
 
+  -- SIMULATE: the points come in one by one, then the finisher spends them.
+  local savedPoints
+  local simulate = BIT.Looks.Simulate(pane, diamonds, {
+    x = 6, y = -8, length = 8,
+    text = "The points come in one by one, then the finisher spends them.",
+    start = function() savedPoints = previewState.points end,
+    frame = function(t)
+      local step = math.floor(t / 1)
+      previewState.points = step > MAX_POINTS and 0 or math.min(MAX_POINTS, step)
+      updateLivePreview()
+    end,
+    finish = function()
+      previewState.points = savedPoints
+      refreshControls()
+      updateLivePreview()
+    end,
+  })
+
   local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", 12, 8)
   hint:SetWidth(PANE_WIDTH - 24)
@@ -748,7 +766,7 @@ BIT.RegisterTab("ResourceDing", {
   title = "ResourceDing",
   summary = "A sound when your combo points are full, and the points as dots under the target; for "
     .. "casters a sound when mana climbs to a level, and for warlocks one on each Soul Shard.",
-  width = 760, height = 470,
+  width = 760, height = 500,
   build = function(parent) Addon.CreateSettingsPanel(parent) end,
 })
 BIT.tabWords.ding = "ResourceDing"

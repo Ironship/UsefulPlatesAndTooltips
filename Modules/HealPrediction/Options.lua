@@ -211,10 +211,21 @@ local function buildPreview(pane)
     local scene = BIT.UI.Preview.Scene(pane, PREVIEW_WIDTH - 2 * SIDE, 122)
     scene:SetPoint("TOP", pane, "TOP", 0, -44)
 
-    local mock = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 60 })
-    mock.frame:SetPoint("CENTER", scene, "CENTER", 0, 0)
-    mock.bar:SetMinMaxValues(0, 100)
-    mock.bar:SetValue(60)
+    -- The frame the sample sits on: target, player or party, each with its own "Show on" switch.
+    local kits = {
+        target = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 60 }),
+        player = BIT.UI.Preview.PlayerFrame(scene, { name = "You", health = 60 }),
+        party = BIT.UI.Preview.PartyBar(scene, { name = "Kaya", width = 190, health = 60 }),
+    }
+    local FRAMES = { { id = "target", label = "Target" }, { id = "player", label = "Player" }, { id = "party", label = "Party" } }
+    local which = "target"
+    local mock = kits.target
+    for id, kit in pairs(kits) do
+        kit.frame:SetPoint("CENTER", scene, "CENTER", 0, 0)
+        kit.bar:SetMinMaxValues(0, 100)
+        kit.bar:SetValue(60)
+        kit.frame:SetShown(id == which)
+    end
 
     local state = { health = 60, heal = 25, others = 12 }
     local sampleHotTotal, sampleHotDuration = 30, 12
@@ -222,12 +233,37 @@ local function buildPreview(pane)
         mock.bar:SetValue(state.health)
         if mock.healthPercent then mock.healthPercent:SetText(string.format("%d%%", state.health)) end
         local horizon = ns.HotHorizon and ns.HotHorizon() or tonumber(db().hotHorizon) or 4
-        local hot = sampleHotTotal * math.min(horizon, sampleHotDuration) / sampleHotDuration
-        ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, hot)
+        -- hotRemaining: seconds of the sample HoT left (the Simulate scene runs it down; otherwise it is fresh)
+        local hot = sampleHotTotal * math.min(horizon, state.hotRemaining or sampleHotDuration) / sampleHotDuration
+        ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, hot, which)
+    end
+
+    -- FRAME: which mock carries the sample (the same switch as ShieldsInfo's preview).
+    local switch = CreateFrame("Frame", nil, pane)
+    switch:SetSize(PREVIEW_WIDTH - 2 * SIDE, 22)
+    switch:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -8)
+    local switchButtons = {}
+    local left = 0
+    for _, entry in ipairs(FRAMES) do
+        local label = BIT.L(entry.label)
+        local button = BIT.UI.Button(switch, label, 70, function()
+            if which == entry.id then return end
+            if ns.HideSample then ns.HideSample(mock.bar) end
+            kits[which].frame:Hide()
+            which, mock = entry.id, kits[entry.id]
+            mock.frame:Show()
+            for id, b in pairs(switchButtons) do b:SetAlpha(id == which and 1 or 0.55) end
+            redraw()
+        end)
+        button:SetHeight(20)
+        button:SetPoint("TOPLEFT", switch, "TOPLEFT", left, 0)
+        button:SetAlpha(entry.id == which and 1 or 0.55)
+        switchButtons[entry.id] = button
+        left = left + 74
     end
 
     -- The two sliders are the sample's own numbers, never settings.
-    local tryIt = BIT.Looks.TryItHeader(pane, scene)
+    local tryIt = BIT.Looks.TryItHeader(pane, switch)
     local healthSlider = BIT.Looks.PreviewSlider(pane, "Health", 1, 100,
         function() return state.health end,
         function(value)
@@ -243,8 +279,38 @@ local function buildPreview(pane)
         end)
     healSlider:SetPoint("TOPLEFT", healthSlider, "BOTTOMLEFT", 0, 0)
 
+    -- SIMULATE: a heal is cast (its segment grows, the other healers' band joins), lands, and its HoT runs down.
+    local saved
+    local sim = BIT.Looks.Simulate(pane, healSlider, {
+        x = 4, y = -10, length = 10,
+        text = "A heal is cast and lands, then its heal over time ticks down.",
+        start = function() saved = { health = state.health, heal = state.heal, others = state.others } end,
+        frame = function(t)
+            if t < 2.5 then
+                state.health, state.heal = 40, 25 * t / 2.5
+                state.others = t >= 1 and 12 or 0
+                state.hotRemaining = 0
+            else
+                local since = t - 2.5
+                state.heal, state.others = 0, 0
+                state.health = math.min(100, 65 + math.floor(since) * 3)
+                state.hotRemaining = math.max(0, sampleHotDuration - since)
+            end
+            state.health = math.floor(state.health + 0.5)
+            redraw()
+        end,
+        finish = function()
+            if saved then state.health, state.heal, state.others = saved.health, saved.heal, saved.others end
+            state.hotRemaining = nil
+            redraw()
+            if healthSlider.Refresh then healthSlider:Refresh() end
+            if healSlider.Refresh then healSlider:Refresh() end
+        end,
+    })
+    pane.simulate = sim
+
     local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", healSlider, "BOTTOMLEFT", 6, -12)
+    hint:SetPoint("TOPLEFT", sim, "BOTTOMLEFT", 2, -8)
     hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
     hint:SetJustifyH("LEFT")
     hint:SetText(BIT.L("The Show on target frame option controls this sample; the other Show on options control live frames. "
