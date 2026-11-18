@@ -660,7 +660,7 @@ local function buildTabs()
             .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. On by "
             .. "default in this beta." })
         native:header("Diagnostics")
-        native:checkbox("nativeShowAll", "Show native next to plain segments", { enabledIf = function(s) return s.nativeDots or s.nativeAllDots end, tooltip = "For checking the "
+        native:checkbox("nativeShowAll", "Show native next to plain segments", { enabledIf = function(s) return s.nativeDots or s.nativeAllDots or s.nativeGateReplace or s.nativeGate end, tooltip = "For checking the "
             .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
             .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "
             .. "the bar, starting at its left edge, so you can compare their length and time left with the plain segment on "

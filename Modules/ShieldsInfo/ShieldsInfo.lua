@@ -1299,11 +1299,13 @@ local function buildLivePreview(pane)
       local damage = hits * 15
       preview.absorb = math.max(0, 40 - damage)
       preview.health = math.max(0, 70 - math.max(0, damage - 40))
-      changed()
+      refreshControls()
+      if refreshPreview then refreshPreview() end
     end,
     finish = function()
       if saved then preview.health, preview.absorb = saved.health, saved.absorb end
-      changed()
+      refreshControls()
+      if refreshPreview then refreshPreview() end
     end,
   })
   M._simulate = simulate

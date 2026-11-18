@@ -131,6 +131,9 @@ end
 
 -- Which rows only mean something while another switch is on: they dim (and ignore the mouse) otherwise, by setting key.
 local function markerOn(s) return s.showMarker end
+-- the kill icon on the unit frames needs the frame switch too (Core.lua: no showTargetFrame, nothing is drawn), so these stay
+-- live while either the marker or the kill icon is on
+local function framesOn(s) return s.showMarker or s.showKillIcon end
 local function iconOn(s) return s.showKillIcon end
 local function outlineOn(s) return s.showMarker and s.outlineStyle ~= "none" end
 local function textOn(s) return s.showMarker and s.showLabel end
@@ -141,7 +144,7 @@ local function plateIconOn(s) return s.showMarker and s.showKillIcon and s.namep
 local function finisherOn(s) return s.finisherPreview end
 local function manualOn(s) return s.manualPower end
 local WHEN = {
-    showTargetFrame = markerOn, showFocusFrame = markerOn, showPartyFrames = markerOn, showRaidFrames = markerOn,
+    showTargetFrame = framesOn, showFocusFrame = framesOn, showPartyFrames = framesOn, showRaidFrames = framesOn,
     nameplateMode = markerOn,
     fillColor = markerOn, fillOpacity = markerOn, castTexture = markerOn, channelTexture = markerOn, outlineStyle = markerOn,
     outlineColor = outlineOn, outlineOpacity = outlineOn, pulseOutline = outlineOn,
