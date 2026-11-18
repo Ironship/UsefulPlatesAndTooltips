@@ -2808,6 +2808,7 @@ local function slash(msg)
     if not (arg == "auto" or arg == "en" or arg == "de" or arg == "ru") then say(L.BAD_ARG) return end
     db.interfaceLang = arg
     ns.SetInterfaceAndRefreshL(arg)
+    if BIT.SetLanguageFromSDI then BIT.SetLanguageFromSDI(arg) end -- the rest of the addon follows (after /reload)
   elseif cmd ~= "status" then
     say(L.BAD_ARG)
     return

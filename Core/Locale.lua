@@ -112,6 +112,17 @@ function BIT.SetLanguage(id)
   end
 end
 
+-- SpellDamageInfo's own language row (its settings tab, /sdi lang) is the same choice as the settings window's button:
+-- it is saved for the whole addon too, so one switch does not leave the other tabs in the old language. SpellDamageInfo
+-- has already switched itself when it calls this; the rest follows after /reload.
+local FROM_SDI = { auto = "auto", en = "en", de = "deDE", ru = "ruRU" }
+function BIT.SetLanguageFromSDI(code)
+  local id = FROM_SDI[code]
+  if not id then return end
+  BIT.DB().language = id ~= "auto" and id or nil
+  if BIT.Say then BIT.Say(BIT.L("The language changes after /reload.")) end
+end
+
 local function command(rest)
   local say = BIT.Say
   local word = (rest or ""):match("^%S+")
