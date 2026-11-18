@@ -575,8 +575,9 @@ local function updateAll()
         end
     end
     -- Replaced primary bars and departed group bars must both leave the display.
+    -- (the settings window's sample bar is not one of them: its overlay belongs to the preview, which draws and hides it itself)
     for healthBar, o in pairs(overlays) do
-        if not seen[healthBar] then hideOverlay(o) end
+        if not seen[healthBar] and not o.sample then hideOverlay(o) end
     end
     local okMana, errMana = pcall(updateMana)
     if not okMana then
@@ -729,6 +730,7 @@ function ns.DrawSample(healthBar, maxHealth, heal, others, hot, flag)
     if not settings then return false end
     local o = overlayFor(healthBar)
     if not o then return false end
+    o.sample = true
     if settings[flag or "target"] == false then
         hideOverlay(o)
         return true
