@@ -296,8 +296,8 @@ local function buildMarkerTab(parent)
         { id = "above", label = "Above the bar" },
         { id = "below", label = "Below the bar" },
     }, nil), y)
-    y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -60, 60, 1, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -60, 60, 1, nil, nil), y, 40)
+    y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -60, 60, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -60, 60, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
     y = section(parent, y, "FINISHER PREVIEW")
     y = place(choiceRow(parent, "Preview fill style", "finisherTexture", textureList(),
         "The fill of the finisher preview (Prediction tab), so it never reads as a real cast."), y)
@@ -352,8 +352,8 @@ local function buildNameplateTab(parent)
         { id = "below", label = "Below the bar" },
         { id = "right", label = "Right of the bar" },
     }, nil), y)
-    y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, nil), y, 40)
-    y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -40, 40, 1, nil, nil), y, 40)
+    y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -40, 40, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
     return y
 end
 

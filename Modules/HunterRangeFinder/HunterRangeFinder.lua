@@ -1133,8 +1133,18 @@ local function sliderRow(parent, labelText, min, max, step, get, set, opts)
     return BIT.Looks.Rows.Slider(parent, labelText, min, max, step, get, set, rowOpts(opts))
 end
 
+-- opts.up: the saved value counts down (negative = above the bar); the slider shows it the other way round
+-- (positive = up, like every other offset in the addon). Nothing saved changes.
 local function slider(parent, key, labelText, min, max, step, opts)
     opts = opts or {}
+    if opts.up then
+        return sliderRow(parent, labelText, 0 - max, 0 - min, step,
+            function() return 0 - (tonumber(db()[key]) or 0) end,
+            function(value)
+                db()[key] = 0 - value
+                changed()
+            end, opts)
+    end
     return sliderRow(parent, labelText, min, max, step,
         function() return db()[key] end,
         function(value)
@@ -1281,9 +1291,9 @@ local function buildTabs(parent, isHunter)
         { enabledIf = hunterOnly,
             tooltip = "The rail rides above the target's nameplate, like the ResourceDing dots. "
                 .. "It is hidden when that plate is not visible. Unchecked keeps the draggable screen position." })
-    parent.plateOffset = display:slider("plateOffset", "Vertical offset (- = above)", -80, 30, 1,
-        { enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
-            tooltip = "How far the rail sits from the plate's health bar. The same seat as the combo dots: top of the row, -offset under the bar." })
+    parent.plateOffset = display:slider("plateOffset", "Height above the bar", -80, 30, 1,
+        { up = true, enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
+            tooltip = "How high the rail sits above the plate's health bar. Positive is up, negative is under the bar. The same seat as the combo dots." })
     plateClashLine = display:note(BIT.L("Nameplate lanes"))
     refreshPlateClash()
     display:gap()
