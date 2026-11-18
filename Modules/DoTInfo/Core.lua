@@ -2956,6 +2956,23 @@ function ns.traceMarker()
         tostring(markerShownValue), shownSegments, tostring(remainingBar:IsShown())))
     local cast = _G.UsefulPlatesAndTooltips_CastPredictionMarker
     say("cast marker: " .. (cast and (frameLine(cast) .. " | parent " .. call(cast:GetParent(), "GetDebugName")) or "none"))
+    -- the focus frame's widgets (Focus.lua): where the bar is and where the marker and the kill icon were put
+    local focusWidgets, focusBar = nil, nil
+    if ns.focusState then focusWidgets, focusBar = ns.focusState() end
+    say("focus: exists " .. tostring(UnitExists("focus")) .. ", mode " .. tostring(db.focusMode) .. ", icon position "
+        .. tostring(db.nameplateIconPosition) .. " offset " .. tostring(db.plateIconOffsetX) .. "/" .. tostring(db.plateIconOffsetY)
+        .. ", custom path '" .. tostring(BIT.Frames and BIT.Frames.Get("focus") or "") .. "'")
+    say("focus bar: " .. (focusBar and (regionName(focusBar) .. " " .. frameLine(focusBar)) or "none yet (needs a focus with a DoT on it)"))
+    if focusWidgets then
+        say("focus marker: " .. frameLine(focusWidgets.marker) .. " | parent " .. call(focusWidgets.marker:GetParent(), "GetDebugName")
+            .. " | shown " .. tostring(focusWidgets.marker:IsShown()))
+        local icon = focusWidgets.iconWindow
+        local anchor = { pcall(icon.GetPoint, icon, 1) }
+        say("focus icon: " .. frameLine(icon) .. " | parent " .. call(icon:GetParent(), "GetDebugName") .. " | shown "
+            .. tostring(icon:IsShown()) .. " | anchor " .. tostring(anchor[2]) .. " to "
+            .. (type(anchor[3]) == "table" and call(anchor[3], "GetDebugName") or "?") .. " " .. tostring(anchor[4])
+            .. " offset " .. tostring(anchor[5]) .. "/" .. tostring(anchor[6]))
+    end
 end
 
 local function targetIsDead()

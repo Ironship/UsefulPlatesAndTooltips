@@ -26,7 +26,10 @@ end
 
 local host = CreateFrame("Frame", nil, UIParent)
 host:SetAllPoints(UIParent)
-local widgets
+local widgets, lastBar
+
+-- For /dotinfo marker: the focus widgets and the bar they were last drawn on.
+function ns.focusState() return widgets, lastBar end
 
 -- The look the nameplates use, except the mode.
 local focusLook = setmetatable({}, { __index = function(_, key)
@@ -135,6 +138,7 @@ local function refresh()
     if not okExists or isSecret(exists) or not exists or dead() then return hide() end
     local _, bar = BIT.Plate.UnitFrame("focus")
     if type(bar) ~= "table" or not shown(bar) then return hide() end
+    lastBar = bar
     local entries, total = ns.dotBreakdownForUnit("focus")
     if total <= 0 then return hide() end
     -- the marker hangs on the focus bar itself (as on the target frame, see Core.lua applyMarkerParent)
