@@ -206,7 +206,7 @@ BIT.RegisterCommand("rangecheck", function() M.Report() end)
 ---------------------------------------------------------------------------------------------
 
 local icon, driver
-local refreshEuiDimming
+local refreshEuiDimming, syncRange
 
 -- The target's nameplate, if there is one the addon may use.
 local function targetPlate()
@@ -296,12 +296,14 @@ local function start()
     since = 0
     update()
     refreshEuiDimming()
+    syncRange(false)
   end)
   driver:RegisterEvent("PLAYER_TARGET_CHANGED")
   driver:RegisterEvent("NAME_PLATE_UNIT_ADDED")
   driver:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
   driver:SetScript("OnEvent", function(_, event, unit)
     refreshEuiDimming()
+    syncRange(true)
     -- the plate the icon sits on is being handed to another unit: never leave the icon on it. Other
     -- plates come and go without concern.
     if event == "NAME_PLATE_UNIT_REMOVED" and icon:GetParent() ~= UIParent
@@ -470,6 +472,70 @@ local function startDimming()
     dimIcon(button)
   end)
 end
+
+-- The client sends ACTION_RANGE_CHECK_UPDATE only when an action's answer changes, and a button keeps whatever the last
+-- event said: after the target died, a new one was clicked, or the button was given another action (a bar page, a drag)
+-- it could stay grey for a target that is in range. So the answer is asked again, for the buttons the events reached:
+-- on every target change at once, and otherwise twice a second. No target or a dead one is "not out of range"; an answer that cannot be said
+-- (nil or secret) leaves the state as it was; only a plain false is out, a plain true is in.
+local SYNC_INTERVAL = 0.5
+local syncedAt = 0
+syncRange = function(force)
+  if not running or not settings.dimIcons or next(seen) == nil then return end
+  local now = GetTime()
+  if not force and now - syncedAt < SYNC_INTERVAL then return end
+  syncedAt = now
+  local query = C_ActionBar and C_ActionBar.IsActionInRange or IsActionInRange
+  if type(query) ~= "function" then return end
+  local hasTarget = ask(UnitExists, "target") == true and ask(UnitIsDeadOrGhost, "target") ~= true
+  for button in pairs(seen) do
+    local action = button.action
+    if type(action) == "number" then -- hidden ones too: a nameplate-style bar addon may hide the game's own buttons
+      local out
+      if not hasTarget then
+        out = false
+      else
+        local ok, answer = pcall(query, action)
+        -- a secret answer, an error or nil (the client cannot say, which it may do for an addon's call) says nothing: the
+        -- last event stays. Only a plain yes or no changes the state.
+        if ok and not isSecret(answer) and answer ~= nil then out = (answer == false or answer == 0) end
+      end
+      if out ~= nil and (outOfRange[button] == true) ~= out then
+        outOfRange[button] = out or nil
+        dimIcon(button)
+      end
+    end
+  end
+end
+
+-- /upt rangedim: what the dimming knows about each action button the range events reached, to compare with what is
+-- on screen (a button that is grey although its target is in range shows `event-out=true` or `desaturated=true` here).
+BIT.RegisterCommand("rangedim", function()
+  local say = BIT.Say
+  local query = C_ActionBar and C_ActionBar.IsActionInRange or IsActionInRange
+  local count, shown = 0, 0
+  for button in pairs(seen) do
+    count = count + 1
+    local icon = button.icon
+    local desaturated = type(icon) == "table" and ask(icon.IsDesaturated, icon)
+    local answer = "-"
+    if type(query) == "function" and type(button.action) == "number" then
+      local ok, value = pcall(query, button.action)
+      answer = (not ok and "error") or (isSecret(value) and "secret") or tostring(value)
+    end
+    local dot = button.RangeIndicator
+    local dotShown = type(dot) == "table" and ask(dot.IsShown, dot)
+    local interesting = outOfRange[button] or dimmed[button] or desaturated == true or answer == "false"
+    if interesting and shown < 24 then
+      shown = shown + 1
+      say(string.format("%s action=%s event-out=%s dimmed=%s desaturated=%s IsActionInRange=%s visible=%s dot=%s",
+        tostring(ask(button.GetName, button)), tostring(button.action), tostring(outOfRange[button] == true),
+        tostring(dimmed[button] == true), tostring(desaturated), answer, tostring(ask(button.IsVisible, button)), tostring(dotShown)))
+    end
+  end
+  say(string.format("rangedim: %d button(s) reached by range events, %d listed (event-out, dimmed, grey or out of range), target %s, dimIcons %s",
+    count, shown, tostring(ask(UnitExists, "target")), tostring(settings and settings.dimIcons)))
+end)
 
 -- After the setting changes: dim or restore every button now.
 function M.RefreshDimming()
