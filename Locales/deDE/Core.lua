@@ -505,4 +505,9 @@ BIT.RegisterLocale("deDE", {
     "Die Punkte kommen einzeln, dann verbraucht sie der Finisher.",
   ["Three hits land: the shield takes them first, then the health, and the shield breaks."] =
     "Drei Treffer landen: Der Schild nimmt sie zuerst, dann die Gesundheit, und der Schild bricht.",
+  ["Reset frames"] = "Rahmen zurücksetzen",
+  ["Frames reset: %d paths cleared, the addon finds the frames by itself again."] =
+    "Rahmen zurückgesetzt: %d Pfade gelöscht, das Addon findet die Rahmen wieder selbst.",
+  ["Frames: no path was set, the addon already finds the frames by itself."] =
+    "Rahmen: Es war kein Pfad gesetzt, das Addon findet die Rahmen bereits selbst.",
 })

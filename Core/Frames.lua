@@ -51,6 +51,21 @@ function Frames.Set(key, path)
   saved.frames[key] = strtrim(path or "")
 end
 
+-- Every path empty again: the addon finds Blizzard's (or the other addon's own) frames by itself. Returns how many paths
+-- were set.
+function Frames.Reset()
+  if type(BIT.DB) ~= "function" then return 0 end
+  local saved = BIT.DB()
+  local paths = type(saved) == "table" and saved.frames
+  if type(paths) ~= "table" then return 0 end
+  local cleared = 0
+  for key in pairs(KEYS) do
+    if type(paths[key]) == "string" and strtrim(paths[key]) ~= "" then cleared = cleared + 1 end
+    paths[key] = nil
+  end
+  return cleared
+end
+
 -- Frame path -> the frame (or texture), or nil if it does not exist (yet: some addons build frames late).
 function Frames.Resolve(path)
   if type(path) ~= "string" then return nil end

@@ -83,11 +83,24 @@ local function build(content)
   note:SetText(BIT.L("Only for another unit frame addon (ElvUI, Shadowed Unit Frames, ...) or custom nameplates: tell the "
     .. "addon where its health bars are. Empty rows are automatic. The markers of DoTs, Cast, Shields and Heals use these."))
   y = y - math.max(30, (note:GetStringHeight() or 24) + 10)
+  local rows = {}
   for _, spec in ipairs(ROWS) do
     local row = frameRow(content, spec)
     row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, y)
+    rows[#rows + 1] = row
     y = y - ROW
   end
+  -- Back to automatic: a path typed or picked wrong (a frame that is not the health bar) puts the markers in the wrong place.
+  local reset = BIT.Looks.ResetButton(content, function()
+    local cleared = Frames.Reset()
+    for _, row in ipairs(rows) do row:Refresh() end
+    tell(cleared > 0 and string.format(BIT.L("Frames reset: %d paths cleared, the addon finds the frames by itself again."), cleared)
+      or BIT.L("Frames: no path was set, the addon already finds the frames by itself."))
+  end, 140)
+  reset:SetText(BIT.L("Reset frames"))
+  reset:SetWidth(math.max(140, reset:GetFontString():GetStringWidth() + 24))
+  reset:SetPoint("TOPLEFT", content, "TOPLEFT", 8, y - 8)
+  y = y - 30
   content:SetHeight(-y + 12)
 end
 
