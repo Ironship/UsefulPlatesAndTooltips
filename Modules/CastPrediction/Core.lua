@@ -1917,7 +1917,7 @@ local function drawPlate(w, damage, maxHealth, health, state)
     local minimum = number(state and state.min) or damage
     setKillValue(w.iconBar, health, minimum)
     w.iconBar:SetShown(settings.showKillIcon and (not state or state.kill ~= false))
-    w.iconWindow:SetShown(settings.showKillIcon and settings.nameplateMode == "markerIcon")
+    w.iconWindow:SetShown(settings.showMarker and settings.showKillIcon and settings.nameplateMode == "markerIcon")
     return true
 end
 

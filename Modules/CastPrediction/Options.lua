@@ -136,7 +136,8 @@ local function outlineOn(s) return s.showMarker and s.outlineStyle ~= "none" end
 local function textOn(s) return s.showMarker and s.showLabel end
 local function platesOn(s) return s.showMarker and s.nameplateMode ~= "off" end
 local function plateOutlineOn(s) return platesOn(s) and s.plateOutlineStyle ~= "none" end
-local function plateIconOn(s) return s.showKillIcon and s.nameplateMode == "markerIcon" end
+-- the kill icon on the target frame is independent of the marker, the one on a nameplate is not (Core.lua)
+local function plateIconOn(s) return s.showMarker and s.showKillIcon and s.nameplateMode == "markerIcon" end
 local function finisherOn(s) return s.finisherPreview end
 local function manualOn(s) return s.manualPower end
 local WHEN = {
