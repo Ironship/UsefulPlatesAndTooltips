@@ -7,26 +7,30 @@
 -- Run 2026-09-27, 5000 iterations per run; each run on the build named in its setup (the sim's gear, talent, rotation or build presets; the rest the spec's defaults: consumables, buffs, encounter).
 -- A weight is per point of the item's stat, in points of the measure's reference stat. Forever pays an
 -- item's hit and crit into both the melee and the spell pool, so those keys carry both weights.
--- A weight smaller than its own 90% confidence interval is left out as the sim's noise.
+-- Hit and haste that ForeverSim left out (gear at the cap) or measured negative for a few specs are filled
+-- from the sim repo's EP presets as a ratio to crit (EP_FILLS in tools/make_weights.py).
+-- A weight smaller than its own 90% confidence interval is left out as the sim's noise, and a negative
+-- one counts as 0: a stat on an item never hurts (the sim's negative weights are its mana and rage
+-- limits, and made an item with strictly more stats read as worse).
 -- mainHand, offHand, ranged: the worth of a point of a weapon's damage per second in that place (0 where
 -- the spec does not fight with it: a caster's weapon, an Arms warrior's off hand). Cat and Bear Form
 -- fight with the weapon's DPS (FERAL_RUNS below): their mainHand is game-measured, not simulated.
 --
 -- The healers (druid Restoration, priest Holy, paladin Holy, shaman Restoration) are rated by
 -- UsefulPlatesAndTooltips's own starter heuristic (an approximation, marked '(approx.)' in the tooltip;
--- weighted score = 1 * +Healing + 1 * Spell Power + 0.5 * Intellect + 0.5 * Spirit + 2 * MP5), NOT a simulation: ForeverSim does not simulate healing, so no measured
+-- weighted score = 1 * +Healing, 1 * Spell Power, 0.325 * Intellect, 0.275 * Spirit, 0.6 * MP5, 0.265 * Crit and 0.49 * Haste), NOT a simulation: ForeverSim does not simulate healing, so no measured
 -- healer weights exist.
 
 local _, BIT = ...
 local M = BIT.Module("StatsInfo")
 
-M.WEIGHTS_SOURCE = "ForeverSim stat weights, 2026-09-27, level 60 builds of each spec; the healers (druid Restoration, priest Holy, paladin Holy, shaman Restoration): UsefulPlatesAndTooltips starter heuristic, not simulated"
+M.WEIGHTS_SOURCE = "ForeverSim stat weights, 2026-09-27, level 60 builds of each spec; the healers (druid Restoration, priest Holy, paladin Holy, shaman Restoration): the wowsims/forever EP presets for a Holy priest (the mean of 'Holy Raid Healing' and 'Holy Single-Target', tools/data/ep_presets.json), applied to every healer spec; community EP weights, not a ForeverSim run, so the line is marked approximate"
 
 M.SPECS = {
   DRUID = {
     -- druid/feralbear: Launch, Bear Tank 0/31/20; talents -5003232120132010501-0550325
     { name = "Feral (Bear)", icon = "Interface\\Icons\\Ability_Racial_BearForm", role = "tank",
-      survival = { reference = "Armor", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      survival = { reference = "Armor", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 0.7397,
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.182,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.182,
@@ -35,10 +39,11 @@ M.SPECS = {
         ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 3.7421,
         ITEM_MOD_DODGE_RATING_SHORT = 0.3157,
         ITEM_MOD_EXPERTISE_RATING_SHORT = 1.5186,
+        ITEM_MOD_EXTRA_ARMOR_SHORT = 1.0502,
         ITEM_MOD_STAMINA_SHORT = 2.4022,
         RESISTANCE0_NAME = 1,
       } },
-      threat = { reference = "Agility", mainHand = 8.972, offHand = 0, ranged = 0, weights = {
+      threat = { reference = "Agility", mainHand = 8.972, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.2153,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.6409,
@@ -46,19 +51,16 @@ M.SPECS = {
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 1.3997,
         ITEM_MOD_CRIT_RATING_SHORT = 1.3997,
         ITEM_MOD_CRIT_SPELL_RATING_SHORT = 1.3997,
-        ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = -0.2775,
-        ITEM_MOD_DODGE_RATING_SHORT = -0.0541,
         ITEM_MOD_EXPERTISE_RATING_SHORT = 3.3124,
         ITEM_MOD_FERAL_ATTACK_POWER_SHORT = 0.6409,
         ITEM_MOD_HASTE_RATING_SHORT = 0.7231,
         ITEM_MOD_PHYSICAL_DAMAGE_DONE_SHORT = 5.1888,
-        ITEM_MOD_STAMINA_SHORT = -0.3952,
         ITEM_MOD_STRENGTH_SHORT = 1.2817,
       } },
     },
     -- druid/feralcat: Feral; talents -5521002023132213051-05503
     { name = "Feral (Cat)", icon = "Interface\\Icons\\Ability_Druid_CatForm", role = "damage",
-      damage = { reference = "Agility", mainHand = 6.033, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Agility", mainHand = 6.033, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.1394,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.4421,
@@ -79,7 +81,7 @@ M.SPECS = {
     },
     -- druid/balance: Balance; talents 5532220115001351--505302
     { name = "Balance", icon = "Interface\\Icons\\Spell_Nature_StarFall", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_ARCANE_DAMAGE_DONE_SHORT = 0.6429,
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.4463,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.4463,
@@ -97,21 +99,24 @@ M.SPECS = {
         ITEM_MOD_SPELL_POWER_SHORT = 1,
       } },
     },
-    -- druid/restoration: weighted score = 1 * +Healing + 1 * Spell Power + 0.5 * Intellect + 0.5 * Spirit + 2 * MP5; UsefulPlatesAndTooltips starter heuristic, not simulated
+    -- druid/restoration: weighted score = 1 * +Healing, 1 * Spell Power, 0.325 * Intellect, 0.275 * Spirit, 0.6 * MP5, 0.265 * Crit and 0.49 * Haste; the wowsims/forever EP presets for a Holy priest (the mean of 'Holy Raid Healing' and 'Holy Single-Target', tools/data/ep_presets.json), applied to every healer spec; community EP weights, not a ForeverSim run, so the line is marked approximate
     { name = "Restoration", icon = "Interface\\Icons\\Spell_Nature_HealingTouch", role = "healing",
       healing = { reference = "Healing", approximate = true, mainHand = 0, offHand = 0, ranged = 0, weights = {
-        ITEM_MOD_INTELLECT_SHORT = 0.5,
-        ITEM_MOD_MANA_REGENERATION_SHORT = 2,
+        ITEM_MOD_CRIT_RATING_SHORT = 0.265,
+        ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.265,
+        ITEM_MOD_HASTE_RATING_SHORT = 0.49,
+        ITEM_MOD_INTELLECT_SHORT = 0.325,
+        ITEM_MOD_MANA_REGENERATION_SHORT = 0.6,
         ITEM_MOD_SPELL_HEALING_DONE_SHORT = 1,
         ITEM_MOD_SPELL_POWER_SHORT = 1,
-        ITEM_MOD_SPIRIT_SHORT = 0.5,
+        ITEM_MOD_SPIRIT_SHORT = 0.275,
       } },
     },
   },
   HUNTER = {
     -- hunter/dps: Beast Mastery 35/16/0; talents 5520001505121251-0050551
     { name = "Beast Mastery", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", role = "damage",
-      damage = { reference = "Agility", mainHand = 0, offHand = 0, ranged = 5.553, weights = {
+      damage = { reference = "Agility", mainHand = 0, offHand = 0, ranged = 5.553, caps = { hit = { kind = "ranged", steps = { { 8, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.1515,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.4086,
@@ -125,14 +130,13 @@ M.SPECS = {
         ITEM_MOD_HIT_RATING_SHORT = 0.9787,
         ITEM_MOD_HIT_SPELL_RATING_SHORT = 0.9787,
         ITEM_MOD_INTELLECT_SHORT = 0.4067,
-        ITEM_MOD_MANA_REGENERATION_SHORT = -0.0053,
         ITEM_MOD_PHYSICAL_DAMAGE_DONE_SHORT = 1.6827,
         ITEM_MOD_RANGED_ATTACK_POWER_SHORT = 0.4086,
       } },
     },
     -- hunter/dps: Marksmanship 0/39/12; talents -3050552301503151-50024001
     { name = "Marksmanship", icon = "Interface\\Icons\\Ability_Marksmanship", role = "damage",
-      damage = { reference = "Agility", mainHand = 0, offHand = 0, ranged = 5.449, weights = {
+      damage = { reference = "Agility", mainHand = 0, offHand = 0, ranged = 5.449, caps = { hit = { kind = "ranged", steps = { { 8, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.1567,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.3889,
@@ -140,7 +144,7 @@ M.SPECS = {
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.779,
         ITEM_MOD_CRIT_RATING_SHORT = 0.779,
         ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.779,
-        ITEM_MOD_HASTE_RATING_SHORT = -0.1521,
+        ITEM_MOD_HASTE_RATING_SHORT = 0.7419,
         ITEM_MOD_HIT_MELEE_RATING_SHORT = 0.9954,
         ITEM_MOD_HIT_RANGED_RATING_SHORT = 0.9954,
         ITEM_MOD_HIT_RATING_SHORT = 0.9954,
@@ -153,7 +157,7 @@ M.SPECS = {
     },
     -- hunter/dps: Survival 0/15/36; talents -005055-550230031051220151
     { name = "Survival", icon = "Interface\\Icons\\Ability_Hunter_SwiftStrike", role = "damage",
-      damage = { reference = "Agility", mainHand = 0, offHand = 0, ranged = 4.851, weights = {
+      damage = { reference = "Agility", mainHand = 0, offHand = 0, ranged = 4.851, caps = { hit = { kind = "ranged", steps = { { 8, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.1391,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.357,
@@ -162,6 +166,10 @@ M.SPECS = {
         ITEM_MOD_CRIT_RATING_SHORT = 0.595,
         ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.595,
         ITEM_MOD_HASTE_RATING_SHORT = 0.7259,
+        ITEM_MOD_HIT_MELEE_RATING_SHORT = 1.4633,
+        ITEM_MOD_HIT_RANGED_RATING_SHORT = 1.4633,
+        ITEM_MOD_HIT_RATING_SHORT = 1.4633,
+        ITEM_MOD_HIT_SPELL_RATING_SHORT = 1.4633,
         ITEM_MOD_INTELLECT_SHORT = 0.3263,
         ITEM_MOD_PHYSICAL_DAMAGE_DONE_SHORT = 1.4702,
         ITEM_MOD_RANGED_ATTACK_POWER_SHORT = 0.357,
@@ -171,7 +179,7 @@ M.SPECS = {
   MAGE = {
     -- mage/dps: Arcane DPS, Auto; talents 050215003100311531-2305003202003-
     { name = "Arcane", icon = "Interface\\Icons\\Spell_Holy_MagicalSentry", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_ARCANE_DAMAGE_DONE_SHORT = 0.9238,
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.5952,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.5952,
@@ -192,7 +200,7 @@ M.SPECS = {
     },
     -- mage/dps: Fire DPS, Auto; talents 0502252000003-23550000130133051-
     { name = "Fire", icon = "Interface\\Icons\\Spell_Fire_FireBolt02", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.7188,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.7188,
         ITEM_MOD_CRIT_RATING_SHORT = 0.7188,
@@ -212,7 +220,7 @@ M.SPECS = {
     },
     -- mage/dps: Frost DPS, Auto; talents 0502050030003--055500033100030024
     { name = "Frost", icon = "Interface\\Icons\\Spell_Frost_FrostBolt02", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.7402,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.7402,
         ITEM_MOD_CRIT_RATING_SHORT = 0.7402,
@@ -232,17 +240,18 @@ M.SPECS = {
   PALADIN = {
     -- paladin/protection: the sim's defaults; talents 55003-5530513321301501
     { name = "Protection", icon = "Interface\\Icons\\Spell_Holy_DevotionAura", role = "tank",
-      survival = { reference = "Armor", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      survival = { reference = "Armor", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1.7084,
         ITEM_MOD_BLOCK_VALUE_SHORT = 0.3988,
         ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 6.0647,
         ITEM_MOD_DODGE_RATING_SHORT = 1.3873,
         ITEM_MOD_EXPERTISE_RATING_SHORT = 1.6256,
+        ITEM_MOD_EXTRA_ARMOR_SHORT = 0.9098,
         ITEM_MOD_STAMINA_SHORT = 11.2209,
         ITEM_MOD_STRENGTH_SHORT = 0.0219,
         RESISTANCE0_NAME = 1,
       } },
-      threat = { reference = "Strength", mainHand = 6.364, offHand = 0, ranged = 0, weights = {
+      threat = { reference = "Strength", mainHand = 6.364, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1.0874,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.1193,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.4546,
@@ -267,7 +276,7 @@ M.SPECS = {
     },
     -- paladin/retribution: the sim's defaults; talents 550030022001--05225231001330321
     { name = "Retribution", icon = "Interface\\Icons\\Spell_Holy_AuraOfLight", role = "damage",
-      damage = { reference = "Strength", mainHand = 5.405, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Strength", mainHand = 5.405, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 0.99,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.1153,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.4167,
@@ -277,27 +286,34 @@ M.SPECS = {
         ITEM_MOD_CRIT_SPELL_RATING_SHORT = 1.2823,
         ITEM_MOD_EXPERTISE_RATING_SHORT = 1.607,
         ITEM_MOD_HASTE_RATING_SHORT = 1.2848,
+        ITEM_MOD_HIT_MELEE_RATING_SHORT = 2.832,
+        ITEM_MOD_HIT_RANGED_RATING_SHORT = 2.832,
+        ITEM_MOD_HIT_RATING_SHORT = 2.832,
+        ITEM_MOD_HIT_SPELL_RATING_SHORT = 2.832,
         ITEM_MOD_INTELLECT_SHORT = 2.5439,
         ITEM_MOD_SPELL_DAMAGE_DONE_SHORT = 1.4713,
         ITEM_MOD_SPELL_POWER_SHORT = 1.4713,
         ITEM_MOD_STRENGTH_SHORT = 1,
       } },
     },
-    -- paladin/holy: weighted score = 1 * +Healing + 1 * Spell Power + 0.5 * Intellect + 0.5 * Spirit + 2 * MP5; UsefulPlatesAndTooltips starter heuristic, not simulated
+    -- paladin/holy: weighted score = 1 * +Healing, 1 * Spell Power, 0.325 * Intellect, 0.275 * Spirit, 0.6 * MP5, 0.265 * Crit and 0.49 * Haste; the wowsims/forever EP presets for a Holy priest (the mean of 'Holy Raid Healing' and 'Holy Single-Target', tools/data/ep_presets.json), applied to every healer spec; community EP weights, not a ForeverSim run, so the line is marked approximate
     { name = "Holy", icon = "Interface\\Icons\\Spell_Holy_HolyBolt", role = "healing",
       healing = { reference = "Healing", approximate = true, mainHand = 0, offHand = 0, ranged = 0, weights = {
-        ITEM_MOD_INTELLECT_SHORT = 0.5,
-        ITEM_MOD_MANA_REGENERATION_SHORT = 2,
+        ITEM_MOD_CRIT_RATING_SHORT = 0.265,
+        ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.265,
+        ITEM_MOD_HASTE_RATING_SHORT = 0.49,
+        ITEM_MOD_INTELLECT_SHORT = 0.325,
+        ITEM_MOD_MANA_REGENERATION_SHORT = 0.6,
         ITEM_MOD_SPELL_HEALING_DONE_SHORT = 1,
         ITEM_MOD_SPELL_POWER_SHORT = 1,
-        ITEM_MOD_SPIRIT_SHORT = 0.5,
+        ITEM_MOD_SPIRIT_SHORT = 0.275,
       } },
     },
   },
   PRIEST = {
     -- priest/dps: Shadow (talents); talents 005300231303--505120501201300051
     { name = "Shadow", icon = "Interface\\Icons\\Spell_Shadow_ShadowWordPain", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.8943,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.8943,
         ITEM_MOD_CRIT_RATING_SHORT = 0.8943,
@@ -315,12 +331,12 @@ M.SPECS = {
     },
     -- priest/smite: Smite (talents); talents 515330031305001001-30505113002
     { name = "Discipline", icon = "Interface\\Icons\\Spell_Holy_HolySmite", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.3355,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.3355,
         ITEM_MOD_CRIT_RATING_SHORT = 0.3355,
         ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.3355,
-        ITEM_MOD_HASTE_RATING_SHORT = -0.778,
+        ITEM_MOD_HASTE_RATING_SHORT = 0.4508,
         ITEM_MOD_HIT_MELEE_RATING_SHORT = 0.1748,
         ITEM_MOD_HIT_RANGED_RATING_SHORT = 0.1748,
         ITEM_MOD_HIT_RATING_SHORT = 0.1748,
@@ -334,21 +350,24 @@ M.SPECS = {
         ITEM_MOD_SPIRIT_SHORT = 0.7127,
       } },
     },
-    -- priest/holy: weighted score = 1 * +Healing + 1 * Spell Power + 0.5 * Intellect + 0.5 * Spirit + 2 * MP5; UsefulPlatesAndTooltips starter heuristic, not simulated
+    -- priest/holy: weighted score = 1 * +Healing, 1 * Spell Power, 0.325 * Intellect, 0.275 * Spirit, 0.6 * MP5, 0.265 * Crit and 0.49 * Haste; the wowsims/forever EP presets for a Holy priest (the mean of 'Holy Raid Healing' and 'Holy Single-Target', tools/data/ep_presets.json), applied to every healer spec; community EP weights, not a ForeverSim run, so the line is marked approximate
     { name = "Holy", icon = "Interface\\Icons\\Spell_Holy_HolyNova", role = "healing",
       healing = { reference = "Healing", approximate = true, mainHand = 0, offHand = 0, ranged = 0, weights = {
-        ITEM_MOD_INTELLECT_SHORT = 0.5,
-        ITEM_MOD_MANA_REGENERATION_SHORT = 2,
+        ITEM_MOD_CRIT_RATING_SHORT = 0.265,
+        ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.265,
+        ITEM_MOD_HASTE_RATING_SHORT = 0.49,
+        ITEM_MOD_INTELLECT_SHORT = 0.325,
+        ITEM_MOD_MANA_REGENERATION_SHORT = 0.6,
         ITEM_MOD_SPELL_HEALING_DONE_SHORT = 1,
         ITEM_MOD_SPELL_POWER_SHORT = 1,
-        ITEM_MOD_SPIRIT_SHORT = 0.5,
+        ITEM_MOD_SPIRIT_SHORT = 0.275,
       } },
     },
   },
   ROGUE = {
     -- rogue/dps: gear Sinister Strike Pre-BiS, talents Sinister Strike, rotation Auto; talents 00530310501-32003311201515231
     { name = "Combat", icon = "Interface\\Icons\\Spell_Shadow_RitualOfSacrifice", role = "damage",
-      damage = { reference = "Attack Power", mainHand = 11.021, offHand = 3.188, ranged = 0, weights = {
+      damage = { reference = "Attack Power", mainHand = 11.021, offHand = 3.188, ranged = 0, caps = { hit = { kind = "melee", steps = { { 27, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1.9393,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.3771,
         ITEM_MOD_ATTACK_POWER_SHORT = 1,
@@ -368,7 +387,7 @@ M.SPECS = {
     },
     -- rogue/dps: gear Backstab Pre-BiS, talents Backstab, rotation Auto; talents 005302005-30230320201515231-102
     { name = "Subtlety", icon = "Interface\\Icons\\Ability_BackStab", role = "damage",
-      damage = { reference = "Attack Power", mainHand = 10.034, offHand = 3.581, ranged = 0, weights = {
+      damage = { reference = "Attack Power", mainHand = 10.034, offHand = 3.581, ranged = 0, caps = { hit = { kind = "melee", steps = { { 27, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1.9252,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.4003,
         ITEM_MOD_ATTACK_POWER_SHORT = 1,
@@ -388,7 +407,7 @@ M.SPECS = {
     },
     -- rogue/dps: gear Backstab Pre-BiS, talents Mutilate, rotation Auto; talents 00530310551021051-302303202004
     { name = "Assassination", icon = "Interface\\Icons\\Ability_Rogue_Eviscerate", role = "damage",
-      damage = { reference = "Attack Power", mainHand = 8.047, offHand = 4.488, ranged = 0, weights = {
+      damage = { reference = "Attack Power", mainHand = 8.047, offHand = 4.488, ranged = 0, caps = { hit = { kind = "melee", steps = { { 27, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 2.0947,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.4207,
         ITEM_MOD_ATTACK_POWER_SHORT = 1,
@@ -410,7 +429,7 @@ M.SPECS = {
   SHAMAN = {
     -- shaman/elemental: the sim's defaults; talents 5505301300103051--503352001
     { name = "Elemental", icon = "Interface\\Icons\\Spell_Nature_Lightning", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.6036,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.6036,
         ITEM_MOD_CRIT_RATING_SHORT = 0.6036,
@@ -429,7 +448,7 @@ M.SPECS = {
     },
     -- shaman/enhancement: the sim's defaults; talents 5505301-053030031005112251
     { name = "Enhancement", icon = "Interface\\Icons\\Spell_Nature_LightningShield", role = "damage",
-      damage = { reference = "Attack Power", mainHand = 10.223, offHand = 3.531, ranged = 0, weights = {
+      damage = { reference = "Attack Power", mainHand = 10.223, offHand = 3.531, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0.37 }, { 20, 0.33 }, { 27, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 1.1199,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.3429,
         ITEM_MOD_ATTACK_POWER_SHORT = 1,
@@ -450,21 +469,24 @@ M.SPECS = {
         ITEM_MOD_STRENGTH_SHORT = 2,
       } },
     },
-    -- shaman/restoration: weighted score = 1 * +Healing + 1 * Spell Power + 0.5 * Intellect + 0.5 * Spirit + 2 * MP5; UsefulPlatesAndTooltips starter heuristic, not simulated
+    -- shaman/restoration: weighted score = 1 * +Healing, 1 * Spell Power, 0.325 * Intellect, 0.275 * Spirit, 0.6 * MP5, 0.265 * Crit and 0.49 * Haste; the wowsims/forever EP presets for a Holy priest (the mean of 'Holy Raid Healing' and 'Holy Single-Target', tools/data/ep_presets.json), applied to every healer spec; community EP weights, not a ForeverSim run, so the line is marked approximate
     { name = "Restoration", icon = "Interface\\Icons\\Spell_Nature_HealingWaveGreater", role = "healing",
       healing = { reference = "Healing", approximate = true, mainHand = 0, offHand = 0, ranged = 0, weights = {
-        ITEM_MOD_INTELLECT_SHORT = 0.5,
-        ITEM_MOD_MANA_REGENERATION_SHORT = 2,
+        ITEM_MOD_CRIT_RATING_SHORT = 0.265,
+        ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.265,
+        ITEM_MOD_HASTE_RATING_SHORT = 0.49,
+        ITEM_MOD_INTELLECT_SHORT = 0.325,
+        ITEM_MOD_MANA_REGENERATION_SHORT = 0.6,
         ITEM_MOD_SPELL_HEALING_DONE_SHORT = 1,
         ITEM_MOD_SPELL_POWER_SHORT = 1,
-        ITEM_MOD_SPIRIT_SHORT = 0.5,
+        ITEM_MOD_SPIRIT_SHORT = 0.275,
       } },
     },
   },
   WARLOCK = {
     -- warlock/dps: build Deep Affliction 35/0/16 (talents, rotation, pet options), default gear; talents 2535002013521105--05000551
     { name = "Affliction", icon = "Interface\\Icons\\Spell_Shadow_DeathCoil", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.706,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.706,
         ITEM_MOD_CRIT_RATING_SHORT = 0.706,
@@ -484,7 +506,7 @@ M.SPECS = {
     },
     -- warlock/dps: build Demonic Pact 2/31/18 (talents, rotation, pet options), default gear; talents 113-0005003221220311351-0550005
     { name = "Demonology", icon = "Interface\\Icons\\Spell_Shadow_Metamorphosis", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.6825,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.6825,
         ITEM_MOD_CRIT_RATING_SHORT = 0.6825,
@@ -504,7 +526,7 @@ M.SPECS = {
     },
     -- warlock/dps: build Shadow and Flame 13/11/27 (talents, rotation, pet options), default gear; talents 25501-0025003001-055035510010002
     { name = "Destruction", icon = "Interface\\Icons\\Spell_Shadow_RainOfFire", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.6773,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.6773,
         ITEM_MOD_CRIT_RATING_SHORT = 0.6773,
@@ -524,7 +546,7 @@ M.SPECS = {
     },
     -- warlock/dps: default: talents DS/Ruin 24/11/16, rotation Auto, default gear; talents 233500201332-0340003001-0550105
     { name = "Destruction (DS/Ruin)", icon = "Interface\\Icons\\Spell_Shadow_PsychicScream", role = "damage",
-      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Spell Damage", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "spell", steps = { { 17, 0 } } } }, weights = {
         ITEM_MOD_CRIT_MELEE_RATING_SHORT = 0.7564,
         ITEM_MOD_CRIT_RANGED_RATING_SHORT = 0.7564,
         ITEM_MOD_CRIT_RATING_SHORT = 0.7564,
@@ -546,18 +568,19 @@ M.SPECS = {
   WARRIOR = {
     -- warrior/protection: Launch, Protection (talents), Protection (rotation); talents 31--552531233330012531
     { name = "Protection", icon = "Interface\\Icons\\Ability_Warrior_DefensiveStance", role = "tank",
-      survival = { reference = "Armor", mainHand = 0, offHand = 0, ranged = 0, weights = {
+      survival = { reference = "Armor", mainHand = 0, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 3.3134,
         ITEM_MOD_BLOCK_VALUE_SHORT = 0.1112,
         ITEM_MOD_DEFENSE_SKILL_RATING_SHORT = 6.4244,
         ITEM_MOD_DODGE_RATING_SHORT = 1.0943,
         ITEM_MOD_EXPERTISE_RATING_SHORT = 1.5676,
+        ITEM_MOD_EXTRA_ARMOR_SHORT = 0.9091,
         ITEM_MOD_PARRY_RATING_SHORT = 1.1589,
         ITEM_MOD_STAMINA_SHORT = 11.2681,
         ITEM_MOD_STRENGTH_SHORT = 0.0061,
         RESISTANCE0_NAME = 1,
       } },
-      threat = { reference = "Strength", mainHand = 5.988, offHand = 0, ranged = 0, weights = {
+      threat = { reference = "Strength", mainHand = 5.988, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 2.0758,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.4332,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.4277,
@@ -572,13 +595,12 @@ M.SPECS = {
         ITEM_MOD_EXPERTISE_RATING_SHORT = 7.2431,
         ITEM_MOD_HASTE_RATING_SHORT = 1.3303,
         ITEM_MOD_PARRY_RATING_SHORT = 1.28,
-        ITEM_MOD_STAMINA_SHORT = -0.5003,
         ITEM_MOD_STRENGTH_SHORT = 1,
       } },
     },
     -- warrior/dps: Launch (Arms), Arms 39/12/0, DPS (No Reck); talents 32305213132515201-5502
     { name = "Arms", icon = "Interface\\Icons\\Ability_Warrior_SavageBlow", role = "damage",
-      damage = { reference = "Strength", mainHand = 6.552, offHand = 0, ranged = 0, weights = {
+      damage = { reference = "Strength", mainHand = 6.552, offHand = 0, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0.12 }, { 27, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 0.6734,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.2143,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.4546,
@@ -588,12 +610,16 @@ M.SPECS = {
         ITEM_MOD_CRIT_SPELL_RATING_SHORT = 0.8793,
         ITEM_MOD_EXPERTISE_RATING_SHORT = 1.7576,
         ITEM_MOD_HASTE_RATING_SHORT = 1.0387,
+        ITEM_MOD_HIT_MELEE_RATING_SHORT = 1.8533,
+        ITEM_MOD_HIT_RANGED_RATING_SHORT = 1.8533,
+        ITEM_MOD_HIT_RATING_SHORT = 1.8533,
+        ITEM_MOD_HIT_SPELL_RATING_SHORT = 1.8533,
         ITEM_MOD_STRENGTH_SHORT = 1,
       } },
     },
     -- warrior/dps: Launch, DPS, DPS (No Reck); talents 30305013-050520035150310051
     { name = "Fury", icon = "Interface\\Icons\\Ability_Warrior_InnerRage", role = "damage",
-      damage = { reference = "Strength", mainHand = 2.999, offHand = 1.916, ranged = 0, weights = {
+      damage = { reference = "Strength", mainHand = 2.999, offHand = 1.916, ranged = 0, caps = { hit = { kind = "melee", steps = { { 8, 0.34 }, { 27, 0 } } }, exp = { steps = { { 6.5, 0 } } } }, weights = {
         ITEM_MOD_AGILITY_SHORT = 0.6842,
         ITEM_MOD_ARMOR_PENETRATION_RATING_SHORT = 0.1869,
         ITEM_MOD_ATTACK_POWER_SHORT = 0.4546,

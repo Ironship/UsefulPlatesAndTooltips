@@ -1,15 +1,23 @@
 {
-  "source": "UsefulPlatesAndTooltips starter heuristic, not simulated",
-  "model": "weighted score = 1 * +Healing + 1 * Spell Power + 0.5 * Intellect + 0.5 * Spirit + 2 * MP5",
+  "source": "the wowsims/forever EP presets for a Holy priest (the mean of 'Holy Raid Healing' and 'Holy Single-Target', tools/data/ep_presets.json), applied to every healer spec; community EP weights, not a ForeverSim run, so the line is marked approximate",
+  "model": "weighted score = 1 * +Healing, 1 * Spell Power, 0.325 * Intellect, 0.275 * Spirit, 0.6 * MP5, 0.265 * Crit and 0.49 * Haste",
   "reference": "Healing",
   "approximate": true,
-  "specs": ["druid_restoration", "priest_holy", "paladin_holy", "shaman_restoration"],
-  "note": "A DESIGN CHOICE of UsefulPlatesAndTooltips, not an empirical WoW result: ForeverSim does not simulate healing, so no measured stat weights exist for a healer. This one model rates every healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration): the same coefficients for each, for consistency, since none of them can be measured. These coefficients were chosen by hand as a transparent starting approximation and are marked (approx.) in the tooltip. Assumptions documented so the choice can be judged: (1) a point of Spell Power (ITEM_MOD_SPELL_POWER_SHORT) is assumed to be the same bonus as a point of +Healing (ITEM_MOD_SPELL_HEALING_DONE_SHORT), and an item the client reports with both keys is counted through both - if the client ever gives both keys for one bonus, the score counts it twice (the +N Spell Damage and Healing line is assumed to come only under the Healing key here, its Spell Damage key is damage-only and never counted); (2) Intellect and Spirit are worth half a healing point; (3) MP5 (ITEM_MOD_MANA_REGENERATION_SHORT) is worth two healing points; (4) crit, haste, spell ranks, talents, procs, overheal and cast uptime are NOT modelled. The percentage shown is the change in this score against the equipped item - an approximate healer ITEM score, not an actual healing increase. Generated into Weights.lua by tools/make_weights.py.",
+  "specs": [
+    "druid_restoration",
+    "priest_holy",
+    "paladin_holy",
+    "shaman_restoration"
+  ],
+  "note": "ForeverSim does not simulate healing, so no measured stat weights exist for a healer. This one model rates every healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) with the same weights: the sim repo's own EP presets for a Holy priest (Healing 1, Crit 0.265, Haste 0.49, Intellect 0.325, Spirit 0.275, MP5 0.6, the mean of its raid-healing and single-target presets). They replace an earlier hand-chosen guess (Intellect 0.5, Spirit 0.5, MP5 2, no Crit or Haste), which overvalued MP5 three to ten times against these presets. Assumptions: (1) a point of Spell Power (ITEM_MOD_SPELL_POWER_SHORT) is the same bonus as a point of +Healing (ITEM_MOD_SPELL_HEALING_DONE_SHORT), and an item the client reports with both keys is counted through both; (2) the weights are those of a priest and are used for the other healers as they are (a paladin or a shaman may want more Crit or Intellect); (3) spell ranks, talents, procs, overheal and cast uptime are not modelled. The percentage shown is the change in this score against the equipped item: an approximate healer ITEM score, not an actual healing increase. Generated into Weights.lua by tools/make_weights.py.",
   "weights": {
     "ITEM_MOD_SPELL_HEALING_DONE_SHORT": 1.0,
     "ITEM_MOD_SPELL_POWER_SHORT": 1.0,
-    "ITEM_MOD_INTELLECT_SHORT": 0.5,
-    "ITEM_MOD_SPIRIT_SHORT": 0.5,
-    "ITEM_MOD_MANA_REGENERATION_SHORT": 2.0
+    "ITEM_MOD_INTELLECT_SHORT": 0.325,
+    "ITEM_MOD_SPIRIT_SHORT": 0.275,
+    "ITEM_MOD_MANA_REGENERATION_SHORT": 0.6,
+    "ITEM_MOD_HASTE_RATING_SHORT": 0.49,
+    "ITEM_MOD_CRIT_RATING_SHORT": 0.265,
+    "ITEM_MOD_CRIT_SPELL_RATING_SHORT": 0.265
   }
 }
