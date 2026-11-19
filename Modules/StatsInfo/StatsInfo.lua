@@ -27,6 +27,10 @@ local DEFAULTS = {
   bagArrowScale = 100,         -- the arrows' size in percent
   bagNativeUp = true,          -- Blizzard bags: the game's own upgrade arrow for an upgrade (its place is the game's)
   detail = "full",  -- tooltip density: "compact" (one line; Shift or "full" expands it)
+  specFilter = "all", -- which specs are rated, in the tooltip, on the arrows and on quest rewards: "all", "auto" (the talent tree in use) or "manual" (the roles below)
+  specDamage = true,  -- manual: damage specs
+  specTank = true,    -- manual: tank specs (and the tank caps lines)
+  specHealing = true, -- manual: healer specs
 }
 
 -- Inventory slots an item of an equip location goes into. Two slots: compared with each.
@@ -1140,6 +1144,87 @@ local DAMAGE_MEASURES = { "damage" }
 
 local EMPTY = {} -- a read-only stand-in for "nothing to compare with"; never written to
 
+-- Which specs are rated at all (the settings' "Specs to rate"): every spec of the class, the talent
+-- tree the character is in ("auto"), or the roles ticked ("manual"). One place, so the tooltip's
+-- lines, its one-line summary, the bag and quest arrows and the beneficiary icon all agree.
+-- The talent trees of each class in the client's order (TalentTab.OrderIndex): { tab id, the
+-- names of M.SPECS that belong to it }. The id is what C_SpecializationInfo.GetSpecializationInfo
+-- answers in Forever (the TalentTab row), the position is the fallback when a client answers
+-- another id. Feral has two rated specs (Bear, Cat) in one tree, a warlock's Destruction two builds.
+local TREES = {
+  DRUID = { { 283, "Balance" }, { 281, "Feral (Bear)", "Feral (Cat)" }, { 282, "Restoration" } },
+  HUNTER = { { 361, "Beast Mastery" }, { 363, "Marksmanship" }, { 362, "Survival" } },
+  MAGE = { { 81, "Arcane" }, { 41, "Fire" }, { 61, "Frost" } },
+  PALADIN = { { 382, "Holy" }, { 383, "Protection" }, { 381, "Retribution" } },
+  PRIEST = { { 201, "Discipline" }, { 202, "Holy" }, { 203, "Shadow" } },
+  ROGUE = { { 182, "Assassination" }, { 181, "Combat" }, { 183, "Subtlety" } },
+  SHAMAN = { { 261, "Elemental" }, { 263, "Enhancement" }, { 262, "Restoration" } },
+  WARLOCK = { { 302, "Affliction" }, { 303, "Demonology" }, { 301, "Destruction", "Destruction (DS/Ruin)" } },
+  WARRIOR = { { 161, "Arms" }, { 164, "Fury" }, { 163, "Protection" } },
+}
+
+-- The tree the character has its points in (the one the game calls the primary), or nil when the
+-- client does not say (no points yet, a secret, an API this client lacks): then nothing is hidden.
+local function computeTree()
+  local class = charClass()
+  local trees = class and TREES[class]
+  if not trees then return nil end
+  local info = C_SpecializationInfo
+  local getSpec = type(info) == "table" and info.GetSpecialization or GetSpecialization or GetPrimaryTalentTree
+  local getInfo = type(info) == "table" and info.GetSpecializationInfo or GetSpecializationInfo
+  local index = ask(getSpec)
+  if type(index) ~= "number" or isSecret(index) or index < 1 then return nil end
+  local id = ask(getInfo, index)
+  if type(id) == "number" and not isSecret(id) then
+    for _, tree in ipairs(trees) do
+      if tree[1] == id then return tree end
+    end
+  end
+  return trees[index]
+end
+
+local function inTree(tree, spec)
+  for i = 2, #tree do
+    if tree[i] == spec.name then return true end
+  end
+  return false
+end
+
+-- The tree "auto" rates: only when one of the class's rated specs is in it, else nil (all specs).
+local function autoTree(specs)
+  local tree = charFact("tree", computeTree)
+  if not tree then return nil end
+  for _, spec in ipairs(specs) do
+    if inTree(tree, spec) then return tree end
+  end
+  return nil
+end
+
+local function specWanted(spec, mode, tree)
+  if mode == "manual" then
+    local s = settings or DEFAULTS
+    if spec.role == "tank" then return s.specTank ~= false end
+    if spec.role == "healing" then return s.specHealing ~= false end
+    return s.specDamage ~= false
+  end
+  if mode == "auto" and tree then return inTree(tree, spec) end
+  return true
+end
+
+-- Whether any spec of this role ("tank", "healing", "damage") is rated; the tank caps lines follow it.
+local function roleWanted(role)
+  local mode = (settings or DEFAULTS).specFilter
+  if mode ~= "auto" and mode ~= "manual" then return true end
+  local class = charClass()
+  local specs = class and M.SPECS and M.SPECS[class]
+  if not specs then return true end
+  local tree = mode == "auto" and autoTree(specs) or nil
+  for _, spec in ipairs(specs) do
+    if spec.role == role and specWanted(spec, mode, tree) then return true end
+  end
+  return false
+end
+
 local function specRatingsBody(link, against, slots, offHand, alloc)
   if M.CanEquipItem(link) ~= true then return nil end
   local class = charClass()
@@ -1148,38 +1233,42 @@ local function specRatingsBody(link, against, slots, offHand, alloc)
   if not specs then return nil end
   local out = alloc("specRows")
   against = against or EMPTY
+  local mode = (settings or DEFAULTS).specFilter
+  local tree = mode == "auto" and autoTree(specs) or nil
   for _, spec in ipairs(specs) do
-    local row = alloc("specRow")
-    row.spec = spec
-    row.parts = alloc("specRowParts")
-    local measures
-    if spec.role == "tank" then measures = TANK_MEASURES
-    elseif spec.role == "healing" then measures = HEAL_MEASURES
-    else measures = DAMAGE_MEASURES end
-    for _, kind in ipairs(measures) do
-      local measure = spec[kind]
-      local new, old = worthTo(measure, link, offHand, alloc), 0
-      for i, worn in ipairs(against) do old = old + worthTo(measure, worn, slots and slots[i] == 17, alloc) end
-      local part = alloc("specPart")
-      part.kind, part.reference = kind, measure.reference
-      if measure.approximate then part.approx = true end
-      if math.abs(old) > 0.05 then
-        local p = (new - old) / math.abs(old) * 100
-        if p > MAX_PERCENT then part.percent, part.capped = MAX_PERCENT, true
-        elseif p < -MAX_PERCENT then part.percent, part.capped = -MAX_PERCENT, true
-        else part.percent = p end
-      elseif new > 0.05 then
-        part.percent, part.capped = MAX_PERCENT, true -- empty slot / worn worth nothing: past the cap
-        part.noBaseline = true
-      elseif new < -0.05 then
-        part.percent, part.capped = -MAX_PERCENT, true
-        part.noBaseline = true
-      else
-        part.percent = 0
+    if specWanted(spec, mode, tree) then
+      local row = alloc("specRow")
+      row.spec = spec
+      row.parts = alloc("specRowParts")
+      local measures
+      if spec.role == "tank" then measures = TANK_MEASURES
+      elseif spec.role == "healing" then measures = HEAL_MEASURES
+      else measures = DAMAGE_MEASURES end
+      for _, kind in ipairs(measures) do
+        local measure = spec[kind]
+        local new, old = worthTo(measure, link, offHand, alloc), 0
+        for i, worn in ipairs(against) do old = old + worthTo(measure, worn, slots and slots[i] == 17, alloc) end
+        local part = alloc("specPart")
+        part.kind, part.reference = kind, measure.reference
+        if measure.approximate then part.approx = true end
+        if math.abs(old) > 0.05 then
+          local p = (new - old) / math.abs(old) * 100
+          if p > MAX_PERCENT then part.percent, part.capped = MAX_PERCENT, true
+          elseif p < -MAX_PERCENT then part.percent, part.capped = -MAX_PERCENT, true
+          else part.percent = p end
+        elseif new > 0.05 then
+          part.percent, part.capped = MAX_PERCENT, true -- empty slot / worn worth nothing: past the cap
+          part.noBaseline = true
+        elseif new < -0.05 then
+          part.percent, part.capped = -MAX_PERCENT, true
+          part.noBaseline = true
+        else
+          part.percent = 0
+        end
+        row.parts[#row.parts + 1] = part
       end
-      row.parts[#row.parts + 1] = part
+      out[#out + 1] = row
     end
-    out[#out + 1] = row
   end
   return out
 end
@@ -1633,6 +1722,7 @@ end)
 -- GetDodgeChance/GetParryChance/GetBlockChance) plus optionally miss (defense+level).
 local function tankExtraLines(link, alloc)
   if type(link) ~= "string" or isSecret(link) then return alloc("tankLines") end
+  if not roleWanted("tank") then return alloc("tankLines") end -- "Specs to rate" leaves the tanks out
   local loc = equipLoc(link)
   local worn = loc ~= nil and (SLOTS[loc] ~= nil or BOTH_HANDS[loc] == true)
   if not (hasTankSpec() and worn) and not itemHasTankStats(link, alloc) then return alloc("tankLines") end
@@ -2106,9 +2196,20 @@ function M.Probe()
   p.functions["C_Item.GetItemStats"] = type(C_Item and C_Item.GetItemStats)
   p.functions["C_PaperDollInfo"] = type(C_PaperDollInfo)
   p.functions["C_TooltipInfo.GetInventoryItem"] = type(C_TooltipInfo and C_TooltipInfo.GetInventoryItem)
+  -- "Specs to rate: Automatic" asks these: what the client answers for the talent tree in use
+  local specApi = type(C_SpecializationInfo) == "table" and C_SpecializationInfo or {}
+  p.functions["C_SpecializationInfo.GetSpecialization"] = type(specApi.GetSpecialization)
+  p.functions["C_SpecializationInfo.GetSpecializationInfo"] = type(specApi.GetSpecializationInfo)
+  p.functions["GetSpecialization"] = type(GetSpecialization)
+  p.functions["GetPrimaryTalentTree"] = type(GetPrimaryTalentTree)
+  local tree = computeTree()
+  p.specTree = tree and tree[1] or "<none: Automatic rates every spec>"
+  p.specFilter = tostring((settings or DEFAULTS).specFilter)
 
   local v = {}
   for i = 1, 5 do v["UnitStat" .. i] = record(UnitStat, "player", i) end
+  v.GetSpecialization = record(specApi.GetSpecialization or GetSpecialization or GetPrimaryTalentTree)
+  for i = 1, 3 do v["GetSpecializationInfo" .. i] = record(specApi.GetSpecializationInfo or GetSpecializationInfo, i) end
   v.UnitHealthMax = record(UnitHealthMax, "player")
   v.UnitPowerMax0 = record(UnitPowerMax, "player", 0)
   v.UnitArmor = record(UnitArmor, "player")
@@ -2791,6 +2892,22 @@ BIT.RegisterTab("StatsInfo", {
       { tooltip = "The Help tab explains the numbers." })
     tooltipTab:check("icons", "Icons instead of words",
       { tooltip = "Icons and one line each, instead of words." })
+    tooltipTab:header("SPECS TO RATE")
+    tooltipTab:choice("specFilter", "Specs to rate", {
+      { id = "all", label = "All specs of the class" },
+      { id = "auto", label = "Automatic: my talent spec" },
+      { id = "manual", label = "Manual: pick the roles" },
+    }, { tooltip = "Which specs the tooltip rates, the arrows on bags, loot and quest rewards count, and the "
+        .. "spec icon names. Automatic follows the talent tree you have your points in (all specs if the game "
+        .. "does not say). Manual uses the boxes below." })
+    local manualSpecs = function(s) return s.specFilter == "manual" end
+    tooltipTab:check("specDamage", "Damage specs",
+      { enabledIf = manualSpecs, tooltip = "Rate the damage specs of your class. Needs Manual." })
+    tooltipTab:check("specTank", "Tank specs",
+      { enabledIf = manualSpecs, tooltip = "Rate the tank specs, and show the tank caps lines (uncrittable, "
+        .. "avoidance). Needs Manual." })
+    tooltipTab:check("specHealing", "Healer specs",
+      { enabledIf = manualSpecs, tooltip = "Rate the healer specs (an approximate score). Needs Manual." })
     tooltipTab:header("HOW MUCH OF IT")
     tooltipTab.keys[#tooltipTab.keys + 1] = "detail"
     tooltipTab:place(Rows.Check(tooltipTab.content, "Always show the full tooltip",
@@ -2855,6 +2972,8 @@ BIT.RegisterTab("StatsInfo", {
     help:header("HOW EACH SPEC RATES THE ITEM")
     help:text(BIT.L("Each spec of your class rates the item against what you wear: \"25% better dmg spec\" "
       .. "means its stats are worth a quarter more to that spec."))
+    help:text(BIT.L("Specs to rate (Tooltip tab) narrows this to the specs you play: Automatic follows your talent "
+      .. "tree, Manual lets you tick damage, tank and healer. It also decides the arrows and the spec icon."))
     help:text(BIT.L("A tank has two numbers: for survival (less damage taken) and for threat gen. (holding aggro)."))
     help:text(BIT.L("With nothing worth comparing, or a change past the cap: \">300% ...\", at most triple."))
     help:text(BIT.L("Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is "

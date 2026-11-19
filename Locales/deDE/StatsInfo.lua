@@ -137,6 +137,34 @@ BIT.RegisterLocale("deDE", {
     "Aus: eine Zeile, die beste Spezialisierung und ihr Pfeil. Haltet die Umschalttaste gedrückt für die vollständige Aufschlüsselung.",
   ["Hold Shift for the full breakdown."] = "Haltet die Umschalttaste gedrückt für die vollständige Aufschlüsselung.",
 
+  -- Specs to rate
+  ["SPECS TO RATE"] =
+    "ZU BEWERTENDE SPEZIALISIERUNGEN",
+  ["Specs to rate"] =
+    "Zu bewertende Spezialisierungen",
+  ["All specs of the class"] =
+    "Alle Spezialisierungen der Klasse",
+  ["Automatic: my talent spec"] =
+    "Automatisch: meine Talentspezialisierung",
+  ["Manual: pick the roles"] =
+    "Manuell: Rollen wählen",
+  ["Which specs the tooltip rates, the arrows on bags, loot and quest rewards count, and the spec icon names. Automatic follows the talent tree you have your points in (all specs if the game does not say). Manual uses the boxes below."] =
+    "Welche Spezialisierungen der Tooltip bewertet, welche die Pfeile an Taschen, Beute und Questbelohnungen zählen und welche das Spezialisierungssymbol nennt. Automatisch folgt dem Talentbaum, in dem Ihr Eure Punkte habt (alle Spezialisierungen, wenn das Spiel es nicht sagt). Manuell nutzt die Kästchen darunter.",
+  ["Damage specs"] =
+    "Schadens-Spezialisierungen",
+  ["Rate the damage specs of your class. Needs Manual."] =
+    "Die Schadens-Spezialisierungen Eurer Klasse bewerten. Benötigt Manuell.",
+  ["Tank specs"] =
+    "Tank-Spezialisierungen",
+  ["Rate the tank specs, and show the tank caps lines (uncrittable, avoidance). Needs Manual."] =
+    "Die Tank-Spezialisierungen bewerten und die Tank-Grenzwert-Zeilen zeigen (nicht kritisch treffbar, Vermeidung). Benötigt Manuell.",
+  ["Healer specs"] =
+    "Heiler-Spezialisierungen",
+  ["Rate the healer specs (an approximate score). Needs Manual."] =
+    "Die Heiler-Spezialisierungen bewerten (ein ungefährer Wert). Benötigt Manuell.",
+  ["Specs to rate (Tooltip tab) narrows this to the specs you play: Automatic follows your talent tree, Manual lets you tick damage, tank and healer. It also decides the arrows and the spec icon."] =
+    "Zu bewertende Spezialisierungen (Reiter Tooltip) beschränkt dies auf die Spezialisierungen, die Ihr spielt: Automatisch folgt Eurem Talentbaum, Manuell lässt Euch Schaden, Tank und Heiler ankreuzen. Es bestimmt auch die Pfeile und das Spezialisierungssymbol.",
+
   -- the Bag arrows tab
   ["On the game's own bags and the Baganator bag grid: green up when at least one spec's score is outright better and none of it worse."] =
     "In den Taschen des Spiels und im Taschenraster von Baganator: grün nach oben, wenn die Wertung mindestens einer Spezialisierung eindeutig besser ist und keine schlechter.",
