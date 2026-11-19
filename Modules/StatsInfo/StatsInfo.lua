@@ -31,6 +31,9 @@ local DEFAULTS = {
   specDamage = true,  -- manual: damage specs
   specTank = true,    -- manual: tank specs (and the tank caps lines)
   specHealing = true, -- manual: healer specs
+  caps = true,        -- hit and expertise count only up to their caps (spell hit 17%, melee 8%, expertise 6.5%)
+  effects = true,     -- the ratings count an item's effects (trinkets, procs) and its set's bonuses (Effects.lua)
+  consumables = true, -- elixirs, flasks, food, potions and scrolls: what the buff is worth against your gear
 }
 
 -- Inventory slots an item of an equip location goes into. Two slots: compared with each.
@@ -391,6 +394,17 @@ local function compareBody(link, alloc)
     local s = alloc("compSlots")
     s[1] = 16
     compareWith(s, nil, new, comparisons, alloc) -- it goes into the main hand
+    -- ...or, for a dual wielder, into the off hand: with a weapon worn there, the item is also set
+    -- against that one (priced as an off-hand weapon on both sides: compareWith marks the block offHand).
+    -- Judged only against the main hand, a dagger that beats a worn off-hand dagger read as a loss, and
+    -- the bag arrow went red. An empty off hand, a shield or a held item is no off-hand weapon: no block.
+    local offHandItem = equipped(17)
+    local offLoc = offHandItem and equipLoc(offHandItem)
+    if offLoc == "INVTYPE_WEAPON" or offLoc == "INVTYPE_WEAPONOFFHAND" then
+      local o = alloc("compSlots")
+      o[1] = 17
+      compareWith(o, nil, new, comparisons, alloc)
+    end
   elseif #slots == 1 and slots[1] == 17 and mainHand and equipLoc(mainHand) == "INVTYPE_2HWEAPON" then
     local s = alloc("compSlots")
     s[1] = 16
@@ -994,6 +1008,8 @@ function M.WorthParts(key, n)
       local regen = math.floor(healthPer * n * 50 + 0.5) / 10
       if regen ~= 0 then addPart(parts, "hpregen", regen) end -- "+0 health" says nothing
     end
+  elseif key == "ITEM_MOD_EXTRA_ARMOR_SHORT" then
+    addPart(parts, "armor", n) -- "+50 Bonus Armor": armor all the same (the sim weighs it beside Armor)
   elseif key == "ITEM_MOD_HEALTH_SHORT" then
     -- flat health on the item (an enchant or a gem gives it), not through Stamina
     addPart(parts, "health", n)
@@ -1113,13 +1129,34 @@ local RANGED_LOCS = { INVTYPE_RANGED = true, INVTYPE_RANGEDRIGHT = true, INVTYPE
 -- (or would be) in the off hand. A weapon's damage per second has the sim's own weight for where it is:
 -- main hand, off hand or ranged slot (0 where the spec does not fight with it: a caster, the paw of Cat
 -- and Bear Form, an Arms warrior's off hand).
-local function worthTo(measure, link, offHand, alloc)
-  local stats = itemStats(link, alloc)
+-- The health a point of Stamina gives this character (the game's own answer; 10 at level 60 when it gives none).
+local function computeHpPerStamina()
+  local per = num(ask(UnitHPPerStamina, "player"))
+  return per and per > 0 and per or 10
+end
+
+-- The worth of a table of stats (key -> amount) to a measure. Flat health has no weight of its own (the sim
+-- weighs Stamina): it counts as the Stamina it would take to give it, so a flask of 1200 health is worth to a
+-- tank what 120 Stamina is.
+local function statsWorth(measure, stats, skip)
   local total = 0
   for key, amount in pairs(stats) do
     local w = measure.weights[key]
-    if w then total = total + w * amount end
+    if w and not (skip and skip[key]) then total = total + w * amount end
   end
+  local health = stats.ITEM_MOD_HEALTH_SHORT
+  if health and health ~= 0 and not measure.weights.ITEM_MOD_HEALTH_SHORT then
+    local stamina = measure.weights.ITEM_MOD_STAMINA_SHORT
+    if stamina then total = total + stamina * health / charFact("hpPerStamina", computeHpPerStamina) end
+  end
+  return total
+end
+
+local function worthTo(measure, link, offHand, alloc, skip)
+  local stats = itemStats(link, alloc)
+  local total = statsWorth(measure, stats, skip)
+  -- what its effects give on average (a trinket is its use effect; Effects.lua)
+  if M.EffectStats then total = total + statsWorth(measure, M.EffectStats(link), skip) end
   local dps = stats.ITEM_MOD_DAMAGE_PER_SECOND_SHORT
   if dps then
     local w
@@ -1165,15 +1202,11 @@ local TREES = {
 
 -- The tree the character has its points in (the one the game calls the primary), or nil when the
 -- client does not say (no points yet, a secret, an API this client lacks): then nothing is hidden.
-local function computeTree()
-  local class = charClass()
-  local trees = class and TREES[class]
-  if not trees then return nil end
-  local info = C_SpecializationInfo
-  local getSpec = type(info) == "table" and info.GetSpecialization or GetSpecialization or GetPrimaryTalentTree
-  local getInfo = type(info) == "table" and info.GetSpecializationInfo or GetSpecializationInfo
-  local index = ask(getSpec)
-  if type(index) ~= "number" or isSecret(index) or index < 1 then return nil end
+-- The helpers live in one block with computeTree: this file is at Lua's limit of 200 local variables.
+local computeTree
+do
+-- The tree of the client's tab number: by the tab's id when the client answers one, else by position.
+local function treeAt(trees, getInfo, index)
   local id = ask(getInfo, index)
   if type(id) == "number" and not isSecret(id) then
     for _, tree in ipairs(trees) do
@@ -1181,6 +1214,52 @@ local function computeTree()
     end
   end
   return trees[index]
+end
+
+-- The points spent in each of the three trees: { n1, n2, n3 }, or nil when the client does not say (every
+-- answer is the 7th value of GetSpecializationInfo, after id, name, description, icon, role, primary stat).
+local function treePoints(getInfo)
+  local points, any = {}, false
+  for i = 1, 3 do
+    local _, _, _, _, _, _, spent = ask(getInfo, i)
+    if type(spent) == "number" and not isSecret(spent) then
+      points[i] = spent
+      any = true
+    else
+      points[i] = 0
+    end
+  end
+  return any and points or nil
+end
+
+function computeTree()
+  local class = charClass()
+  local trees = class and TREES[class]
+  if not trees then return nil end
+  local info = C_SpecializationInfo
+  local getSpec = type(info) == "table" and info.GetSpecialization or GetSpecialization or GetPrimaryTalentTree
+  local getInfo = type(info) == "table" and info.GetSpecializationInfo or GetSpecializationInfo
+  local index = ask(getSpec)
+  if type(index) ~= "number" or isSecret(index) or index < 1 then index = nil end
+  -- The points decide first: the tree with the most is the character's spec (a hunter with 4 points in
+  -- Beast Mastery and 33 in Survival is Survival), whatever "the primary tree" call says. A tie goes to the
+  -- one the client names, else to the first; no points at all falls back to the client's answer.
+  local points = treePoints(getInfo)
+  if points then
+    local best = 0
+    for i = 1, 3 do
+      if points[i] > best then best = points[i] end
+    end
+    if best > 0 then
+      if index and points[index] == best then return treeAt(trees, getInfo, index) end
+      for i = 1, 3 do
+        if points[i] == best then return treeAt(trees, getInfo, i) end
+      end
+    end
+  end
+  if not index then return nil end
+  return treeAt(trees, getInfo, index)
+end
 end
 
 local function inTree(tree, spec)
@@ -1203,6 +1282,13 @@ end
 local function specWanted(spec, mode, tree)
   if mode == "manual" then
     local s = settings or DEFAULTS
+    -- a single spec can be turned off by name ("Survival"): three hunter specs are all damage
+    local key = spec.pickKey
+    if not key then
+      key = "spec:" .. tostring(spec.name)
+      spec.pickKey = key
+    end
+    if s[key] == false then return false end
     if spec.role == "tank" then return s.specTank ~= false end
     if spec.role == "healing" then return s.specHealing ~= false end
     return s.specDamage ~= false
@@ -1225,6 +1311,162 @@ local function roleWanted(role)
   return false
 end
 
+-- The helpers of the set bonuses and the consumables' lines are fields of one table: this file is at Lua's
+-- limit of 200 local variables.
+local FX = {}
+
+-- The pieces of each counted set that is worn: { [setId] = pieces }, once per build.
+function FX.computeSets() return M.SetCounts(equipped) end
+
+-- The sets a swap touches, and their piece counts before and after it: nil when it touches none.
+function FX.setSwap(link, against)
+  if not M.SetOf then return nil end
+  local newSet = M.SetOf(link)
+  local touched
+  for _, worn in ipairs(against) do
+    local s = M.SetOf(worn)
+    if s then touched = touched or {}; touched[#touched + 1] = s end
+  end
+  if not newSet and not touched then return nil end
+  local counts = charFact("sets", FX.computeSets)
+  if not counts then return nil end
+  local before, after = {}, {}
+  local function touch(s)
+    if before[s] == nil then before[s], after[s] = counts[s] or 0, counts[s] or 0 end
+  end
+  if newSet then touch(newSet); after[newSet] = after[newSet] + 1 end
+  for _, s in ipairs(touched or EMPTY) do touch(s); after[s] = after[s] - 1 end
+  return before, after
+end
+
+-- Hit and expertise are counted by the steps of a measure's `caps` (the game's own caps, see make_weights.py): a
+-- point is worth in full below the first step and, from each step on, the share the step names (0 for a hard cap;
+-- a dual wielder has two steps, 8% for special attacks and 27% for white hits). The value of an item's hit is its
+-- marginal value to the character's total, so a swap that crosses the cap counts only the part below it. Needs the
+-- character's current percentages (Effects.lua: the game's own sheet formulas); where the client does not answer,
+-- the stat is counted in full, as before.
+FX.HIT_KEYS = { ITEM_MOD_HIT_RATING_SHORT = true, ITEM_MOD_HIT_MELEE_RATING_SHORT = true,
+  ITEM_MOD_HIT_RANGED_RATING_SHORT = true, ITEM_MOD_HIT_SPELL_RATING_SHORT = true }
+FX.EXP_KEYS = { ITEM_MOD_EXPERTISE_RATING_SHORT = true }
+
+function FX.capContextBuild(measure)
+  local caps = measure.caps
+  if not caps or not M.CapCurrent then return nil end
+  local ctx = {}
+  local function add(name, keys, current, steps)
+    local weight = 0
+    for key in pairs(keys) do weight = math.max(weight, measure.weights[key] or 0) end
+    local per = M.PercentPerRating(name)
+    local now = M.CapCurrent(current)
+    if weight > 0 and per and now then
+      ctx[#ctx + 1] = { keys = keys, weight = weight, per = per, now = now, steps = steps, name = name }
+    end
+  end
+  if caps.hit then add("hit", FX.HIT_KEYS, caps.hit.kind, caps.hit.steps) end
+  if caps.exp then add("expertise", FX.EXP_KEYS, "expertise", caps.exp.steps) end
+  if #ctx == 0 then return nil end
+  -- the keys the cap terms take over: only those with a cap here (a stat the client did not answer for stays linear)
+  ctx.skip = {}
+  for _, c in ipairs(ctx) do
+    for key in pairs(c.keys) do ctx.skip[key] = true end
+  end
+  return ctx
+end
+
+-- A measure's cap context is kept for a second (the same answers the readings would give, see Effects.lua
+-- M.CapCurrent) and dropped when the gear, an aura, the form or the level change: a bag refresh rates a hundred
+-- items, and each of them used to read the same hit and expertise for every measure of every spec.
+FX.ctxCache = {}
+function FX.computeNow() return ask(GetTime) end
+-- the readings' expiry and the contexts built from them go together
+for _, name in ipairs({ "CapExpire", "CapForget" }) do
+  local base = M[name]
+  if base then
+    M[name] = function(...)
+      FX.ctxCache = {}
+      return base(...)
+    end
+  end
+end
+
+function FX.capContext(measure)
+  if not measure.caps or (M.settings and M.settings.caps == false) then return nil end
+  -- once per build (the measure table is the key: no closure and no string per rating)
+  if memoDepth > 0 then
+    local hit = charMemo[measure]
+    if hit ~= nil then
+      if hit == NO_VALUE then return nil end
+      return hit
+    end
+  end
+  local t = charFact("now", FX.computeNow)
+  local entry = FX.ctxCache[measure]
+  local ctx
+  if entry and type(t) == "number" and t >= entry.t and (t - entry.t) <= 1 then
+    ctx = entry.ctx or nil
+  else
+    ctx = FX.capContextBuild(measure)
+    if type(t) == "number" then FX.ctxCache[measure] = { t = t, ctx = ctx or false } end
+  end
+  if memoDepth > 0 then
+    if ctx == nil then charMemo[measure] = NO_VALUE else charMemo[measure] = ctx end
+  end
+  return ctx
+end
+
+-- The rating of a capped stat an item gives (its stats and the average of its effects): "hit" is the sum of the
+-- four hit keys (an item has one of them), "expertise" the one key. Direct reads: this runs for every item rated.
+function FX.capRating(name, link, alloc)
+  local stats = itemStats(link, alloc)
+  local effects = M.EffectStats and M.EffectStats(link) or EMPTY
+  if name == "hit" then
+    return (stats.ITEM_MOD_HIT_RATING_SHORT or 0) + (stats.ITEM_MOD_HIT_MELEE_RATING_SHORT or 0)
+      + (stats.ITEM_MOD_HIT_RANGED_RATING_SHORT or 0) + (stats.ITEM_MOD_HIT_SPELL_RATING_SHORT or 0)
+      + (effects.ITEM_MOD_HIT_RATING_SHORT or 0) + (effects.ITEM_MOD_HIT_MELEE_RATING_SHORT or 0)
+      + (effects.ITEM_MOD_HIT_RANGED_RATING_SHORT or 0) + (effects.ITEM_MOD_HIT_SPELL_RATING_SHORT or 0)
+  end
+  return (stats.ITEM_MOD_EXPERTISE_RATING_SHORT or 0) + (effects.ITEM_MOD_EXPERTISE_RATING_SHORT or 0)
+end
+
+-- The percentage of x that counts: in full to the first step, then by each step's share.
+function FX.counted(steps, x)
+  local total, from, share = 0, 0, 1
+  for i = 1, #steps do
+    local step = steps[i]
+    if x <= step[1] then return total + (x - from) * share end
+    total = total + (step[1] - from) * share
+    from, share = step[1], step[2]
+  end
+  return total + (x - from) * share
+end
+
+-- What counts of the cap-limited stats, in the measure's own points, for the item and for what it replaces.
+function FX.capTerms(ctx, link, against, alloc)
+  local newValue, oldValue = 0, 0
+  for _, c in ipairs(ctx) do
+    local rNew = FX.capRating(c.name, link, alloc)
+    local rOld = 0
+    for _, worn in ipairs(against) do rOld = rOld + FX.capRating(c.name, worn, alloc) end
+    if rNew ~= 0 or rOld ~= 0 then
+      local base = c.now - rOld * c.per -- the character without what is worn there
+      local counted = FX.counted
+      oldValue = oldValue + c.weight * (counted(c.steps, c.now) - counted(c.steps, base)) / c.per
+      newValue = newValue + c.weight * (counted(c.steps, base + rNew * c.per) - counted(c.steps, base)) / c.per
+    end
+  end
+  return newValue, oldValue
+end
+
+-- What the bonuses of the sets in counts ({ [setId] = pieces }) are worth to a measure.
+function FX.setWorth(measure, counts)
+  local total = 0
+  for set, pieces in pairs(counts) do
+    local bonus = M.SetBonusStats(set, pieces)
+    if bonus then total = total + statsWorth(measure, bonus) end
+  end
+  return total
+end
+
 local function specRatingsBody(link, against, slots, offHand, alloc)
   if M.CanEquipItem(link) ~= true then return nil end
   local class = charClass()
@@ -1235,6 +1477,7 @@ local function specRatingsBody(link, against, slots, offHand, alloc)
   against = against or EMPTY
   local mode = (settings or DEFAULTS).specFilter
   local tree = mode == "auto" and autoTree(specs) or nil
+  local setBefore, setAfter = FX.setSwap(link, against)
   for _, spec in ipairs(specs) do
     if specWanted(spec, mode, tree) then
       local row = alloc("specRow")
@@ -1246,8 +1489,19 @@ local function specRatingsBody(link, against, slots, offHand, alloc)
       else measures = DAMAGE_MEASURES end
       for _, kind in ipairs(measures) do
         local measure = spec[kind]
-        local new, old = worthTo(measure, link, offHand, alloc), 0
-        for i, worn in ipairs(against) do old = old + worthTo(measure, worn, slots and slots[i] == 17, alloc) end
+        local capCtx = FX.capContext(measure) -- hit and expertise, counted up to their caps
+        local skip = capCtx and capCtx.skip or nil
+        local new, old = worthTo(measure, link, offHand, alloc, skip), 0
+        for i, worn in ipairs(against) do old = old + worthTo(measure, worn, slots and slots[i] == 17, alloc, skip) end
+        if capCtx then
+          local capNew, capOld = FX.capTerms(capCtx, link, against, alloc)
+          new, old = new + capNew, old + capOld
+        end
+        -- the bonuses of the sets the swap touches, as they stand after it and as they stood before
+        if setBefore then
+          new = new + FX.setWorth(measure, setAfter)
+          old = old + FX.setWorth(measure, setBefore)
+        end
         local part = alloc("specPart")
         part.kind, part.reference = kind, measure.reference
         if measure.approximate then part.approx = true end
@@ -1869,7 +2123,110 @@ local function tooltipLinesCompact(link, alloc)
   return lines
 end
 
+-- A percentage to one decimal ("14.8", "17"), as the character sheet shows hit and expertise.
+function FX.percentText(v)
+  return (string.format("%.1f", v):gsub("%.0$", ""))
+end
+
+-- A line for an item that gives a capped stat: the cap and where the character stands, for the first spec rated
+-- that has one ("Hit counts up to 17%: you have 14.8%").
+function FX.capNote(link, alloc)
+  if M.settings and M.settings.caps == false then return nil end
+  local class = charClass()
+  local specs = type(class) == "string" and not isSecret(class) and M.SPECS and M.SPECS[class]
+  if not specs then return nil end
+  local mode = (settings or DEFAULTS).specFilter
+  local tree = mode == "auto" and autoTree(specs) or nil
+  for _, spec in ipairs(specs) do
+    if specWanted(spec, mode, tree) then
+      for _, kind in ipairs(spec.role == "tank" and TANK_MEASURES or spec.role == "healing" and HEAL_MEASURES
+          or DAMAGE_MEASURES) do
+        local ctx = FX.capContext(spec[kind])
+        for _, c in ipairs(ctx or EMPTY) do
+          if FX.capRating(c.name, link, alloc) ~= 0 then
+            return string.format(BIT.L(c.name == "hit" and "Hit counts up to %s%%: you have %s%%"
+              or "Expertise counts up to %s%%: you have %s%%"), FX.percentText(c.steps[1][1]), FX.percentText(c.now))
+          end
+        end
+      end
+    end
+  end
+  return nil
+end
+
+-- What a consumable's buff is worth, as a share of what the character's gear is worth, to each spec rated: an
+-- elixir that gives 25 Agility to a character whose gear is worth 2000 Agility is 1.25%. A potion lasts seconds,
+-- a flask hours: the line names how long. Nothing is said for a spec the buff's stats are not worth anything to.
+function FX.gearWorth(measure)
+  local total = 0
+  for _, slot in ipairs(M.WORN_SLOTS) do
+    local worn = equipped(slot)
+    if worn then total = total + worthTo(measure, worn, slot == 17, fresh) end
+  end
+  local counts = charFact("sets", FX.computeSets)
+  if counts then total = total + FX.setWorth(measure, counts) end
+  return total
+end
+
+function M.ConsumableLines(link, alloc)
+  local lines = alloc("lines")
+  local c = M.CONSUMABLES and M.CONSUMABLES[M.ItemIDOf(link)]
+  if not c then return lines end
+  local class = charClass()
+  local specs = type(class) == "string" and not isSecret(class) and M.SPECS and M.SPECS[class]
+  if not specs then return lines end
+  local mode = (settings or DEFAULTS).specFilter
+  local tree = mode == "auto" and autoTree(specs) or nil
+  local rows = take("consumableRows")
+  local buff = M.ExpandStats(c.stats, c.pct) -- the stats of the buff, its percentages as rating of this level
+  for _, spec in ipairs(specs) do
+    if specWanted(spec, mode, tree) then
+      local measures
+      if spec.role == "tank" then measures = TANK_MEASURES
+      elseif spec.role == "healing" then measures = HEAL_MEASURES
+      else measures = DAMAGE_MEASURES end
+      local words = {}
+      for _, kind in ipairs(measures) do
+        local measure = spec[kind]
+        local gear = FX.gearWorth(measure)
+        local value = statsWorth(measure, buff)
+        if gear > 0.05 and math.abs(value) > 0.0005 then
+          local p = value / gear * 100
+          local text = string.format(BIT.L("%s%% %s"), shortNumber(p, true), BIT.L(kind == "damage" and "damage"
+            or kind == "survival" and "survival" or kind == "threat" and "threat" or "healing"))
+          if measure.approximate then text = string.format(BIT.L("%s (approx.)"), text) end
+          words[#words + 1] = coloured(p, text)
+        end
+      end
+      if #words > 0 then
+        rows[#rows + 1] = icon(spec.icon) .. " " .. BIT.L(spec.name) .. ": " .. table.concat(words, ", ")
+      end
+    end
+  end
+  if #rows == 0 then return lines end
+  local divider = alloc("line")
+  divider[1], divider[2], divider[3], divider[4] = DIVIDER, 1, 1, 1
+  lines[#lines + 1] = divider
+  local head = alloc("line")
+  local lasts = M.DurationText(c.kind ~= "food" and c.dur or 0)
+  head[1], head[2], head[3], head[4] = lasts
+    and string.format(BIT.L("The buff is worth, against your gear (%s):"), lasts)
+    or BIT.L("The buff is worth, against your gear:"), 0.4, 0.73, 1
+  lines[#lines + 1] = head
+  for _, text in ipairs(rows) do
+    local l = alloc("line")
+    l[1], l[2], l[3], l[4] = text, 1, 1, 1
+    lines[#lines + 1] = l
+  end
+  return lines
+end
+
 local function tooltipLinesBody(link, gameCompares, alloc)
+  -- an elixir, a flask, food, a potion or a scroll with stats: its buff against the gear, not a comparison
+  if settings and settings.consumables ~= false and M.CONSUMABLES and M.ItemIDOf then
+    local id = M.ItemIDOf(link)
+    if id and M.CONSUMABLES[id] then return M.ConsumableLines(link, alloc) end
+  end
   local allowed = M.CanEquipItem(link)
   if allowed ~= true then
     local lines = alloc("lines")
@@ -2027,6 +2384,24 @@ local function tooltipLinesBody(link, gameCompares, alloc)
       for _, l in ipairs(extra) do lines[#lines + 1] = l end
     end
   end
+  -- What was counted beyond the stats: the item's effects and its set (and what is not rated), and a capped stat.
+  if settings and settings.specs and M.EffectNotes then
+    local ok, notes = pcall(M.EffectNotes, link, charFact("sets", FX.computeSets))
+    local capOk, capLine = pcall(FX.capNote, link, alloc)
+    if ok and capOk and capLine and type(notes) == "table" then notes[#notes + 1] = capLine end
+    if ok and type(notes) == "table" and #notes > 0 then
+      if #lines > 0 and lines[#lines][1] ~= DIVIDER then
+        local l = alloc("line")
+        l[1], l[2], l[3], l[4] = DIVIDER, 1, 1, 1
+        lines[#lines + 1] = l
+      end
+      for _, text in ipairs(notes) do
+        local l = alloc("line")
+        l[1], l[2], l[3], l[4] = text, 0.7, 0.7, 0.7
+        lines[#lines + 1] = l
+      end
+    end
+  end
   return lines
 end
 
@@ -2166,6 +2541,7 @@ local PROBED_FUNCTIONS = {
   "GetItemStats", "GetInventoryItemLink",
   "GetCritChanceFromStat", "GetSpellCritChanceFromStat", "GetDodgeChanceFromAttribute", "UnitHPPerStamina",
   "GetManaRegenFromSpirit", "GetRangedAttackPowerForStat", "GetHealthRegen", "GetHealthRegenFromSpirit",
+  "GetExpertise", "GetRangedHitModifier", "GetOffhandHitModifier", -- the hit and expertise caps ("Count hit and expertise only up to their caps")
 }
 
 local function plain(v)
@@ -2214,6 +2590,18 @@ function M.Probe()
   for i = 1, 5 do v["UnitStat" .. i] = record(UnitStat, "player", i) end
   v.GetSpecialization = record(specApi.GetSpecialization or GetSpecialization or GetPrimaryTalentTree)
   for i = 1, 3 do v["GetSpecializationInfo" .. i] = record(specApi.GetSpecializationInfo or GetSpecializationInfo, i) end
+  -- what the hit and expertise caps read (Effects.lua M.CapCurrent): the character sheet's own formulas
+  v.GetExpertise = record(GetExpertise)
+  v.GetRangedHitModifier = record(GetRangedHitModifier)
+  v.GetCombatRatingBonusHitMelee = record(GetCombatRatingBonus, type(CR_HIT_MELEE) == "number" and CR_HIT_MELEE or 6)
+  v.GetCombatRatingBonusHitSpell = record(GetCombatRatingBonus, type(CR_HIT_SPELL) == "number" and CR_HIT_SPELL or 8)
+  v.GetCombatRatingBonusForValueHit10 = record(GetCombatRatingBonusForCombatRatingValue,
+    type(CR_HIT_MELEE) == "number" and CR_HIT_MELEE or 6, 10)
+  v.ShouldUnitStatsBeSecret = record(C_Secrets and C_Secrets.ShouldUnitStatsBeSecret)
+  if M.CapCurrent then
+    p.capCurrent = { melee = M.CapCurrent("melee"), ranged = M.CapCurrent("ranged"), spell = M.CapCurrent("spell"),
+      expertise = M.CapCurrent("expertise") }
+  end
   v.UnitHealthMax = record(UnitHealthMax, "player")
   v.UnitPowerMax0 = record(UnitPowerMax, "player", 0)
   v.UnitArmor = record(UnitArmor, "player")
@@ -2305,6 +2693,7 @@ loader:SetScript("OnEvent", function(self, event, name)
     hookTooltips()
   else
     tankForget()
+    if M.CapExpire then M.CapExpire() end -- gear, auras, form or level changed: hit and expertise are read again
   end
 end)
 
@@ -2896,6 +3285,18 @@ BIT.RegisterTab("StatsInfo", {
       { tooltip = "The Help tab explains the numbers." })
     tooltipTab:check("icons", "Icons instead of words",
       { tooltip = "Icons and one line each, instead of words." })
+    tooltipTab:check("caps", "Count hit and expertise only up to their caps",
+      { tooltip = "Spell hit counts up to 17%, melee and ranged hit up to 8% (a dual wielder's melee hit is not "
+        .. "capped here), expertise up to 6.5%: above that a point is worth nothing, so an item whose hit you "
+        .. "no longer need is not rated for it. Uses your current hit and expertise as the character sheet "
+        .. "shows them. Off: every point counts in full." })
+    tooltipTab:check("effects", "Count effects and set bonuses in the ratings",
+      { tooltip = "A trinket is mostly its use effect, a set piece its set's bonus: the ratings, the arrows and the "
+        .. "quest reward marks count them (an effect that is up part of the time counts for that part). Damage, "
+        .. "healing and stacking effects are not stats; such an item says it has one that is not rated." })
+    tooltipTab:check("consumables", "Rate elixirs, flasks, food, potions and scrolls",
+      { tooltip = "Under a consumable that gives stats, what its buff is worth to each spec, as a share of what "
+        .. "your gear is worth." })
     tooltipTab:header("SPECS TO RATE")
     tooltipTab:choice("specFilter", "Specs to rate", {
       { id = "all", label = "All specs of the class" },
@@ -2912,6 +3313,22 @@ BIT.RegisterTab("StatsInfo", {
         .. "avoidance). Needs Manual." })
     tooltipTab:check("specHealing", "Healer specs",
       { enabledIf = manualSpecs, tooltip = "Rate the healer specs (an approximate score). Needs Manual." })
+    -- One box per spec of the player's class: the roles above cannot tell a hunter's three damage specs apart.
+    local pickClass = charClass()
+    local pickSpecs = pickClass and M.SPECS and M.SPECS[pickClass]
+    if pickSpecs and #pickSpecs > 1 then
+      tooltipTab:text(BIT.L("Or pick single specs of your class (a spec you turn off here is not rated, "
+        .. "whatever its role says). Needs Manual."), true)
+      for _, spec in ipairs(pickSpecs) do
+        local key = "spec:" .. tostring(spec.name)
+        tooltipTab.keys[#tooltipTab.keys + 1] = key
+        tooltipTab:place(Rows.Check(tooltipTab.content, spec.name,
+          function() return (settings or DEFAULTS)[key] ~= false end,
+          function(v) apply(key, v) end,
+          rowOpts({ enabledIf = manualSpecs,
+            tooltip = "Rate this spec. Off: its lines, arrows and quest marks are left out. Needs Manual." })))
+      end
+    end
     tooltipTab:header("HOW MUCH OF IT")
     tooltipTab.keys[#tooltipTab.keys + 1] = "detail"
     tooltipTab:place(Rows.Check(tooltipTab.content, "Always show the full tooltip",
@@ -2973,19 +3390,31 @@ BIT.RegisterTab("StatsInfo", {
       .. "Health regeneration from Spirit is the character sheet's own number (standing, out of combat), taken "
       .. "per point of Spirit: it assumes the two are proportional. "
       .. "In combat the game may hide these numbers; then the line is left out."))
+    help:header("HIT AND EXPERTISE CAPS")
+    help:text(BIT.L("Hit and expertise stop mattering at a cap: spell hit at 17%, melee and ranged hit at 8%, expertise "
+      .. "at 6.5% (the simulator's own caps for each spec). The ratings count them only up to the cap, from the hit and "
+      .. "expertise your character has now, so an item whose hit you no longer need is not rated for it, and one "
+      .. "that takes you across the cap is rated for the part below it."))
+    help:header("EFFECTS, SETS AND CONSUMABLES")
+    help:text(BIT.L("Beside its stats, an item can have an effect (a trinket's use, a weapon's proc) and a set bonus. "
+      .. "Those that give stats are counted at the share of the time they are up: 280 attack power for 20 s every "
+      .. "120 s counts as 17% of it. A proc by chance per hit is an estimate (one eligible hit every two seconds)."))
+    help:text(BIT.L("Damage, healing and absorb effects and stacking effects are not stats and are not rated: the "
+      .. "tooltip says so. Under an elixir, flask, food, potion or scroll with stats the lines are what its buff is "
+      .. "worth, as a share of what your gear is worth."), true)
     help:header("HOW EACH SPEC RATES THE ITEM")
     help:text(BIT.L("Each spec of your class rates the item against what you wear: \"25% better dmg spec\" "
       .. "means its stats are worth a quarter more to that spec."))
     help:text(BIT.L("Specs to rate (Tooltip tab) narrows this to the specs you play: Automatic follows your talent "
-      .. "tree, Manual lets you tick damage, tank and healer. It also decides the arrows and the spec icon."))
+      .. "tree, Manual lets you tick damage, tank and healer, or single specs. It also decides the arrows and the spec icon."))
     help:text(BIT.L("A tank has two numbers: for survival (less damage taken) and for threat gen. (holding aggro)."))
     help:text(BIT.L("With nothing worth comparing, or a change past the cap: \">300% ...\", at most triple."))
     help:text(BIT.L("Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is "
-      .. "rated by this addon's own starter heuristic, and its line is marked \"(approx.)\": "
+      .. "rated by one shared healer model, and its line is marked \"(approx.)\": "
       .. "an approximate item score, not a measured healing gain."))
-    help:text(BIT.L("Its weights are design choices of this addon (tools/data/healer_weights.json): "
-      .. "1 x +Healing, 1 x Spell Power, 0.5 x Intellect, 0.5 x Spirit and 2 x MP5. "
-      .. "Every other stat counts for nothing to it."))
+    help:text(BIT.L("Its weights are the simulator repo's EP presets for a Holy priest, the mean of raid and "
+      .. "single-target healing (tools/data/healer_weights.json): 1 x +Healing, 1 x Spell Power, 0.325 x Intellect, "
+      .. "0.275 x Spirit, 0.6 x MP5, 0.265 x Crit and 0.49 x Haste. Every other stat counts for nothing to it."))
     help:text(BIT.L("The other ratings use ForeverSim's stat weights, measured on a level 60 build of each spec "
       .. "with its own talents, gear and buffs: below 60 they are an estimate."), true)
     help:text(BIT.L("A weapon's damage per second counts as the simulator weighs it for the spec: main hand, "

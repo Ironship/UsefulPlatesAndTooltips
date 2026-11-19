@@ -100,6 +100,8 @@ Modules\DoTInfo\TickViewer.lua
 Modules\DoTInfo\API.lua
 
 Modules\StatsInfo\Weights.lua
+Modules\StatsInfo\EffectData.lua
+Modules\StatsInfo\Effects.lua
 Modules\StatsInfo\StatsInfo.lua
 Modules\StatsInfo\BagMarkers.lua
 Modules\StatsInfo\WorldMarkers.lua

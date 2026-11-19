@@ -122,10 +122,10 @@ BIT.RegisterLocale("ruRU", {
     "Для танка указываются два значения: выживаемость (снижение получаемого урона) и создание угрозы (удержание противников).",
   ["With nothing worth comparing, or a change past the cap: \">300% ...\", at most triple."] =
     "Если сравнивать не с чем или изменение превышает ограничение: «>300% ...», максимум втрое.",
-  ["Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is rated by this addon's own starter heuristic, and its line is marked \"(approx.)\": an approximate item score, not a measured healing gain."] =
-    "Каждая специализация целителя (друид «Исцеление», жрец «Свет», паладин «Свет», шаман «Исцеление») оценивается по начальной эвристике аддона; строка помечена «(прибл.)». Это примерная оценка предмета, а не измеренный прирост исцеления.",
-  ["Its weights are design choices of this addon (tools/data/healer_weights.json): 1 x +Healing, 1 x Spell Power, 0.5 x Intellect, 0.5 x Spirit and 2 x MP5. Every other stat counts for nothing to it."] =
-    "Веса заданы разработчиками аддона (tools/data/healer_weights.json): 1 × бонус к исцелению, 1 × сила заклинаний, 0,5 × интеллект, 0,5 × дух и 2 × MP5. Все прочие характеристики не учитываются.",
+  ["Each healer spec (druid Restoration, priest Holy, paladin Holy, shaman Restoration) is rated by one shared healer model, and its line is marked \"(approx.)\": an approximate item score, not a measured healing gain."] =
+    "Каждая специализация целителя (друид «Исцеление», жрец «Свет», паладин «Свет», шаман «Исцеление») оценивается по единой модели целителя, а её строка помечена «(прибл.)»: это приблизительная оценка предмета, а не измеренный прирост исцеления.",
+  ["Its weights are the simulator repo's EP presets for a Holy priest, the mean of raid and single-target healing (tools/data/healer_weights.json): 1 x +Healing, 1 x Spell Power, 0.325 x Intellect, 0.275 x Spirit, 0.6 x MP5, 0.265 x Crit and 0.49 x Haste. Every other stat counts for nothing to it."] =
+    "Её веса — пресеты EP из репозитория симулятора для жреца «Свет», среднее значение для исцеления рейда и одной цели (tools/data/healer_weights.json): 1 × бонус к исцелению, 1 × сила заклинаний, 0,325 × интеллект, 0,275 × дух, 0,6 × MP5, 0,265 × крит и 0,49 × скорость. Все прочие характеристики для неё ничего не значат.",
   ["The other ratings use ForeverSim's stat weights, measured on a level 60 build of each spec with its own talents, gear and buffs: below 60 they are an estimate."] =
     "Для остальных оценок используются веса характеристик ForeverSim, измеренные на персонажах 60-го уровня для каждой специализации с её талантами, экипировкой и усилениями. Для уровней ниже 60 это приблизительная оценка.",
   ["A weapon's damage per second counts as the simulator weighs it for the spec: main hand, off hand and ranged slot apart."] =
@@ -136,6 +136,64 @@ BIT.RegisterLocale("ruRU", {
   ["Off: one line, the best spec and its arrow. Hold Shift for the full breakdown."] =
     "Если выключено: одна строка с лучшей специализацией и стрелкой. Удерживайте Shift, чтобы увидеть подробности.",
   ["Hold Shift for the full breakdown."] = "Удерживайте Shift, чтобы увидеть подробности.",
+
+  -- hit and expertise caps
+  ["Count hit and expertise only up to their caps"] =
+    "Учитывать меткость и мастерство только до их предела",
+  ["Spell hit counts up to 17%, melee and ranged hit up to 8% (a dual wielder's melee hit is not capped here), expertise up to 6.5%: above that a point is worth nothing, so an item whose hit you no longer need is not rated for it. Uses your current hit and expertise as the character sheet shows them. Off: every point counts in full."] =
+    "Меткость заклинаний учитывается до 17%, меткость в ближнем и дальнем бою до 8% (меткость ближнего боя у бойца с двумя оружиями здесь не ограничена), мастерство до 6,5%: выше предела очко ничего не стоит, поэтому предмет, меткость которого вам уже не нужна, за неё не оценивается. Используются ваши текущие меткость и мастерство, как их показывает окно персонажа. Выключено: каждое очко учитывается полностью.",
+  ["HIT AND EXPERTISE CAPS"] =
+    "ПРЕДЕЛЫ МЕТКОСТИ И МАСТЕРСТВА",
+  ["Hit and expertise stop mattering at a cap: spell hit at 17%, melee and ranged hit at 8%, expertise at 6.5% (the simulator's own caps for each spec). The ratings count them only up to the cap, from the hit and expertise your character has now, so an item whose hit you no longer need is not rated for it, and one that takes you across the cap is rated for the part below it."] =
+    "Меткость и мастерство перестают иметь значение на пределе: меткость заклинаний на 17%, меткость в ближнем и дальнем бою на 8%, мастерство на 6,5% (пределы симулятора для каждой специализации). Оценка учитывает их только до предела, исходя из текущих меткости и мастерства вашего персонажа: предмет, меткость которого вам уже не нужна, за неё не оценивается, а предмет, выводящий за предел, оценивается за часть ниже него.",
+  ["Hit counts up to %s%%: you have %s%%"] =
+    "Меткость учитывается до %s%%: у вас %s%%",
+  ["Expertise counts up to %s%%: you have %s%%"] =
+    "Мастерство учитывается до %s%%: у вас %s%%",
+
+  -- effects, set bonuses and consumables
+  ["Count effects and set bonuses in the ratings"] =
+    "Учитывать эффекты и бонусы комплектов в оценке",
+  ["A trinket is mostly its use effect, a set piece its set's bonus: the ratings, the arrows and the quest reward marks count them (an effect that is up part of the time counts for that part). Damage, healing and stacking effects are not stats; such an item says it has one that is not rated."] =
+    "Аксессуар — это в основном его эффект при использовании, часть комплекта — бонус комплекта: оценки, стрелки и отметки наград за задания их учитывают (эффект, действующий часть времени, учитывается в этой доле). Эффекты урона, лечения и накопления не являются характеристиками; у такого предмета указано, что один из эффектов не оценивается.",
+  ["Rate elixirs, flasks, food, potions and scrolls"] =
+    "Оценивать эликсиры, настои, еду, зелья и свитки",
+  ["Under a consumable that gives stats, what its buff is worth to each spec, as a share of what your gear is worth."] =
+    "Под расходуемым предметом с характеристиками: чего стоит его эффект для каждой специализации, в долях стоимости вашей экипировки.",
+  ["EFFECTS, SETS AND CONSUMABLES"] =
+    "ЭФФЕКТЫ, КОМПЛЕКТЫ И РАСХОДУЕМЫЕ ПРЕДМЕТЫ",
+  ["Beside its stats, an item can have an effect (a trinket's use, a weapon's proc) and a set bonus. Those that give stats are counted at the share of the time they are up: 280 attack power for 20 s every 120 s counts as 17% of it. A proc by chance per hit is an estimate (one eligible hit every two seconds)."] =
+    "Помимо характеристик у предмета может быть эффект (использование аксессуара, срабатывание оружия) и бонус комплекта. Те, что дают характеристики, учитываются в доле времени их действия: 280 силы атаки на 20 с каждые 120 с считаются как 17%. Срабатывание с шансом за удар — оценка (одно подходящее попадание раз в две секунды).",
+  ["Damage, healing and absorb effects and stacking effects are not stats and are not rated: the tooltip says so. Under an elixir, flask, food, potion or scroll with stats the lines are what its buff is worth, as a share of what your gear is worth."] =
+    "Эффекты урона, лечения, поглощения и накопления не являются характеристиками и не оцениваются: подсказка об этом сообщает. Под эликсиром, настоем, едой, зельем или свитком с характеристиками показано, чего стоит его эффект, в долях стоимости вашей экипировки.",
+  ["%d hr"] =
+    "%d ч",
+  ["%d min"] =
+    "%d мин",
+  ["%d sec"] =
+    "%d с",
+  ["Use: %s for %s every %s, counted at %d%%"] =
+    "Использование: %s на %s каждые %s, учтено на %d%%",
+  ["Proc: %s for %s, counted at about %d%%"] =
+    "Срабатывание: %s на %s, учтено примерно на %d%%",
+  ["Proc: %s for %s, counted at %d%%"] =
+    "Срабатывание: %s на %s, учтено на %d%%",
+  ["Effect counted: %s"] =
+    "Эффект учтён: %s",
+  ["Set bonuses are counted: %d pieces worn"] =
+    "Бонусы комплекта учтены: надето предметов — %d",
+  ["Another effect of this item is not rated"] =
+    "Другой эффект этого предмета не оценивается",
+  ["Another effect of this set is not rated"] =
+    "Другой эффект этого комплекта не оценивается",
+  ["The buff is worth, against your gear (%s):"] =
+    "Эффект стоит, по сравнению с вашей экипировкой (%s):",
+  ["The buff is worth, against your gear:"] =
+    "Эффект стоит, по сравнению с вашей экипировкой:",
+  ["survival"] =
+    "выживаемость",
+  ["threat"] =
+    "угроза",
 
   -- Specs to rate
   ["SPECS TO RATE"] =
@@ -162,8 +220,12 @@ BIT.RegisterLocale("ruRU", {
     "Специализации лекаря",
   ["Rate the healer specs (an approximate score). Needs Manual."] =
     "Оценивать специализации лекаря (приблизительная оценка). Требуется режим «Вручную».",
-  ["Specs to rate (Tooltip tab) narrows this to the specs you play: Automatic follows your talent tree, Manual lets you tick damage, tank and healer. It also decides the arrows and the spec icon."] =
-    "«Оцениваемые специализации» (вкладка «Подсказка») ограничивает оценку теми специализациями, в которые вы играете: «Автоматически» следует вашей ветке талантов, «Вручную» позволяет отметить урон, танка и лекаря. От этого зависят и стрелки со значком специализации.",
+  ["Or pick single specs of your class (a spec you turn off here is not rated, whatever its role says). Needs Manual."] =
+    "Или выберите отдельные специализации вашего класса (отключённая здесь специализация не оценивается, независимо от её роли). Требуется режим «Вручную».",
+  ["Rate this spec. Off: its lines, arrows and quest marks are left out. Needs Manual."] =
+    "Оценивать эту специализацию. Выключено: её строки, стрелки и отметки заданий не показываются. Требуется режим «Вручную».",
+  ["Specs to rate (Tooltip tab) narrows this to the specs you play: Automatic follows your talent tree, Manual lets you tick damage, tank and healer, or single specs. It also decides the arrows and the spec icon."] =
+    "«Оцениваемые специализации» (вкладка «Подсказка») ограничивает оценку теми специализациями, в которые вы играете: «Автоматически» следует вашей ветке талантов, «Вручную» позволяет отметить урон, танка и лекаря или отдельные специализации. От этого зависят и стрелки со значком специализации.",
 
   -- вкладка «Стрелки сумки»
   ["On the game's own bags and the Baganator bag grid: green up when at least one spec's score is outright better and none of it worse."] =
