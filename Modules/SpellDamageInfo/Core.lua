@@ -1533,6 +1533,31 @@ local function recollectButtons()
 end
 ns.RecollectButtons = recollectButtons
 
+-- Buttons of other addons that want the same numbers (the public SpellDamageInfo API, API.md). `button.action` is the action
+-- slot the button shows, read like a Blizzard button's; the button is a frame that can make a FontString. The list is kept in
+-- `buttons` with the rest, so a refresh draws them with the same rules and settings (the "Show" kinds, DPS mode, sizes).
+local externalButtons = {}
+
+function ns.RegisterButton(button)
+  if type(button) ~= "table" or type(button.CreateFontString) ~= "function" then return false end
+  if externalButtons[button] then return true end
+  externalButtons[button] = true
+  local listed = false
+  for _, known in ipairs(buttons) do
+    if known == button then listed = true; break end
+  end
+  if not listed then buttons[#buttons + 1] = button end
+  if ns.RefreshButton then ns.RefreshButton(button)
+  elseif ns.Refresh then ns.Refresh() end
+  return true
+end
+
+function ns.UnregisterButton(button)
+  if not externalButtons[button] then return end
+  externalButtons[button] = nil
+  dropListed(buttons, function(known) return known == button end)
+end
+
 local function spellOnSlot(slot)
   if isSecret(slot) or type(slot) ~= "number" or type(GetActionInfo) ~= "function" then return nil end
   local ok, kind, id, sub = pcall(GetActionInfo, slot)
@@ -2116,6 +2141,13 @@ local function updateButton(button, pet)
   d.count, d.width, d.height, d.size, d.position, d.sidePosition = countShown, width, height, db.size, db.position, db.sidePosition
   local side = sideText and getSideLabel(button) or sideLabels[button]
   drawNumber(button, getLabel(button), side, mainText, mainColor, sideText, countShown, sideColor, layout)
+end
+
+-- Immediately refreshes a single registered button (e.g. a wheel slot whose .action just changed),
+-- avoiding the 100-250 ms coalescing gap so stale numbers from another page never flash.
+function ns.RefreshButton(button)
+  if not db or not externalButtons[button] then return false end
+  return pcall(updateButton, button, false)
 end
 
 -- A refresh walks every button (a hundred on a full set of bars: the character's own bars and the crossbar's pages) and took

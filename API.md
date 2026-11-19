@@ -26,7 +26,7 @@ Additions can raise a version; incompatible contracts need a different API name.
 
 | Function | Result |
 |---|---|
-| `API.Get(name)` | `"DoT"` or `"CastPrediction"` API table, or `nil` if absent or disabled |
+| `API.Get(name)` | `"DoT"`, `"CastPrediction"` or `"SpellDamageInfo"` API table, or `nil` if absent or disabled |
 | `API.GetVersion(name)` | Sub-API version, or `nil` |
 | `API.GetModules()` | A new list of enabled sub-API names |
 | `API.GetEvents()` | A new list of declared event names, including disabled modules |
@@ -176,3 +176,31 @@ DoT and cast estimates are plain numbers, so consumers may add their first retur
 `DoT.GetRemainingDamage(unit) + Cast.GetPredictedDamage(unit)`. Check both APIs exist before doing so.
 
 `Modules/DoTInfo/Nameplates.lua` and `Focus.lua` are full examples, with smoothing, per-DoT segments and layering.
+
+## SpellDamageInfo API (version 1)
+
+`API.Get("SpellDamageInfo")` returns the API while the SpellDamageInfo module is enabled. It lets a bar or window of
+your own show the damage and healing numbers SpellDamageInfo draws on action buttons, with the same formatting and
+the player's settings.
+
+### `SpellDamageInfo.RegisterButton(button) -> boolean`
+
+`button` is a frame (anything that can create a FontString) whose field `button.action` is the action slot it shows, read
+the way a Blizzard action button's is: a spell, a `/cast` macro or a consumable item on that slot gets its number. Change
+`button.action` whenever the slot changes; the number follows at the next refresh (`Refresh()` asks for one at once).
+Returns `true` when the button was taken. Register it again harmlessly; register it only while it is shown if there are
+many of them, since every registered button is looked at in each refresh.
+
+### `SpellDamageInfo.UnregisterButton(button)`
+
+Stops drawing on the button and hides its numbers.
+
+### `SpellDamageInfo.Refresh([button])`
+
+Asks for the numbers to be worked out again soon. When given a registered `button`, updates that button immediately on
+the current frame.
+
+### `SpellDamageInfo.RefreshButton(button) -> boolean`
+
+Immediately redraws the numbers on a single registered `button` without waiting for the coalesced refresh timer (useful
+when a wheel or paged frame swaps `button.action` on open). Returns `true` when updated.

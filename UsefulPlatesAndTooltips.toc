@@ -64,6 +64,7 @@ Modules\SpellDamageInfo\Parser_koKR.lua
 Modules\SpellDamageInfo\Estimate.lua
 Modules\SpellDamageInfo\History.lua
 Modules\SpellDamageInfo\Core.lua
+Modules\SpellDamageInfo\API.lua
 Modules\SpellDamageInfo\Options.lua
 
 # CastPrediction: the damage a cast in flight should deal, on the target's bar and plates
