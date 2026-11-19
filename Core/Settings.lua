@@ -262,7 +262,12 @@ function UI.RegisterSettingsLauncher(title, tooltip, onClick)
       or type(Settings.RegisterAddOnCategory) ~= "function"
       or type(CreateSettingsButtonInitializer) ~= "function" then return false end
   local category = Settings.RegisterVerticalLayoutCategory(title)
-  local initializer = CreateSettingsButtonInitializer(title, BIT.L("Open settings"), onClick, tooltip, true)
+  -- addSearchTags false: with true, the Blizzard function writes the row's searchTags while it runs
+  -- under this addon's taint, and the settings search (SettingsPanel:FindInitializersMatchingSearchText)
+  -- reads them for every category: the rest of that search ran tainted by us, so the Social tab's
+  -- C_Discord.IsUserOAuthed() was refused as a forbidden action (issue #72, the Discord button then
+  -- read "sign in"). Blizzard's own launcher buttons pass false for the same reason.
+  local initializer = CreateSettingsButtonInitializer(title, BIT.L("Open settings"), onClick, tooltip, false)
   Settings.RegisterInitializer(category, initializer)
   Settings.RegisterAddOnCategory(category)
   return true
