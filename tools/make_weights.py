@@ -10,7 +10,7 @@ the melee and the spell pool, so an item's hit is worth the melee and the spell 
 its crit (and its haste, which items give as one rating). A weapon's damage per second has the sim's own
 weight, main hand, off hand and ranged apart. The healers (druid Restoration, priest Holy, paladin
 Holy, shaman Restoration) have no sim weights: ForeverSim does not simulate healing, so those specs
-are rated by UsefulPlatesAndTooltips's own starter heuristic from tools/data/healer_weights.json (an
+are rated by the sim repo's EP presets for a Holy priest (tools/data/healer_weights.json; an
 approximation, not a measured result).
 """
 import json
@@ -61,12 +61,15 @@ KEYS = {
     "Block Value": ["ITEM_MOD_BLOCK_VALUE_SHORT"],
     "MP5": ["ITEM_MOD_MANA_REGENERATION_SHORT"],
     "Armor": ["RESISTANCE0_NAME"],
+    # "+50 Bonus Armor" (item stat 50, 314 items: Mithril Insignia, Band of the Great Tortoise, the Defender weapons):
+    # a stat of its own in the client's item stats (ITEM_MOD_EXTRA_ARMOR_SHORT), and the sim weighs it separately
+    # from Armor (about nine tenths of it: bonus armor escapes the percent armor modifiers).
+    "Bonus Armor": ["ITEM_MOD_EXTRA_ARMOR_SHORT"],
 }
 # A weapon's damage per second, by where the weapon is.
 WEAPONS = {"Main Hand DPS": "mainHand", "Off Hand DPS": "offHand", "Ranged DPS": "ranged"}
-# Not item stats, or not ones an item's stat list carries: mana, armor on top of the base (GetItemStats
-# gives the item's whole armor), spell piercing.
-SKIPPED = {"Mana", "Bonus Armor", "Spell Piercing"}
+# Not item stats, or not ones an item's stat list carries: mana, spell piercing (no run has a weight for it).
+SKIPPED = {"Mana", "Spell Piercing"}
 # What each of a spec's measures is, and the sim's metric for it.
 # A tank's survival is the sim's TMI (Theck-Meloree Index): how big the damage spikes are against the tank's
 # health, so Stamina counts as well as armor and avoidance; its damage taken per second (DTPS) gave Stamina
@@ -75,7 +78,7 @@ SKIPPED = {"Mana", "Bonus Armor", "Spell Piercing"}
 METRICS = {"damage": "DPS", "threat": "TPS", "survival": "TMI"}
 
 # A healer's measure is NOT a ForeverSim run: ForeverSim does not simulate healing, so its weights
-# cannot be measured. It is UsefulPlatesAndTooltips's own starter heuristic, kept in tools/data/healer_weights.json
+# cannot be measured. It is the sim repo's community EP for a Holy priest, kept in tools/data/healer_weights.json
 # (its coefficients are DESIGN CHOICES, provenance and assumptions documented there), born the same way
 # into Weights.lua with approximate = true so the tooltip marks it "(approx.)". The same model rates
 # every healer spec (one file, several entries in SPECS below). HEALER_RUNS keeps the two sources
@@ -142,6 +145,96 @@ SPECS = {
 }
 
 
+# ForeverSim leaves a stat out of a run when the run's gear has it capped (no Melee Hit Rating at all for Arms,
+# Retribution and Survival: their sim gear is at the hit cap), which this table would read as "hit is worthless", and
+# a few weights come out negative (a mana-limited build that runs dry sooner with Haste), which count as 0. For a
+# player under the cap an item's hit is the most valuable stat it can have, so both gaps are filled from the sim
+# repo's own EP presets (tools/data/ep_presets.json), as a ratio to a stat the run did measure:
+#   weight = the run's anchor weight x preset(stat) / preset(anchor), the mean of the presets named.
+# (run, measure, stat to fill, anchor stat in the run, [presets], preset stat, preset anchor stat)
+EP_FILLS = [
+    ("warrior_arms", "damage", "Melee Hit Rating", "Melee Crit Rating", ["warrior__dps/Pre-BiS - Arms"],
+     "StatHitRating", "StatCritRating"),
+    ("paladin_retribution", "damage", "Melee Hit Rating", "Melee Crit Rating",
+     ["paladin__retribution/Holy Shock", "paladin__retribution/Unsealed Wrath"], "StatHitRating", "StatCritRating"),
+    ("hunter_sv", "damage", "Melee Hit Rating", "Melee Crit Rating", ["hunter__dps/Melee"],
+     "StatHitRating", "StatCritRating"),
+    ("hunter_mm", "damage", "Melee Haste Rating", "Melee Crit Rating", ["hunter__dps/Turret"],
+     "StatHasteRating", "StatCritRating"),
+    ("priest_smite", "damage", "Spell Haste Rating", "Spell Crit Rating", ["priest__dps/Smite"],
+     "StatHasteRating", "StatCritRating"),
+]
+EP_PRESETS = json.load(open(os.path.join(ROOT, "tools", "data", "ep_presets.json"), encoding="utf-8"))["presets"]
+
+
+def fill_from_presets(metric, run_name, kind):
+    """Adds the weights EP_FILLS names to the metric where the run has none (or a negative one)."""
+    for run, measure, stat, anchor, presets, p_stat, p_anchor in EP_FILLS:
+        if run != run_name or measure != kind:
+            continue
+        value, ci = metric.get(stat, [0, 0])
+        if value > 0 and value >= ci:
+            continue
+        base = metric.get(anchor, [0, 0])[0]
+        ratios = [EP_PRESETS[p][p_stat] / EP_PRESETS[p][p_anchor] for p in presets]
+        if base <= 0 or not ratios:
+            continue
+        ratio = sum(ratios) / len(ratios)
+        metric[stat] = [base * ratio, 0]
+        print(f"  {run_name} {kind}: {stat} had {value:+.4f}, filled as {ratio:.2f} x {anchor} from {', '.join(presets)}")
+
+
+# The caps of a spec. The numbers are the game's own: the Forever character sheet's hit tooltip lists them
+# (CR_<CLASS>_HIT_CAP_TOOLTIP in the client's GlobalStrings: "To never miss Raid Bosses: 8.00% Melee/Ranged, 17.00%
+# Spells, 27.00% Dual Wielding"; the expertise tooltip: a raid boss dodges 6.50%), and they are the sim repo's
+# (ui/specs/<class>/<spec>/spec.ts: statCaps, softCapBreakpoints). A step is (percentage, what a point is worth
+# from there on, as a share of what it is worth below the first step); the last step of a dual wielder or of
+# Arms is 0. The shares come from the sim's postCapEPs against the same preset's hit EP: Fury 0.57 of 1.69,
+# Arms 0.57 of 4.70, Enhancement 1.9 and 1.73 of 5.20 (tools/data/ep_presets.json). A rogue's 3.06 between 8 and
+# 27 is more than its 2.42 below 8, so a rogue's hit counts in full up to 27. StatsInfo reads the character's
+# current hit and expertise with the formulas of the game's character sheet and counts the stat by these steps.
+HARD_8 = [(8, 0)]
+CAPS = {
+    "druid_balance": {"hit": ("spell", [(17, 0)])},
+    "druid_cat": {"hit": ("melee", HARD_8), "exp": [(6.5, 0)]},
+    "druid_bear": {"hit": ("melee", HARD_8), "exp": [(6.5, 0)]},
+    "hunter_bm": {"hit": ("ranged", HARD_8)}, "hunter_mm": {"hit": ("ranged", HARD_8)},
+    "hunter_sv": {"hit": ("ranged", HARD_8)},
+    "mage_arcane": {"hit": ("spell", [(17, 0)])}, "mage_fire": {"hit": ("spell", [(17, 0)])},
+    "mage_frost": {"hit": ("spell", [(17, 0)])},
+    "paladin_protection": {"hit": ("melee", HARD_8), "exp": [(6.5, 0)]},
+    "paladin_retribution": {"hit": ("melee", HARD_8), "exp": [(6.5, 0)]},
+    "priest_shadow": {"hit": ("spell", [(17, 0)])}, "priest_smite": {"hit": ("spell", [(17, 0)])},
+    "rogue_ss": {"hit": ("melee", [(27, 0)]), "exp": [(6.5, 0)]},
+    "rogue_backstab": {"hit": ("melee", [(27, 0)]), "exp": [(6.5, 0)]},
+    "rogue_mutilate": {"hit": ("melee", [(27, 0)]), "exp": [(6.5, 0)]},
+    "shaman_elemental": {"hit": ("spell", [(17, 0)])},
+    "shaman_enhancement": {"hit": ("melee", [(8, 0.37), (20, 0.33), (27, 0)]), "exp": [(6.5, 0)]},
+    "warlock_affliction": {"hit": ("spell", [(17, 0)])}, "warlock_demonology": {"hit": ("spell", [(17, 0)])},
+    "warlock_destruction": {"hit": ("spell", [(17, 0)])}, "warlock_dsruin": {"hit": ("spell", [(17, 0)])},
+    "warrior_protection": {"hit": ("melee", HARD_8), "exp": [(6.5, 0)]},
+    "warrior_arms": {"hit": ("melee", [(8, 0.12), (27, 0)]), "exp": [(6.5, 0)]},
+    "warrior_fury": {"hit": ("melee", [(8, 0.34), (27, 0)]), "exp": [(6.5, 0)]},
+}
+
+
+def steps_lua(steps):
+    return "{ " + ", ".join(f"{{ {cap:g}, {mult:g} }}" for cap, mult in steps) + " }"
+
+
+def caps_lua(run_name):
+    caps = CAPS.get(run_name)
+    if not caps:
+        return ""
+    parts = []
+    if "hit" in caps:
+        kind, steps = caps["hit"]
+        parts.append(f'hit = {{ kind = "{kind}", steps = {steps_lua(steps)} }}')
+    if "exp" in caps:
+        parts.append(f"exp = {{ steps = {steps_lua(caps['exp'])} }}")
+    return ", caps = { " + ", ".join(parts) + " }"
+
+
 def significant(metric, stat, reference):
     """A raw weight of the metric, or 0 where it is smaller than its own 90% confidence interval: the sim's
     noise (a bear's Stamina for damage taken was -0.031 +- 0.044), which as the base of a percentage made
@@ -156,6 +249,7 @@ def measure(run, run_name, kind, reference):
     """One measure of a spec as Lua: its reference stat, the weights of a weapon's damage per second in
     each place, and the item weights, all in points of the reference stat."""
     metric = run["metrics"][METRICS[kind]]
+    fill_from_presets(metric, run_name, kind)
     ref = significant(metric, reference, reference)
     if ref == 0:
         raise SystemExit(f"{reference} has no weight to count in")
@@ -166,6 +260,13 @@ def measure(run, run_name, kind, reference):
             weapons[WEAPONS[stat]] = value
         elif stat in SKIPPED:
             continue
+        elif value < 0:
+            # An item's stat never hurts: a negative weight is the sim's fight (a mana-limited caster that
+            # runs dry sooner with Haste, a tank whose rage per hit falls with more health), not harm, and
+            # it made a strict superset of stats read as worse (a chest with more armor and more Stamina
+            # "37% worse for threat gen.", +20 Haste "42% worse" for Discipline). So it counts as nothing.
+            print(f"  {run_name} {kind}: {stat} weighs {value:.4f}, counted as 0")
+            continue
         elif stat not in KEYS:
             raise SystemExit(f"no item key for ForeverSim's {stat!r}")
         else:
@@ -174,7 +275,7 @@ def measure(run, run_name, kind, reference):
     if run_name in FERAL_RUNS and kind in ("damage", "threat"):
         fap = significant(metric, "Feral Attack Power", reference) / ref
         weapons["mainHand"] = round(FERAL_AP_PER_DPS * fap, 3)
-    return measure_lua(reference, weights, weapons, False)
+    return measure_lua(reference, weights, weapons, False, caps_lua(run_name))
 
 
 def heuristic_measure(data):
@@ -188,12 +289,12 @@ def heuristic_measure(data):
     return measure_lua(data["reference"], weights, {field: 0 for field in WEAPONS.values()}, True)
 
 
-def measure_lua(reference, weights, weapons, approximate):
+def measure_lua(reference, weights, weapons, approximate, caps=""):
     weights = {k: round(v, 4) for k, v in sorted(weights.items()) if round(v, 4) != 0}
     w = {k: round(v, 3) for k, v in weapons.items()}
     approx = approximate and "approximate = true, " or ""
     return (f"{{ reference = \"{reference}\", {approx}mainHand = {w['mainHand']:g}, offHand = {w['offHand']:g}, "
-            f"ranged = {w['ranged']:g}, weights = {lua_table(weights, 6)} }}")
+            f"ranged = {w['ranged']:g}{caps}, weights = {lua_table(weights, 6)} }}")
 
 
 def lua_table(d, indent):
@@ -225,7 +326,11 @@ def main():
         f"-- Run {src['run']}.",
         "-- A weight is per point of the item's stat, in points of the measure's reference stat. Forever pays an",
         "-- item's hit and crit into both the melee and the spell pool, so those keys carry both weights.",
-        "-- A weight smaller than its own 90% confidence interval is left out as the sim's noise.",
+        "-- Hit and haste that ForeverSim left out (gear at the cap) or measured negative for a few specs are filled",
+        "-- from the sim repo's EP presets as a ratio to crit (EP_FILLS in tools/make_weights.py).",
+        "-- A weight smaller than its own 90% confidence interval is left out as the sim's noise, and a negative",
+        "-- one counts as 0: a stat on an item never hurts (the sim's negative weights are its mana and rage",
+        "-- limits, and made an item with strictly more stats read as worse).",
         "-- mainHand, offHand, ranged: the worth of a point of a weapon's damage per second in that place (0 where",
         "-- the spec does not fight with it: a caster's weapon, an Arms warrior's off hand). Cat and Bear Form",
         "-- fight with the weapon's DPS (FERAL_RUNS below): their mainHand is game-measured, not simulated.",
