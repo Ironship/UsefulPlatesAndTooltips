@@ -1370,7 +1370,13 @@ local function ensureEvents()
   for _, e in ipairs(REFRESH_EVENTS) do loader:RegisterEvent(e) end
   loader:RegisterEvent("ITEM_DATA_LOAD_RESULT") -- request arrivals (Baganator's loader too)
   loader:RegisterEvent("ADDON_LOADED")           -- a LATE Baganator load still registers
-  if type(GetSpecialization) == "function" then loader:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED") end
+  -- A new spec or a talent change moves "Specs to rate: Automatic"; every name is tried alone,
+  -- a client that does not know one raises on it (see the note on ITEM_DATA_LOADED above).
+  if type(GetSpecialization) == "function" or type(C_SpecializationInfo) == "table" then
+    for _, e in ipairs({ "PLAYER_SPECIALIZATION_CHANGED", "ACTIVE_TALENT_GROUP_CHANGED", "PLAYER_TALENT_UPDATE" }) do
+      pcall(loader.RegisterEvent, loader, e)
+    end
+  end
   loader:RegisterEvent("BAG_CLOSED")
   loader:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
@@ -1493,7 +1499,9 @@ loader:SetScript("OnEvent", function(self, event, arg1)
     scheduleRefresh()
     return
   end
-  if event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_LEVEL_UP" then
+  if event == "PLAYER_EQUIPMENT_CHANGED" or event == "PLAYER_LEVEL_UP"
+      or event == "PLAYER_SPECIALIZATION_CHANGED" or event == "ACTIVE_TALENT_GROUP_CHANGED"
+      or event == "PLAYER_TALENT_UPDATE" then
     -- the verdict is against what is worn (and gated by the player's level): an unchanged
     -- (slot, link) pair can answer differently now, so the memo must not skip this pass
     bumpRevision()

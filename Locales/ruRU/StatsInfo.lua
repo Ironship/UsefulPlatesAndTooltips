@@ -137,6 +137,34 @@ BIT.RegisterLocale("ruRU", {
     "Если выключено: одна строка с лучшей специализацией и стрелкой. Удерживайте Shift, чтобы увидеть подробности.",
   ["Hold Shift for the full breakdown."] = "Удерживайте Shift, чтобы увидеть подробности.",
 
+  -- Specs to rate
+  ["SPECS TO RATE"] =
+    "ОЦЕНИВАЕМЫЕ СПЕЦИАЛИЗАЦИИ",
+  ["Specs to rate"] =
+    "Оцениваемые специализации",
+  ["All specs of the class"] =
+    "Все специализации класса",
+  ["Automatic: my talent spec"] =
+    "Автоматически: моя ветка талантов",
+  ["Manual: pick the roles"] =
+    "Вручную: выбрать роли",
+  ["Which specs the tooltip rates, the arrows on bags, loot and quest rewards count, and the spec icon names. Automatic follows the talent tree you have your points in (all specs if the game does not say). Manual uses the boxes below."] =
+    "Какие специализации оцениваются в подсказке, учитываются стрелками на сумках, добыче и наградах за задания и показываются значком специализации. «Автоматически» следует ветке талантов, в которую вложены ваши очки (все специализации, если игра не сообщает её). «Вручную» использует флажки ниже.",
+  ["Damage specs"] =
+    "Специализации урона",
+  ["Rate the damage specs of your class. Needs Manual."] =
+    "Оценивать специализации урона вашего класса. Требуется режим «Вручную».",
+  ["Tank specs"] =
+    "Специализации танка",
+  ["Rate the tank specs, and show the tank caps lines (uncrittable, avoidance). Needs Manual."] =
+    "Оценивать специализации танка и показывать строки предельных значений танка (защита от критов, уклонение). Требуется режим «Вручную».",
+  ["Healer specs"] =
+    "Специализации лекаря",
+  ["Rate the healer specs (an approximate score). Needs Manual."] =
+    "Оценивать специализации лекаря (приблизительная оценка). Требуется режим «Вручную».",
+  ["Specs to rate (Tooltip tab) narrows this to the specs you play: Automatic follows your talent tree, Manual lets you tick damage, tank and healer. It also decides the arrows and the spec icon."] =
+    "«Оцениваемые специализации» (вкладка «Подсказка») ограничивает оценку теми специализациями, в которые вы играете: «Автоматически» следует вашей ветке талантов, «Вручную» позволяет отметить урон, танка и лекаря. От этого зависят и стрелки со значком специализации.",
+
   -- вкладка «Стрелки сумки»
   ["On the game's own bags and the Baganator bag grid: green up when at least one spec's score is outright better and none of it worse."] =
     "В стандартных сумках игры и сетке Baganator: зелёная стрелка вверх появляется, если оценка хотя бы для одной специализации определённо лучше и ни для одной не хуже.",
