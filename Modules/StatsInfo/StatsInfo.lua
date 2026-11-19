@@ -1270,6 +1270,10 @@ local function specRatingsBody(link, against, slots, offHand, alloc)
       out[#out + 1] = row
     end
   end
+  -- Manual with no box that fits this class (a hunter with only "Tank specs" ticked, or none): no
+  -- opinion at all. An empty list would let BagMarkers fall back to the raw stat differences and
+  -- draw arrows for exactly what the player switched off; nil is its "cannot be rated" (no arrow).
+  if #out == 0 then return nil end
   return out
 end
 
