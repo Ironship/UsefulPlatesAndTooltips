@@ -252,9 +252,12 @@ local function onItemDataArrived(id)
     wanted[id] = nil
     arrived[id] = (arrived[id] or 0) + 1
     waits[id] = nil -- the arrival starts a fresh bounded wait cycle
+    -- Only an id this module asked for (or already saw) repaints anything: other addons load
+    -- items while a tooltip is hovered, and every one of those events used to recompute every
+    -- bag button's corner widget (issue #75).
+    scheduleRefresh()
+    requestBaganatorRefresh()
   end
-  scheduleRefresh()
-  requestBaganatorRefresh()
 end
 
 -- Stat keys the model prices for this class (any spec, any measure, nonzero):
@@ -1471,8 +1474,12 @@ loader:SetScript("OnEvent", function(self, event, arg1)
   end
   if not active then return end
   if event == "ITEM_DATA_LOAD_RESULT" or event == "GET_ITEM_INFO_RECEIVED" then
-    bumpRevision() -- an unchanged link may now include stats or an enchant absent on the last pass
-    onItemDataArrived(arg1)
+    -- Ids this module never requested are ignored (a secret id is not used as a key at all).
+    if type(arg1) == "number" and not isSecret(arg1)
+        and (outstanding[arg1] or wanted[arg1] or arrived[arg1]) then
+      bumpRevision() -- an unchanged link may now include stats or an enchant absent on the last pass
+      onItemDataArrived(arg1)
+    end
     return
   end
   if event == "PLAYER_REGEN_ENABLED" then
