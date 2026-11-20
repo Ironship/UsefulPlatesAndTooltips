@@ -82,8 +82,9 @@ local function known(id)
 end
 
 -- The damage over time of a spell as SpellDamageInfo reads it (description plus your stats): the rank you cast last,
--- else the highest rank you know. `castIDs` is an array of the spell's rank ids, lowest first.
-local function dotTotal(castIDs)
+-- else the highest rank you know, else `fallbackID` (a spell you have through another route than its rank ids).
+-- `castIDs` is an array of the spell's rank ids, lowest first.
+local function dotTotal(castIDs, fallbackID)
     local sdi = BIT.modules and BIT.modules.SpellDamageInfo
     if type(sdi) ~= "table" or type(sdi.Compute) ~= "function" then return nil end
     local id = ns.ProcDots and ns.ProcDots.LastCastOf and ns.ProcDots.LastCastOf(castIDs)
@@ -92,6 +93,7 @@ local function dotTotal(castIDs)
             if known(castIDs[index]) then id = castIDs[index]; break end
         end
     end
+    id = id or fallbackID
     if not id then return nil end
     local ok, view = pcall(sdi.Compute, id, false)
     local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table" and tonumber(view.dot.total)
@@ -153,7 +155,17 @@ if forever then
             nameID = 2944, fallback = "Devouring Plague",
             ids = { [2944] = true, [19276] = true, [19277] = true, [19278] = true, [19279] = true, [19280] = true },
             castIDs = { 2944, 19276, 19277, 19278, 19279, 19280 },
-            size = function() return dotTotal({ 2944, 19276, 19277, 19278, 19279, 19280 }) end } },
+            -- Only for a priest who has the spell: the segment costs a container per plate (see specAvailable).
+            -- Undead know the rank spells themselves; every other race gains the ability through the "Gain the
+            -- Devouring Plague ability" spells (459713 and 1219275: they put rank 19280 into the Priest Racial Ability
+            -- slot), and the Devouring Contagion talent (1309950) needs the spell too, so any of them counts.
+            learned = function()
+                for _, id in ipairs({ 2944, 19276, 19277, 19280, 19279, 19278, 459713, 1219275, 1309950 }) do
+                    if known(id) then return true end
+                end
+                return false
+            end,
+            size = function() return dotTotal({ 2944, 19276, 19277, 19278, 19279, 19280 }, 19280) end } },
         HUNTER = {
             { key = "trap", slot = "trap", label = "TRAP", ids = { [13797] = true, [14298] = true, [14299] = true,
                 [14300] = true, [14301] = true }, school = 4, covers = "nativeTraps", nameID = 13797,
@@ -171,6 +183,22 @@ else
         familyID = 2818, nameID = 2818, fallback = "Deadly Poison", size = poisonAmount } } }
 end
 local activeSpecs = {}
+-- A spec with `learned` draws nothing, and costs no container on any plate, until you know the spell (asked once a
+-- second). Specs without it (every other class) are always available, as before.
+local function specAvailable(spec)
+    if not spec.learned then return true end
+    local now = GetTime()
+    if not spec.learnedAt or now - spec.learnedAt >= 1 then
+        spec.learnedAt, spec.learnedValue = now, spec.learned() == true
+    end
+    return spec.learnedValue
+end
+local function anySpecAvailable()
+    for _, spec in ipairs(activeSpecs) do
+        if specAvailable(spec) then return true end
+    end
+    return false
+end
 local lastErrors = {} -- [label] = the last setup/update error text, for /upt native
 local LANE_GAP, LANE_HEIGHT = 2, 6 -- diagnostic row under the bar (nativeShowAll)
 
@@ -613,6 +641,7 @@ local function nativeTotal(unit, spec, enabled, entries, entry)
 end
 
 local function updateNativeDamage(entry, unit, enabled, spec, entries)
+    if not entry.natives[spec.key] and not specAvailable(spec) then return end
     local config, signature = poisonAppearance(entry, spec)
     if enabled and signature ~= entry.signatures[spec.key] and not (ask(InCombatLockdown) == true
         and ask(entry.parent.IsProtected, entry.parent) == true) then
@@ -836,7 +865,7 @@ local function update(refresh)
             if spec.covers then ns.ProcDots[spec.covers] = nativeOn end
         end
     end
-    local markers = ns.db.showMarkers ~= false and nativeOn
+    local markers = ns.db.showMarkers ~= false and nativeOn and (wantGeneric() or anySpecAvailable())
     local targetHost, targetBar
     if BIT.Plate and BIT.Plate.UnitFrame then targetHost, targetBar = BIT.Plate.UnitFrame("target")
     else targetHost, targetBar = TargetFrame, healthBar(TargetFrame, false) end
