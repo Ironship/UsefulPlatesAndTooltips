@@ -414,8 +414,9 @@ local function createGlow(button, kind)
   return f
 end
 
--- Size and tint, applied when the glow is shown and whenever a setting changed.
-local function styleGlow(f, button, groupId, place)
+-- Size and tint, applied when the glow is shown and whenever a setting changed. `place` (the lethal glow's own placing)
+-- is called as place(glow, width, height, detector, button).
+local function styleGlow(f, button, groupId, place, detector)
   local w, h = buttonSize(button)
   local scale = clampNumber(cfg().size, 100, 250, 140) / 100
   local rgb = groupId and colorOf(groupId)
@@ -425,7 +426,7 @@ local function styleGlow(f, button, groupId, place)
   local gw, gh = w * scale, h * scale
   if f.glowKind ~= "blizzard" then gw, gh = gw * 1.35, gh * 1.35 end
   if place then
-    place(f, gw, gh) -- the lethal glow hangs on its detector instead of on the button
+    place(f, gw, gh, detector, button) -- the lethal glow hangs on its detector instead of on the button
   else
     f:ClearAllPoints()
     f:SetPoint("CENTER", button, "CENTER", 0, 0)
@@ -766,6 +767,19 @@ end
 
 local lastKill = setmetatable({}, { __mode = "k" })
 
+-- Where the lethal glow hangs: the detector's clip on the button, its bar at the clip's right end, the glow at the end of
+-- the fill. A function of its own: it used to be a closure made for every armed button on every update pass.
+local function placeKill(f, gw, gh, d, button)
+  d.clip:ClearAllPoints()
+  d.clip:SetPoint("CENTER", button, "CENTER", 0, 0)
+  d.clip:SetSize(gw, gh)
+  d.bar:ClearAllPoints()
+  d.bar:SetPoint("RIGHT", d.clip, "RIGHT", 0, 0)
+  d.bar:SetSize(DETECT_WIDTH, gh)
+  f:ClearAllPoints()
+  f:SetPoint("RIGHT", d.bar:GetStatusBarTexture(), "RIGHT", 0, 0)
+end
+
 local function updateKill(entry, testing)
   local button = entry.button
   local d = detectors[button]
@@ -789,16 +803,7 @@ local function updateKill(entry, testing)
   for k, other in pairs(d.glows) do
     if k ~= kind and other.on then hideGlow(other) end
   end
-  styleGlow(g, button, "kill", function(f, gw, gh)
-    d.clip:ClearAllPoints()
-    d.clip:SetPoint("CENTER", button, "CENTER", 0, 0)
-    d.clip:SetSize(gw, gh)
-    d.bar:ClearAllPoints()
-    d.bar:SetPoint("RIGHT", d.clip, "RIGHT", 0, 0)
-    d.bar:SetSize(DETECT_WIDTH, gh)
-    f:ClearAllPoints()
-    f:SetPoint("RIGHT", d.bar:GetStatusBarTexture(), "RIGHT", 0, 0)
-  end)
+  styleGlow(g, button, "kill", placeKill, d)
   local alpha = opacity()
   if testing then
     d.bar:SetMinMaxValues(0, 1)
@@ -953,6 +958,10 @@ local frame = CreateFrame("Frame")
 local dirtyUpdate = false
 local sinceUpdate, sinceScan = 0, 0
 local UPDATE_EVERY, SCAN_EVERY = 0.1, 2
+-- A pass that an event asked for (the target's health, a usable change, a shapeshift, ...) waits until this long after the last
+-- pass, capping event-driven passes at 20 a second (as ShieldsInfo's EVENT_GAP does); the glows still follow within a
+-- twentieth of a second, and at once when no pass ran in the last 50 ms.
+local EVENT_GAP = 0.05
 
 scheduleRescan = function() dirtyScan, collectDue = true, true end
 
@@ -975,12 +984,13 @@ local function onUpdate(_, elapsed)
   sinceUpdate = sinceUpdate + elapsed
   sinceScan = sinceScan + elapsed
   if dirtyScan or sinceScan >= SCAN_EVERY then
-    dirtyScan, sinceScan = false, 0
+    -- a rescan ends with a pass of its own, which already shows what the events of this frame brought
+    dirtyScan, dirtyUpdate, sinceScan = false, false, 0
     rescan()
     sinceUpdate = 0
     return
   end
-  if dirtyUpdate or sinceUpdate >= UPDATE_EVERY then
+  if sinceUpdate >= UPDATE_EVERY or (dirtyUpdate and sinceUpdate >= EVENT_GAP) then
     dirtyUpdate, sinceUpdate = false, 0
     if #active > 0 then updateAll() end
   end
