@@ -160,6 +160,10 @@ BIT.RegisterLocale("ruRU", {
     "Оценивать эликсиры, настои, еду, зелья и свитки",
   ["Under a consumable that gives stats, what its buff is worth to each spec, as a share of what your gear is worth."] =
     "Под расходуемым предметом с характеристиками: чего стоит его эффект для каждой специализации, в долях стоимости вашей экипировки.",
+  ["Tank lines: uncrittable and avoidance"] =
+    "Строки танка: защита от критов и избегание",
+  ["Under a tank's gear: how far the defense skill is from uncrittable (a boss three levels above you) and where avoidance stands against its cap. Off: both lines are left out and the tank ratings stay. They show only while a tank spec is rated (Specs to rate)."] =
+    "Под экипировкой танка: насколько навык защиты далёк от невосприимчивости к критическим ударам (против босса на три уровня выше вас) и как избегание соотносится с пределом. Выключено: обе строки скрыты, оценка танка остаётся. Показываются, только пока оценивается специализация танка (оцениваемые специализации).",
   ["EFFECTS, SETS AND CONSUMABLES"] =
     "ЭФФЕКТЫ, КОМПЛЕКТЫ И РАСХОДУЕМЫЕ ПРЕДМЕТЫ",
   ["Beside its stats, an item can have an effect (a trinket's use, a weapon's proc) and a set bonus. Those that give stats are counted at the share of the time they are up: 280 attack power for 20 s every 120 s counts as 17% of it. A proc by chance per hit is an estimate (one eligible hit every two seconds)."] =

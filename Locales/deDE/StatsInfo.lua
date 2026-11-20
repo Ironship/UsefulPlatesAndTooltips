@@ -160,6 +160,10 @@ BIT.RegisterLocale("deDE", {
     "Elixiere, Fläschchen, Essen, Tränke und Schriftrollen bewerten",
   ["Under a consumable that gives stats, what its buff is worth to each spec, as a share of what your gear is worth."] =
     "Unter einem Verbrauchsgut mit Werten: was sein Bonus jeder Spezialisierung wert ist, als Anteil des Wertes Eurer Ausrüstung.",
+  ["Tank lines: uncrittable and avoidance"] =
+    "Tank-Zeilen: Kritimmun und Vermeidung",
+  ["Under a tank's gear: how far the defense skill is from uncrittable (a boss three levels above you) and where avoidance stands against its cap. Off: both lines are left out and the tank ratings stay. They show only while a tank spec is rated (Specs to rate)."] =
+    "Unter der Ausrüstung eines Tanks: wie weit die Verteidigung von Kritimmun (gegen einen Boss, drei Stufen über Euch) entfernt ist und wo die Vermeidung gegenüber ihrem Limit steht. Aus: beide Zeilen entfallen, die Tank-Bewertung bleibt. Sie erscheinen nur, solange eine Tank-Spezialisierung bewertet wird (Zu bewertende Spezialisierungen).",
   ["EFFECTS, SETS AND CONSUMABLES"] =
     "EFFEKTE, SETS UND VERBRAUCHSGÜTER",
   ["Beside its stats, an item can have an effect (a trinket's use, a weapon's proc) and a set bonus. Those that give stats are counted at the share of the time they are up: 280 attack power for 20 s every 120 s counts as 17% of it. A proc by chance per hit is an estimate (one eligible hit every two seconds)."] =
