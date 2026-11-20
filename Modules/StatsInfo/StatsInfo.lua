@@ -34,6 +34,7 @@ local DEFAULTS = {
   caps = true,        -- hit and expertise count only up to their caps (spell hit 17%, melee 8%, expertise 6.5%)
   effects = true,     -- the ratings count an item's effects (trinkets, procs) and its set's bonuses (Effects.lua)
   consumables = true, -- elixirs, flasks, food, potions and scrolls: what the buff is worth against your gear
+  tankCaps = true,    -- the uncrittable and avoidance lines under a tank's gear (a tank spec still has to be rated)
 }
 
 -- Inventory slots an item of an equip location goes into. Two slots: compared with each.
@@ -1981,6 +1982,7 @@ end)
 local function tankExtraLines(link, alloc)
   if type(link) ~= "string" or isSecret(link) then return alloc("tankLines") end
   if not roleWanted("tank") then return alloc("tankLines") end -- "Specs to rate" leaves the tanks out
+  if (settings or DEFAULTS).tankCaps == false then return alloc("tankLines") end -- the Tooltip tab's "Tank lines" box
   local loc = equipLoc(link)
   local worn = loc ~= nil and (SLOTS[loc] ~= nil or BOTH_HANDS[loc] == true)
   if not (hasTankSpec() and worn) and not itemHasTankStats(link, alloc) then return alloc("tankLines") end
@@ -3297,6 +3299,10 @@ BIT.RegisterTab("StatsInfo", {
     tooltipTab:check("consumables", "Rate elixirs, flasks, food, potions and scrolls",
       { tooltip = "Under a consumable that gives stats, what its buff is worth to each spec, as a share of what "
         .. "your gear is worth." })
+    tooltipTab:check("tankCaps", "Tank lines: uncrittable and avoidance",
+      { tooltip = "Under a tank's gear: how far the defense skill is from uncrittable (a boss three levels above "
+        .. "you) and where avoidance stands against its cap. Off: both lines are left out and the tank ratings "
+        .. "stay. They show only while a tank spec is rated (Specs to rate)." })
     tooltipTab:header("SPECS TO RATE")
     tooltipTab:choice("specFilter", "Specs to rate", {
       { id = "all", label = "All specs of the class" },
