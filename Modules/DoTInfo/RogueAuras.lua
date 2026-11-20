@@ -79,25 +79,46 @@ end
 
 local function known(id)
     return ask(IsSpellKnown, id) == true or ask(IsPlayerSpell, id) == true
+        or ask(IsSpellKnownOrOverridesKnown, id) == true
+end
+
+local function overrideOf(id)
+    local over = ask(C_Spell and C_Spell.GetOverrideSpell, id)
+    if type(over) == "number" and over > 0 then return over end
+    over = ask(FindSpellOverrideByID, id)
+    if type(over) == "number" and over > 0 then return over end
+end
+
+local function hasPlayerAura(id)
+    return ask(C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID, id) ~= nil
 end
 
 -- The damage over time of a spell as SpellDamageInfo reads it (description plus your stats): the rank you cast last,
 -- else the highest rank you know, else `fallbackID` (a spell you have through another route than its rank ids).
--- `castIDs` is an array of the spell's rank ids, lowest first.
-local function dotTotal(castIDs, fallbackID)
-    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
-    if type(sdi) ~= "table" or type(sdi.Compute) ~= "function" then return nil end
-    local id = ns.ProcDots and ns.ProcDots.LastCastOf and ns.ProcDots.LastCastOf(castIDs)
+-- Falls back to the total Core.lua already parsed/learned on cast or the spell's own description when SpellDamageInfo
+-- is switched off or has not loaded the spell text yet. `castIDs` is an array of the spell's rank ids, lowest first.
+local function dotTotal(castIDs, fallbackID, spec)
+    local id = spec and spec.lastCastID
+    if not id then id = ns.ProcDots and ns.ProcDots.LastCastOf and ns.ProcDots.LastCastOf(castIDs) end
     if not id then
         for index = #castIDs, 1, -1 do
             if known(castIDs[index]) then id = castIDs[index]; break end
         end
     end
     id = id or fallbackID
-    if not id then return nil end
-    local ok, view = pcall(sdi.Compute, id, false)
-    local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table" and tonumber(view.dot.total)
-    return dot and dot > 0 and dot or nil
+    if not id then return spec and spec.lastCastTotal or nil end
+    local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+    if type(sdi) == "table" and type(sdi.Compute) == "function" then
+        local ok, view = pcall(sdi.Compute, id, false)
+        local dot = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table" and tonumber(view.dot.total)
+        if dot and dot > 0 and dot < math.huge then return dot end
+    end
+    if spec and type(spec.lastCastTotal) == "number" and spec.lastCastTotal > 0 and spec.lastCastTotal < math.huge then
+        return spec.lastCastTotal
+    end
+    local desc = ask(C_Spell and C_Spell.GetSpellDescription, id)
+    local parsed = desc and ns.ParseRogueAura and ns.ParseRogueAura(id, desc) or nil
+    return type(parsed) == "number" and parsed > 0 and parsed < math.huge and parsed or nil
 end
 
 local function poisonAmount()
@@ -143,7 +164,7 @@ if forever then
                 fallback = "Flamestrike", ids = { [2120] = true, [2121] = true, [8422] = true, [8423] = true,
                     [10215] = true, [10216] = true },
                 castIDs = { 2120, 2121, 8422, 8423, 10215, 10216 },
-                size = function() return dotTotal({ 2120, 2121, 8422, 8423, 10215, 10216 }) end },
+                size = function(spec) return dotTotal({ 2120, 2121, 8422, 8423, 10215, 10216 }, nil, spec) end },
         },
         PALADIN = { { key = "judgement", slot = "judgement", label = "JUDGEMENT", ids = { [440675] = true }, school = 2,
             luaName = "Righteous Judgement", verified = true, nameID = 440675, fallback = "Righteous Judgement", setting = "procDots",
@@ -156,23 +177,31 @@ if forever then
             ids = { [2944] = true, [19276] = true, [19277] = true, [19278] = true, [19279] = true, [19280] = true },
             castIDs = { 2944, 19276, 19277, 19278, 19279, 19280 },
             -- Only for a priest who has the spell: the segment costs a container per plate (see specAvailable).
-            -- Undead know the rank spells themselves; every other race gains the ability through the "Gain the
-            -- Devouring Plague ability" spells (459713 and 1219275: they put rank 19280 into the Priest Racial Ability
-            -- slot), and the Devouring Contagion talent (1309950) needs the spell too, so any of them counts.
-            learned = function()
-                for _, id in ipairs({ 2944, 19276, 19277, 19280, 19279, 19278, 459713, 1219275, 1309950 }) do
+            -- Undead know the rank spells themselves; every other race gains rank 19280 via an override aura
+            -- (459713, 1219275, or RAQ 3P 1213708) on the Priest Racial Ability slot (459695 / 1219274), or has the
+            -- Devouring Contagion talent (1309950), or has actually cast the spell this session.
+            learned = function(spec)
+                if spec and spec.lastCastID then return true end
+                for _, id in ipairs({ 2944, 19276, 19277, 19280, 19279, 19278, 459713, 1219275, 1213708, 1309950 }) do
                     if known(id) then return true end
+                end
+                for _, id in ipairs({ 459713, 1219275, 1213708 }) do
+                    if hasPlayerAura(id) then return true end
+                end
+                for _, slotID in ipairs({ 459695, 1219274 }) do
+                    local over = overrideOf(slotID)
+                    if over and spec and spec.ids[over] then return true end
                 end
                 return false
             end,
-            size = function() return dotTotal({ 2944, 19276, 19277, 19278, 19279, 19280 }, 19280) end } },
+            size = function(spec) return dotTotal({ 2944, 19276, 19277, 19278, 19279, 19280 }, 19280, spec) end } },
         HUNTER = {
             { key = "trap", slot = "trap", label = "TRAP", ids = { [13797] = true, [14298] = true, [14299] = true,
                 [14300] = true, [14301] = true }, school = 4, covers = "nativeTraps", nameID = 13797,
                 fallback = "Immolation Trap", setting = "procDots", size = function() return procSize("trap") end },
             { key = "explosive", slot = "explosive", label = "EXPLOSIVE TRAP", school = 4, nameID = 13812,
                 fallback = "Explosive Trap", ids = { [13812] = true, [14314] = true, [14315] = true },
-                castIDs = { 13813, 14316, 14317 }, size = function() return dotTotal({ 13813, 14316, 14317 }) end },
+                castIDs = { 13813, 14316, 14317 }, size = function(spec) return dotTotal({ 13813, 14316, 14317 }, nil, spec) end },
             { key = "wyvern", slot = "wyvern", label = "WYVERN", ids = { [24336] = true }, school = 8,
                 covers = "nativeDelayed", nameID = 24336, fallback = "Wyvern Sting", setting = "procDots",
                 size = function() return procSize("delayed") end },
@@ -189,7 +218,7 @@ local function specAvailable(spec)
     if not spec.learned then return true end
     local now = GetTime()
     if not spec.learnedAt or now - spec.learnedAt >= 1 then
-        spec.learnedAt, spec.learnedValue = now, spec.learned() == true
+        spec.learnedAt, spec.learnedValue = now, spec.learned(spec) == true
     end
     return spec.learnedValue
 end
@@ -296,7 +325,7 @@ local function finishGenericBuild()
         table.sort(group.castIDs)
         specs[#specs + 1] = { key = "g" .. group.castIDs[1], slot = "g" .. group.castIDs[1], label = group.name:upper(),
             ids = group.ids, school = group.school, luaName = group.name, nameID = group.castIDs[1],
-            fallback = group.name, generic = true, size = function() return dotTotal(group.castIDs) end }
+            fallback = group.name, generic = true, size = function(spec) return dotTotal(group.castIDs, nil, spec) end }
     end
     generic, combined = specs, nil
     lastBookSig = building.sig
@@ -402,8 +431,11 @@ local function poisonAppearance(entry, spec)
     -- segment stays, to see where the twin is drawn and whether its fill shows.
     local probing = forever and ns.db.nativeShowAll == true
     if spec.gated and (not gateReplace() or probing) then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
-    config.fillAbove = forever and spec.gated == true and gateReplace()
-    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace()) .. tostring(probing) .. tostring(config.fillAbove)
+    -- On Forever nameplates a fill texture directly on `timer` is not shown reliably (only a child frame is, like the
+    -- outline), so every nameplate segment gets fillAbove — not only gated twins.
+    config.fillAbove = forever and (onPlate == true or (spec.gated == true and gateReplace()))
+    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace()) .. tostring(probing)
+        .. tostring(config.fillAbove) .. tostring(spec.idsVersion or 0)
     return config, table.concat(parts, "|")
 end
 
@@ -468,10 +500,11 @@ local function createNativeDamage(entry, spec, config, signature)
         if forever then
             -- The segment's frames are made right below, as children of this one: it gets the strata and the level it will
             -- keep first, or they stay at the plate's own level, under its health bar, and a segment drawn over the bar
-            -- (an in-place twin) is covered by it. A row under the bar was never covered, which is why only twins showed it.
+            -- is covered by it. Nameplate segments sit at +10 (above plain w.marker at +5 and its child bars at +6, still
+            -- under the kill icon window at +20).
             local barStrata, barLevel = ask(entry.bar.GetFrameStrata, entry.bar), ask(entry.bar.GetFrameLevel, entry.bar)
             if type(barStrata) == "string" then container:SetFrameStrata(barStrata) end
-            container:SetFrameLevel(type(barLevel) == "number" and barLevel + (spec.gated and gateReplace() and 10 or 5) or 200)
+            container:SetFrameLevel(type(barLevel) == "number" and barLevel + ((entry.onPlate or (spec.gated and gateReplace())) and 10 or 5) or 200)
         end
         formatter = C_StringUtil.CreateNumericRuleFormatter()
         formatter:SetBreakpoints({ { threshold = 0, format = "" } })
@@ -618,11 +651,11 @@ local function nativeTotal(unit, spec, enabled, entries, entry)
         local now = GetTime()
         local cached = spec.cached
         if not cached or now - cached.at >= 1 then
-            cached = { at = now, value = spec.size and spec.size() }
+            cached = { at = now, value = spec.size and spec.size(spec) }
             spec.cached = cached
         end
         total = cached.value
-    else total = spec.size and spec.size() end
+    else total = spec.size and spec.size(spec) end
     if type(total) ~= "number" or total ~= total or total <= 0 or total >= math.huge then return nil end
     if spec.stacked then total = total * MAX_STACKS end -- the bar's full width; no number: the stacks are hidden
     -- Diagnostic switch (nativeShowAll): draw the native segment even where the plain DoT of the same name is shown.
@@ -746,7 +779,7 @@ local function displayContainer(entry, state, unit, enabled, refresh)
     if not usable(container) then return end
     -- Nameplate addons re-level health bars while active; keep native projections above them.
     local level, strata = ask(entry.bar.GetFrameLevel, entry.bar), ask(entry.bar.GetFrameStrata, entry.bar)
-    level = type(level) == "number" and level + ((forever and state.spec and state.spec.gated and gateReplace()) and 10 or 5) or 200
+    level = type(level) == "number" and level + ((forever and state.spec and (entry.onPlate or (state.spec.gated and gateReplace()))) and 10 or 5) or 200
     if forever and state.spec and state.spec.gated and gateReplace() and ns.db.nativeShowAll == true then
         level, strata = level + 40, "HIGH" -- probing: above whatever else the plate draws
     end
@@ -911,6 +944,34 @@ function R.UpdateRogueAuras()
     update(false)
 end
 
+-- Core.lua: remember the exact spell id and full-duration total of a tracked DoT cast, independent of ProcDots'
+-- 8-cast ring and procDots toggle, and accept an unexpected Devouring Plague spell id matching its localized name.
+function R.NoteCast(spellID, name, total)
+    if not forever or secret(spellID) or type(spellID) ~= "number" then return end
+    for _, spec in ipairs(currentSpecs(wantGeneric())) do
+        local matched = spec.ids and spec.ids[spellID]
+        if not matched and spec.castIDs then
+            for _, cid in ipairs(spec.castIDs) do
+                if cid == spellID then matched = true; break end
+            end
+        end
+        if not matched and spec.key == "plague" and type(name) == "string" and not secret(name) then
+            local expected = ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.fallback
+            if name == expected or name == spec.fallback then
+                matched = true
+                spec.ids[spellID] = true
+                spec.idsVersion = (spec.idsVersion or 0) + 1
+            end
+        end
+        if matched then
+            spec.lastCastID = spellID
+            if type(total) == "number" and total > 0 and total < math.huge then spec.lastCastTotal = total end
+            spec.cached = nil
+            if spec.learned then spec.learnedAt = nil end
+        end
+    end
+end
+
 -- Follow plain marker animation/ticks immediately, without resampling any native aura state.
 function R.UpdatePoisonOffset(parent)
     local entry = targetEntry and (parent == TargetFrame or parent == targetEntry.parent) and targetEntry or byPlate[parent]
@@ -1013,9 +1074,11 @@ local function describe()
         tostring(db.nativeGate == true), tostring(db.nativeGateReplace == true),
         tostring(ok and not secret(class) and class or "?")))
     for _, spec in ipairs(currentSpecs(wantGeneric())) do
-        local good, size = pcall(function() return spec.size and spec.size() end)
-        add(string.format("  %s%s: size %s", spec.label, spec.generic and " (every DoT)" or "",
-            good and type(size) == "number" and string.format("%.0f", size) or "none"))
+        local good, size = pcall(function() return spec.size and spec.size(spec) end)
+        local extra = spec.learned and (", learned " .. tostring(specAvailable(spec))) or ""
+        if spec.lastCastID then extra = extra .. ", cast id " .. tostring(spec.lastCastID) end
+        add(string.format("  %s%s: size %s%s", spec.label, spec.generic and " (every DoT)" or "",
+            good and type(size) == "number" and string.format("%.0f", size) or "none", extra))
     end
     local plates, containers = 0, 0
     for _, entry in pairs(byPlate) do
