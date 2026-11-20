@@ -1015,7 +1015,7 @@ local function updateEntry(entry, testing)
     hideGlow(f)
   end
   if entry.rule and entry.rule.dispel and not testing then updateDispel(entry) end
-  if entry.rule and lastState[button] ~= (on and true or false) then
+  if entry.rule and not entry.rule.dispel and lastState[button] ~= (on and true or false) then
     lastState[button] = on and true or false
     if not testing then
       trace(string.format("%s %s on %s", on and "GLOW" or "off", entry.label, entry.name))
@@ -1297,6 +1297,16 @@ function ns.Probe()
         end
         line = line .. "; curve " .. table.concat(pts, " ")
       end
+    end
+    if e.rule and e.rule.dispel then
+      local bank = dispelBank[e.button]
+      local function side(name)
+        local one = bank and bank[name]
+        return one and (one.shown and "on" or "off") or "-"
+      end
+      line = line .. string.format(", aura containers %s (friend %s, enemy %s)",
+        bank and (bank.built and "built" or (bank.failedAt and "FAILED, retrying" or "not built")) or "not built",
+        side("friend"), side("enemy"))
     end
     local set = glows[e.button]
     local f = set and set[currentStyle()]
