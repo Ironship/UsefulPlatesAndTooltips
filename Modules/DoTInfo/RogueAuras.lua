@@ -146,6 +146,14 @@ if forever then
         PALADIN = { { key = "judgement", slot = "judgement", label = "JUDGEMENT", ids = { [440675] = true }, school = 2,
             luaName = "Righteous Judgement", verified = true, nameID = 440675, fallback = "Righteous Judgement", setting = "procDots",
             size = function() return procSize("proc") end } },
+        -- Devouring Contagion (talent): a mob that dies with your Devouring Plague on it passes it to nearby enemies for the
+        -- time it had left. No cast of yours starts that copy, so the plain DoT (cast events) never sees it; the aura does.
+        -- The segment steps aside wherever the plain DoT of the same spell is drawn (nativeTotal).
+        PRIEST = { { key = "plague", slot = "plague", label = "DEVOURING PLAGUE", school = 32, luaName = "Devouring Plague",
+            nameID = 2944, fallback = "Devouring Plague",
+            ids = { [2944] = true, [19276] = true, [19277] = true, [19278] = true, [19279] = true, [19280] = true },
+            castIDs = { 2944, 19276, 19277, 19278, 19279, 19280 },
+            size = function() return dotTotal({ 2944, 19276, 19277, 19278, 19279, 19280 }) end } },
         HUNTER = {
             { key = "trap", slot = "trap", label = "TRAP", ids = { [13797] = true, [14298] = true, [14299] = true,
                 [14300] = true, [14301] = true }, school = 4, covers = "nativeTraps", nameID = 13797,
@@ -595,7 +603,8 @@ local function nativeTotal(unit, spec, enabled, entries, entry)
     if entries then
         for _, effect in ipairs(entries) do
             -- Already drawn by the plain DoT segments.
-            if (spec.familyID and effect.familyID == spec.familyID) or (spec.luaName and effect.name == spec.luaName) then
+            if (spec.familyID and effect.familyID == spec.familyID) or (spec.luaName and effect.name == spec.luaName)
+                or (spec.luaName and spec.ids and spec.ids[effect.spellID]) then
                 return nil
             end
         end
