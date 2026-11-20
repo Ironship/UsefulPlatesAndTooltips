@@ -1100,6 +1100,13 @@ local function onPlayerCast(spellID, castGUID)
     local tickKey = spellID
     if isFinisher then tickKey = comboPoints and (spellID .. "x" .. comboPoints) or nil end
 
+    if ns.RogueNative and ns.RogueNative.NoteCast then
+        ns.RogueNative.NoteCast(spellID, name,
+            (not ns.Retail and tickKey and db.ticks[tickKey] and duration
+                and (db.ticks[tickKey] * math.max(1, math.floor(duration / (statedInterval or KNOWN_TICK_INTERVALS[name] or DEFAULT_TICK_INTERVAL) + 0.5))))
+            or total)
+    end
+
     -- A trap only arms: the DoT starts when it springs (ProcDots.lua).
     if ns.ProcDots and ns.TRAP_DOTS[name] and ns.ProcDots.ArmTrap(spellID, name, desc, total, school, duration, statedInterval) then
         return

@@ -25,6 +25,7 @@ local DEFAULTS = {
   hp = true,              -- Execute, Hammer of Wrath
   heal = true,            -- Divine Grace
   reactive = true,        -- Overpower, Revenge, Mongoose Bite, Counterattack, Victory Rush
+  dispel = true,          -- Dispel Magic, Cure Disease, Cleanse, Remove Curse...: the target has something to remove
   kill = true,            -- any direct-damage spell whose damage would finish the target (needs CastPrediction)
   killBasis = "min",      -- "min": the low end of the damage range (certain) | "avg": its middle
   killSkipTrivial = true, -- no glow while the target is at full health
@@ -39,6 +40,7 @@ local DEFAULTS = {
   hpColor = "native",
   healColor = "green",
   reactiveColor = "yellow",
+  dispelColor = "cyan",
   killColor = "amber",
   size = 140,             -- glow size, % of the button (Blizzard's proc glow is 140)
   opacity = 100,
@@ -705,6 +707,7 @@ local function windowFor(entry)
   local rule, c = entry.rule, cfg()
   if not rule or not ruleEnabled(rule) then return false end
   if c.combatOnly and inCombat() == false then return false end
+  if rule.dispel then return false end -- the game's aura container decides (updateDispel)
   if not rule.target then
     if usableNow(entry.spell) == true then return true, opacity() end
     return false
@@ -841,6 +844,172 @@ end
 
 local lastState = setmetatable({}, { __mode = "k" })
 
+---------------------------------------------------------------------------------------------
+-- The dispel glow: the game's own aura container says when the target has something to remove
+---------------------------------------------------------------------------------------------
+
+-- Addon code cannot read a unit's auras in a fight (GetUnitAuras and the index reads throw on this client), so no
+-- Lua line here knows whether the target carries a Magic debuff. A Blizzard AuraContainer (Blizzard_AuraContainer,
+-- the same mechanism DoTInfo's native segments use) lists auras by dispel type itself and shows its button only
+-- while one matches; the glow is a child of that button, so it appears and disappears with the aura and nothing
+-- is ever read. One container per side (a friendly target's harmful effects, an enemy's beneficial ones) per
+-- button, shown only while the target is on that side, so Dispel Magic does not glow for an enemy's debuffs.
+local dispelBank = setmetatable({}, { __mode = "k" }) -- [host button] = { sig, rule, friend = side, enemy = side, failedAt }
+local DISPEL_RETRY = 5
+local DISPEL_FILTER = { friend = "HARMFUL", enemy = "HELPFUL" }
+
+local function dispelSignature(button, rule)
+  local w, h = buttonSize(button)
+  local scale = clampNumber(cfg().size, 100, 250, 140)
+  local rgb = colorOf("dispel")
+  return string.format("%s/%d/%d/%d/%s/%d", rule.key, w, h, scale, rgb and table.concat(rgb, ",") or "native",
+    clampNumber(cfg().opacity, 10, 100, 100))
+end
+
+local function makeDispelSide(button, rule, side)
+  local types = rule.dispel[side]
+  if type(types) ~= "table" then return nil end
+  local set = {}
+  for _, name in ipairs(types) do set[name] = true end
+  local w, h = buttonSize(button)
+  local scale = clampNumber(cfg().size, 100, 250, 140) / 100 * 1.35
+  local r, g, b = 1, 0.82, 0.3
+  local rgb = colorOf("dispel")
+  if rgb then r, g, b = rgb[1], rgb[2], rgb[3] end
+  local alpha = opacity()
+  local okStrata, strata = pcall(button.GetFrameStrata, button)
+  if not okStrata or isSecret(strata) then strata = nil end
+  local level = readNumber(button, "GetFrameLevel")
+  local container, ready, failure
+  local ok, err = pcall(function()
+    if C_AddOns and ask(C_AddOns.IsAddOnLoaded, "Blizzard_AuraContainer") ~= true
+      and type(C_AddOns.LoadAddOn) == "function" then
+      pcall(C_AddOns.LoadAddOn, "Blizzard_AuraContainer")
+    end
+    container = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
+    container:SetSize(1, 1)
+    container:SetPoint("CENTER", UIParent, "CENTER")
+    container:SetUnit("target")
+    container:AddAuraSlot("dispel" .. rule.key .. side, DISPEL_FILTER[side], {
+      candidateFilters = { includeDispelTypes = set },
+      initializeFrame = function(aura)
+        -- The native factory swallows callback errors, so the outcome is kept here.
+        ready, failure = pcall(function()
+          aura:SetPoint("TOPLEFT", button, "TOPLEFT")
+          aura:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT")
+          local glow = CreateFrame("Frame", nil, aura, "DisableUntrustedLayoutScriptsTemplate")
+          if type(strata) == "string" then glow:SetFrameStrata(strata) end
+          if level then glow:SetFrameLevel(level + 6) end
+          glow:SetPoint("CENTER", button, "CENTER", 0, 0)
+          glow:SetSize(w * scale, h * scale)
+          glow:SetAlpha(alpha)
+          local tex = glow:CreateTexture(nil, "OVERLAY")
+          tex:SetAllPoints()
+          tex:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+          tex:SetBlendMode("ADD")
+          tex:SetVertexColor(r, g, b)
+          -- the pulse is a nicety: if the restricted frame refuses an animation the border stays steady
+          pcall(function()
+            local pulse = tex:CreateAnimationGroup()
+            pulse:SetLooping("BOUNCE")
+            local a = pulse:CreateAnimation("Alpha")
+            a:SetFromAlpha(1)
+            a:SetToAlpha(0.35)
+            a:SetDuration(0.5)
+            pulse:Play()
+          end)
+        end)
+      end,
+    })
+    assert(ready, failure or "the aura frame was not initialized")
+  end)
+  if not ok then
+    if container then pcall(container.SetEnabled, container, false); pcall(container.Hide, container) end
+    trace(string.format("DISPEL %s (%s) container failed: %s", rule.key, side,
+      type(err) == "string" and not isSecret(err) and err or "restricted"))
+    return nil, true
+  end
+  return { container = container }
+end
+
+local function retireDispel(bank)
+  for _, name in ipairs({ "friend", "enemy" }) do
+    local s = bank[name]
+    if s and s.container then
+      pcall(s.container.SetEnabled, s.container, false)
+      pcall(s.container.Hide, s.container)
+    end
+    bank[name] = nil
+  end
+end
+
+local function showSide(bank, name, shown)
+  local side = bank[name]
+  if not side or side.shown == shown then return end
+  local c = side.container
+  local ok = pcall(c.SetEnabled, c, shown)
+  ok = pcall(shown and c.Show or c.Hide, c) and ok
+  if ok then
+    side.shown = shown
+    trace(string.format("DISPEL %s %s side %s", bank.rule.key, name, shown and "watching the target" or "off"))
+  end
+end
+
+local function updateDispel(entry)
+  local rule, button = entry.rule, entry.button
+  local bank = dispelBank[button]
+  local now = GetTime and GetTime() or 0
+  local lockdown = ask(InCombatLockdown) == true
+  local enabled = ruleEnabled(rule)
+  if enabled and not lockdown then
+    local sig = dispelSignature(button, rule)
+    if bank and (bank.sig ~= sig or bank.rule ~= rule) then
+      retireDispel(bank)
+      bank = nil
+    end
+    if not bank then
+      bank = { sig = sig, rule = rule }
+      dispelBank[button] = bank
+    end
+    -- a build that failed is tried again after DISPEL_RETRY seconds, not on every update
+    if not bank.built and (not bank.failedAt or now - bank.failedAt >= DISPEL_RETRY) then
+      local failed = false
+      for _, name in ipairs({ "friend", "enemy" }) do
+        local side, didFail = makeDispelSide(button, rule, name)
+        if didFail then failed = true end
+        bank[name] = side
+      end
+      if failed then
+        retireDispel(bank)
+        bank.failedAt = now
+      else
+        bank.built, bank.failedAt = true, nil
+        trace(string.format("DISPEL %s: aura container ready on %s", rule.key, entry.name))
+      end
+    end
+  end
+  if not bank then return end
+  local wantFriend, wantEnemy = false, false
+  if enabled and not (cfg().combatOnly and inCombat() == false) then
+    local t = targetInfo()
+    if t.exists and not t.dead then
+      wantFriend = t.canAssist == true
+      wantEnemy = t.canAttack == true
+    end
+  end
+  showSide(bank, "friend", wantFriend)
+  showSide(bank, "enemy", wantEnemy)
+end
+
+-- A button that no longer carries a dispel spell lets its containers go.
+local function releaseDispel(button)
+  local bank = dispelBank[button]
+  if bank and ask(InCombatLockdown) ~= true then
+    retireDispel(bank)
+    dispelBank[button] = nil
+  end
+end
+
 local function updateEntry(entry, testing)
   local on, alpha
   if testing then on, alpha = entry.rule and true or false, opacity() else on, alpha = windowFor(entry) end
@@ -854,7 +1023,8 @@ local function updateEntry(entry, testing)
   elseif f and f.on then
     hideGlow(f)
   end
-  if entry.rule and lastState[button] ~= (on and true or false) then
+  if entry.rule and entry.rule.dispel and not testing then updateDispel(entry) end
+  if entry.rule and not entry.rule.dispel and lastState[button] ~= (on and true or false) then
     lastState[button] = on and true or false
     if not testing then
       trace(string.format("%s %s on %s", on and "GLOW" or "off", entry.label, entry.name))
@@ -923,6 +1093,9 @@ local function rescan()
       for _, f in pairs(set) do if f.on then hideGlow(f) end end
       lastState[b] = nil
     end
+  end
+  for b in pairs(dispelBank) do
+    if not by[b] or not by[b].rule or not by[b].rule.dispel then releaseDispel(b) end
   end
   for b, d in pairs(detectors) do
     if not by[b] or not by[b].kill then
@@ -1138,6 +1311,16 @@ function ns.Probe()
         end
         line = line .. "; curve " .. table.concat(pts, " ")
       end
+    end
+    if e.rule and e.rule.dispel then
+      local bank = dispelBank[e.button]
+      local function side(name)
+        local one = bank and bank[name]
+        return one and (one.shown and "on" or "off") or "-"
+      end
+      line = line .. string.format(", aura containers %s (friend %s, enemy %s)",
+        bank and (bank.built and "built" or (bank.failedAt and "FAILED, retrying" or "not built")) or "not built",
+        side("friend"), side("enemy"))
     end
     local set = glows[e.button]
     local f = set and set[currentStyle()]
