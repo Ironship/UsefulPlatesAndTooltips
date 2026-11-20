@@ -877,6 +877,10 @@ local function makeDispelSide(button, rule, side)
   local level = readNumber(button, "GetFrameLevel")
   local container, ready, failure
   local ok, err = pcall(function()
+    if C_AddOns and ask(C_AddOns.IsAddOnLoaded, "Blizzard_AuraContainer") ~= true
+      and type(C_AddOns.LoadAddOn) == "function" then
+      pcall(C_AddOns.LoadAddOn, "Blizzard_AuraContainer")
+    end
     container = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
     container:SetSize(1, 1)
     container:SetPoint("CENTER", UIParent, "CENTER")
