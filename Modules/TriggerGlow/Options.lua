@@ -129,6 +129,11 @@ local function buildSettings(parent)
     "Divine Grace glows while your friendly target (not you) is below the share of health set below."), y)
   y = place(checkRow(parent, "Reactive spells", "reactive",
     "Overpower, Revenge, Mongoose Bite, Counterattack and Victory Rush glow while the game says they can be cast."), y)
+  y = place(checkRow(parent, "Dispel and cure spells", "dispel",
+    "Dispel Magic, Purge, Cure Disease, Purify, Cleanse, Cure Poison and Remove Curse glow while your target has an "
+    .. "effect the spell can remove (a friend's debuff, or an enemy's Magic buff for Dispel Magic and Purge). The "
+    .. "game's own aura list does the matching, so it works in a fight, where addons cannot read auras. It is always "
+    .. "a pulsing border, whatever the style below says."), y)
   for _, rule in ipairs(ns.RULES) do
     y = place(spellRow(parent, rule), y)
   end
@@ -168,6 +173,8 @@ local function buildSettings(parent)
   y = place(choiceRow(parent, "Heal color", "healColor", colorList(), "Tints the glow of Divine Grace."), y)
   y = place(choiceRow(parent, "Reactive color", "reactiveColor", colorList(),
     "Tints the glow of Overpower, Revenge, Mongoose Bite, Counterattack and Victory Rush."), y)
+  y = place(choiceRow(parent, "Dispel color", "dispelColor", colorList(),
+    "Tints the glow of the dispel and cure spells."), y)
   y = place(choiceRow(parent, "Lethal damage color", "killColor", colorList(),
     "Tints the glow of a spell that would kill the target. On a spell that also has its own window "
     .. "(Execute) that spell's color is used."), y)
@@ -289,6 +296,7 @@ local SAMPLES = {
   { group = "hp", icon = 5308, fallback = "Interface\\Icons\\INV_Sword_48", label = "Execute-type" },
   { group = "heal", icon = 1277370, fallback = "Interface\\Icons\\Spell_Holy_PowerWordShield", label = "Heal" },
   { group = "reactive", icon = 7384, fallback = "Interface\\Icons\\Ability_MeleeDamage", label = "Reactive" },
+  { group = "dispel", icon = 527, fallback = "Interface\\Icons\\Spell_Holy_DispelMagic", label = "Dispel" },
   { group = "kill", icon = 133, fallback = "Interface\\Icons\\Spell_Fire_FlameBolt", label = "Lethal" },
 }
 
@@ -339,7 +347,7 @@ local function buildPreview(pane)
   hint:SetPoint("TOPLEFT", SIDE, -190)
   hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
   hint:SetJustifyH("LEFT")
-  hint:SetText(BIT.L("The four buttons show the style, color, size and opacity as set. The glow on your action "
+  hint:SetText(BIT.L("The five buttons show the style, color, size and opacity as set. The glow on your action "
     .. "bars appears only while the spell's condition holds. \"Simulate on my bars\" shows it on the real buttons."))
 
   pane.title = title
@@ -362,7 +370,7 @@ if BIT.RegisterTab then
     title = "Trigger glow",
     summary = "A glow on the action bar button of a spell whose moment has come: Execute and Hammer of Wrath at "
       .. "low target health, Divine Grace for a hurt friend, Overpower, Revenge and the other reactive spells "
-      .. "when the game says they can be cast (experimental).",
+      .. "when the game says they can be cast, Dispel Magic and Cure Disease when the target has something to remove (experimental).",
     width = WINDOW_WIDTH, height = WINDOW_HEIGHT,
     build = function(parent)
       if window == parent then return end

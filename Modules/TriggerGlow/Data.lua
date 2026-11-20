@@ -13,6 +13,12 @@
 -- group "reactive": the game itself says when the spell can be cast (an Overpower after a dodge, a Revenge
 --                   after a block, dodge or parry, a Victory Rush after a kill): C_Spell.IsSpellUsable.
 --
+-- group "dispel":   the target carries an effect this spell can remove (Dispel Magic, Cure Disease, Cleanse, Remove
+--                   Curse, ...). The aura is not readable from addon code in a fight, so the game's own aura
+--                   container does the matching (Core.lua, updateDispel): `dispel.friend` lists the dispel types
+--                   (Magic, Curse, Disease, Poison) of the harmful effects on a friendly target, `dispel.enemy` those of
+--                   the beneficial effects on an enemy (Dispel Magic and Purge take buffs off enemies).
+--
 -- group "kill":     not a rule of this table: any spell on a bar whose direct damage CastPrediction can price glows
 --                   while the target's health is at or below that damage (Core.lua, updateKill). This is what a
 --                   Shadow Word: Death (401955, 1309595, 1309633, 1309635, 1309636) gets: its description in this
@@ -25,6 +31,7 @@ ns.GROUPS = {
   { id = "hp", label = "Execute-type spells", colorKey = "hpColor", enableKey = "hp" },
   { id = "heal", label = "Heal for a low-health friend", colorKey = "healColor", enableKey = "heal" },
   { id = "reactive", label = "Reactive spells", colorKey = "reactiveColor", enableKey = "reactive" },
+  { id = "dispel", label = "Dispel and cure", colorKey = "dispelColor", enableKey = "dispel" },
   { id = "kill", label = "Lethal damage", colorKey = "killColor", enableKey = "kill" },
 }
 
@@ -68,6 +75,36 @@ ns.RULES = {
     key = "victoryRush", group = "reactive", label = "Victory Rush",
     ids = { 402927 },
     note = "Only usable within 20 seconds after you kill an enemy that gives experience or honor.",
+  },
+  {
+    key = "dispelMagic", group = "dispel", label = "Dispel Magic", ids = { 527, 988 },
+    dispel = { friend = { "Magic" }, enemy = { "Magic" } },
+    note = "Glows while your friendly target has a Magic debuff, or your enemy target a Magic buff.",
+  },
+  {
+    key = "purge", group = "dispel", label = "Purge", ids = { 370, 8012 },
+    dispel = { enemy = { "Magic" } },
+    note = "Glows while your enemy target has a Magic buff.",
+  },
+  {
+    key = "cureDisease", group = "dispel", label = "Cure Disease / Abolish Disease", ids = { 528, 2870, 552 },
+    dispel = { friend = { "Disease" } },
+    note = "Glows while your friendly target has a disease.",
+  },
+  {
+    key = "cleanse", group = "dispel", label = "Purify / Cleanse", ids = { 1152, 4987 },
+    dispel = { friend = { "Disease", "Poison", "Magic" } },
+    note = "Glows while your friendly target has an effect the spell removes (Purify: disease and poison; Cleanse: also magic).",
+  },
+  {
+    key = "curePoison", group = "dispel", label = "Cure Poison / Abolish Poison", ids = { 526, 8946, 2893 },
+    dispel = { friend = { "Poison" } },
+    note = "Glows while your friendly target is poisoned.",
+  },
+  {
+    key = "removeCurse", group = "dispel", label = "Remove Curse", ids = { 475, 2782 },
+    dispel = { friend = { "Curse" } },
+    note = "Glows while your friendly target has a curse.",
   },
 }
 
