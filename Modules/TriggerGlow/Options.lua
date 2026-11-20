@@ -329,22 +329,27 @@ local function buildPreview(pane)
   rule:SetPoint("TOPRIGHT", -8, -34)
 
   wipe(sampleButtons)
-  local slot = (PREVIEW_WIDTH - 2 * SIDE) / #SAMPLES
-  for i, sample in ipairs(SAMPLES) do
-    local f = CreateFrame("Frame", nil, pane)
-    f:SetSize(44, 44)
-    f:SetPoint("TOP", pane, "TOPLEFT", SIDE + slot * (i - 0.5), -88)
-    local icon = f:CreateTexture(nil, "ARTWORK")
-    icon:SetAllPoints()
-    icon:SetTexture(iconFor(sample))
-    local cap = pane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    cap:SetPoint("TOP", f, "BOTTOM", 0, -32)
-    cap:SetText(BIT.L(sample.label))
-    sampleButtons[#sampleButtons + 1] = { frame = f, group = sample.group, on = true }
+  local rows = { { 1, 2, 3 }, { 4, 5 } }
+  for r, indices in ipairs(rows) do
+    local slot = (PREVIEW_WIDTH - 2 * SIDE) / #indices
+    local y = -88 - (r - 1) * 100
+    for col, i in ipairs(indices) do
+      local sample = SAMPLES[i]
+      local f = CreateFrame("Frame", nil, pane)
+      f:SetSize(44, 44)
+      f:SetPoint("TOP", pane, "TOPLEFT", SIDE + slot * (col - 0.5), y)
+      local icon = f:CreateTexture(nil, "ARTWORK")
+      icon:SetAllPoints()
+      icon:SetTexture(iconFor(sample))
+      local cap = pane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      cap:SetPoint("TOP", f, "BOTTOM", 0, -32)
+      cap:SetText(BIT.L(sample.label))
+      sampleButtons[#sampleButtons + 1] = { frame = f, group = sample.group, on = true }
+    end
   end
 
   local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("TOPLEFT", SIDE, -190)
+  hint:SetPoint("TOPLEFT", SIDE, -296)
   hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
   hint:SetJustifyH("LEFT")
   hint:SetText(BIT.L("The five buttons show the style, color, size and opacity as set. The glow on your action "

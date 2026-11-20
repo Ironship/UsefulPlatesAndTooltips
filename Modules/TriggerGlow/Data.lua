@@ -92,9 +92,14 @@ ns.RULES = {
     note = "Glows while your friendly target has a disease.",
   },
   {
-    key = "cleanse", group = "dispel", label = "Purify / Cleanse", ids = { 1152, 4987 },
+    key = "purify", group = "dispel", label = "Purify", ids = { 1152 },
+    dispel = { friend = { "Disease", "Poison" } },
+    note = "Glows while your friendly target has a disease or poison.",
+  },
+  {
+    key = "cleanse", group = "dispel", label = "Cleanse", ids = { 4987 },
     dispel = { friend = { "Disease", "Poison", "Magic" } },
-    note = "Glows while your friendly target has an effect the spell removes (Purify: disease and poison; Cleanse: also magic).",
+    note = "Glows while your friendly target has a disease, poison or Magic debuff.",
   },
   {
     key = "curePoison", group = "dispel", label = "Cure Poison / Abolish Poison", ids = { 526, 8946, 2893 },

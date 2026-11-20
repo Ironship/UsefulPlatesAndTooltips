@@ -857,6 +857,7 @@ local lastState = setmetatable({}, { __mode = "k" })
 local dispelBank = setmetatable({}, { __mode = "k" }) -- [host button] = { sig, rule, friend = side, enemy = side, failedAt }
 local DISPEL_RETRY = 5
 local DISPEL_FILTER = { friend = "HARMFUL", enemy = "HELPFUL" }
+local targetStamp = 0
 
 local function dispelSignature(button, rule)
   local w, h = buttonSize(button)
@@ -888,15 +889,20 @@ local function makeDispelSide(button, rule, side)
     end
     container = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
     container:SetSize(1, 1)
-    container:SetPoint("CENTER", UIParent, "CENTER")
+    container:SetPoint("TOPLEFT", UIParent, "TOPLEFT")
     container:SetUnit("target")
     container:AddAuraSlot("dispel" .. rule.key .. side, DISPEL_FILTER[side], {
       candidateFilters = { includeDispelTypes = set },
       initializeFrame = function(aura)
         -- The native factory swallows callback errors, so the outcome is kept here.
         ready, failure = pcall(function()
-          aura:SetPoint("TOPLEFT", button, "TOPLEFT")
-          aura:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT")
+          -- Keep the AuraButton itself 1x1 off the action button and mouse-disabled: AuraButton is a <Button>
+          -- with OnEnter/OnClick handlers, so covering `button` with it would swallow clicks and tooltips.
+          aura:SetSize(1, 1)
+          aura:SetPoint("TOPLEFT", container, "TOPLEFT")
+          pcall(aura.EnableMouse, aura, false)
+          pcall(aura.SetMouseClickEnabled, aura, false)
+          pcall(aura.SetMouseMotionEnabled, aura, false)
           local glow = CreateFrame("Frame", nil, aura, "DisableUntrustedLayoutScriptsTemplate")
           if type(strata) == "string" then glow:SetFrameStrata(strata) end
           if level then glow:SetFrameLevel(level + 6) end
@@ -922,6 +928,8 @@ local function makeDispelSide(button, rule, side)
       end,
     })
     assert(ready, failure or "the aura frame was not initialized")
+    pcall(container.SetEnabled, container, false)
+    pcall(container.Hide, container)
   end)
   if not ok then
     if container then pcall(container.SetEnabled, container, false); pcall(container.Hide, container) end
@@ -929,7 +937,7 @@ local function makeDispelSide(button, rule, side)
       type(err) == "string" and not isSecret(err) and err or "restricted"))
     return nil, true
   end
-  return { container = container }
+  return { container = container, shown = false }
 end
 
 local function retireDispel(bank)
@@ -945,17 +953,26 @@ end
 
 local function showSide(bank, name, shown)
   local side = bank[name]
-  if not side or side.shown == shown then return end
+  if not side then return end
   local c = side.container
-  local ok = pcall(c.SetEnabled, c, shown)
-  ok = pcall(shown and c.Show or c.Hide, c) and ok
-  if ok then
-    side.shown = shown
-    trace(string.format("DISPEL %s %s side %s", bank.rule.key, name, shown and "watching the target" or "off"))
+  if side.shown ~= shown then
+    local ok = pcall(c.SetEnabled, c, shown)
+    ok = pcall(shown and c.Show or c.Hide, c) and ok
+    if ok then
+      side.shown = shown
+      side.targetStamp = shown and targetStamp or nil
+      if shown then pcall(c.UpdateAllAuras, c) end
+      trace(string.format("DISPEL %s %s side %s", bank.rule.key, name, shown and "watching the target" or "off"))
+    end
+  elseif shown and side.targetStamp ~= targetStamp then
+    -- CustomAuraContainerTemplate only listens to UNIT_AURA, not PLAYER_TARGET_CHANGED, so switching between two
+    -- targets on the same side must ask the container to re-read the new target's auras.
+    side.targetStamp = targetStamp
+    pcall(c.UpdateAllAuras, c)
   end
 end
 
-local function updateDispel(entry)
+local function updateDispel(entry, testing)
   local rule, button = entry.rule, entry.button
   local bank = dispelBank[button]
   local now = GetTime and GetTime() or 0
@@ -990,7 +1007,10 @@ local function updateDispel(entry)
   end
   if not bank then return end
   local wantFriend, wantEnemy = false, false
-  if enabled and not (cfg().combatOnly and inCombat() == false) then
+  if not testing and enabled and bank.rule == rule
+    and not (cfg().combatOnly and inCombat() == false)
+    and not (cfg().needResources and usableNow(entry.spell) == false)
+    and ask(button.IsVisible, button) ~= false then
     local t = targetInfo()
     if t.exists and not t.dead then
       wantFriend = t.canAssist == true
@@ -1001,10 +1021,14 @@ local function updateDispel(entry)
   showSide(bank, "enemy", wantEnemy)
 end
 
--- A button that no longer carries a dispel spell lets its containers go.
+-- A button that no longer carries a dispel spell turns its containers off at once (even in combat, since they
+-- live on UIParent) and drops them once out of combat.
 local function releaseDispel(button)
   local bank = dispelBank[button]
-  if bank and ask(InCombatLockdown) ~= true then
+  if not bank then return end
+  showSide(bank, "friend", false)
+  showSide(bank, "enemy", false)
+  if ask(InCombatLockdown) ~= true then
     retireDispel(bank)
     dispelBank[button] = nil
   end
@@ -1023,7 +1047,7 @@ local function updateEntry(entry, testing)
   elseif f and f.on then
     hideGlow(f)
   end
-  if entry.rule and entry.rule.dispel and not testing then updateDispel(entry) end
+  if entry.rule and entry.rule.dispel then updateDispel(entry, testing) end
   if entry.rule and not entry.rule.dispel and lastState[button] ~= (on and true or false) then
     lastState[button] = on and true or false
     if not testing then
@@ -1195,6 +1219,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     return
   end
   if not settings then return end
+  if event == "PLAYER_TARGET_CHANGED" or event == "PLAYER_ENTERING_WORLD" then
+    targetStamp = targetStamp + 1
+  end
   for _, e in ipairs(EVENTS) do
     if event == e then dirtyScan, collectDue = true, true return end
   end
