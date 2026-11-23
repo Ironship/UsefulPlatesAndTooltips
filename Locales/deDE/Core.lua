@@ -510,4 +510,94 @@ BIT.RegisterLocale("deDE", {
     "Rahmen zurückgesetzt: %d Pfade gelöscht, das Addon findet die Rahmen wieder selbst.",
   ["Frames: no path was set, the addon already finds the frames by itself."] =
     "Rahmen: Es war kein Pfad gesetzt, das Addon findet die Rahmen bereits selbst.",
+
+  -- Profiles
+  ["Profiles"] = "Profile",
+  ["Profile: %s"] = "Profil: %s",
+  ["Default"] = "Standard",
+  ["Default (shared)"] = "Standard (geteilt)",
+  ["Separate settings and enabled modules per character, or shared across characters."] =
+    "Getrennte Einstellungen und aktive Module pro Charakter oder gemeinsam für alle Charaktere.",
+  ["Profiles save which modules are enabled and all module settings (appearance, frames and options). Learned combat data and language are kept across profiles. Switching profiles reloads the interface."] =
+    "Profile speichern, welche Module aktiv sind, sowie alle Moduleinstellungen (Aussehen, Rahmen und Optionen). Gelernte Kampfdaten und die Sprache bleiben profilübergreifend erhalten. Ein Profilwechsel lädt die Oberfläche neu.",
+  ["Character: %s"] = "Charakter: %s",
+  ["Unknown"] = "Unbekannt",
+  ["Active profile: %s"] = "Aktives Profil: %s",
+  ["After reload: %s"] = "Nach Neuladen: %s",
+  ["Active: %s  ->  After reload: %s"] = "Aktiv: %s  ->  Nach Neuladen: %s",
+  ["Click to manage character profiles and enabled modules."] =
+    "Klicken, um Charakterprofile und aktive Module zu verwalten.",
+  ["THIS CHARACTER"] = "DIESER CHARAKTER",
+  ["Active profile"] = "Aktives Profil",
+  ["Which profile this character uses. Default is shared across characters; choose this character's name or create a named profile for separate settings and enabled modules."] =
+    "Welches Profil dieser Charakter nutzt. Standard wird zwischen Charakteren geteilt; wählt den Charakternamen oder erstellt ein benanntes Profil für eigene Einstellungen und aktive Module.",
+  ["%s (new character profile)"] = "%s (neues Charakterprofil)",
+  ["Create a separate profile for %s (copying current settings) and reload the interface?"] =
+    "Ein eigenes Profil für %s erstellen (kopiert die aktuellen Einstellungen) und die Oberfläche neu laden?",
+  ["Switch this character to profile \"%s\" and reload the interface?"] =
+    "Diesen Charakter auf das Profil „%s“ umschalten und die Oberfläche neu laden?",
+  ["Switch %s back to the shared Default profile and reload the interface?"] =
+    "%s zurück auf das gemeinsame Standardprofil schalten und die Oberfläche neu laden?",
+  ["Switch %s to its own profile \"%s\" and reload the interface?"] =
+    "%s auf sein eigenes Profil „%s“ umschalten und die Oberfläche neu laden?",
+  ["Switch & reload"] = "Wechseln & neu laden",
+  ["Switch back to Default (shared)"] = "Zurück zu Standard (geteilt)",
+  ["Use %s's profile"] = "Profil von %s nutzen",
+  ["Use separate profile for this character"] = "Eigenes Profil für diesen Charakter nutzen",
+  ["MODULES IN THIS PROFILE"] = "MODULE IN DIESEM PROFIL",
+  ["Enable all"] = "Alle an",
+  ["Disable all"] = "Alle aus",
+  ["Reload UI to edit the newly selected profile."] =
+    "Oberfläche neu laden, um das neu gewählte Profil zu bearbeiten.",
+  ["Changes take effect after a reload of the interface."] =
+    "Änderungen werden nach einem Neuladen der Oberfläche wirksam.",
+  ["Tick which modules run in this profile."] =
+    "Hakt an, welche Module in diesem Profil laufen.",
+  ["MANAGE PROFILES"] = "PROFILE VERWALTEN",
+  ["New profile"] = "Neues Profil",
+  ["Create a named profile (e.g. Healer, Tank, Alt) and switch this character to it."] =
+    "Erstellt ein benanntes Profil (z. B. Heiler, Tank, Twink) und schaltet diesen Charakter darauf um.",
+  ["Copy current"] = "Aktuelles kopieren",
+  ["Blank"] = "Leer",
+  ["Enter a profile name first."] = "Gebt zuerst einen Profilnamen ein.",
+  ["A profile named \"%s\" already exists."] = "Ein Profil namens „%s“ existiert bereits.",
+  ["Create profile \"%s\" (copying current settings), switch this character to it and reload?"] =
+    "Profil „%s“ erstellen (kopiert aktuelle Einstellungen), darauf umschalten und neu laden?",
+  ["Create blank profile \"%s\" (defaults), switch this character to it and reload?"] =
+    "Leeres Profil „%s“ (Standardwerte) erstellen, darauf umschalten und neu laden?",
+  ["Create & reload"] = "Erstellen & neu laden",
+  ["Copy settings from"] = "Einstellungen kopieren von",
+  ["Overwrite this profile's settings with a copy from another profile (keeps learned combat data)."] =
+    "Überschreibt die Einstellungen dieses Profils mit einer Kopie eines anderen Profils (gelernte Kampfdaten bleiben erhalten).",
+  ["Copy"] = "Kopieren",
+  ["Copy all settings from \"%s\" into \"%s\" and reload the interface? Learned combat data is kept."] =
+    "Alle Einstellungen von „%s“ nach „%s“ kopieren und die Oberfläche neu laden? Gelernte Kampfdaten bleiben erhalten.",
+  ["Copy & reload"] = "Kopieren & neu laden",
+  ["(no other profiles)"] = "(keine weiteren Profile)",
+  ["Delete profile"] = "Profil löschen",
+  ["Remove a profile that is not currently in use. Default cannot be deleted."] =
+    "Entfernt ein derzeit nicht genutztes Profil. Standard kann nicht gelöscht werden.",
+  ["Delete"] = "Löschen",
+  ["Delete profile \"%s\"? Any character using it will fall back to Default."] =
+    "Profil „%s“ löschen? Jeder Charakter mit diesem Profil fällt auf Standard zurück.",
+  ["Deleted profile \"%s\"."] = "Profil „%s“ gelöscht.",
+  ["(none to delete)"] = "(nichts zum Löschen)",
+  ["Reset profile"] = "Profil zurücksetzen",
+  ["Reset all settings in profile \"%s\" to defaults and reload? Learned combat data is kept."] =
+    "Alle Einstellungen im Profil „%s“ auf Standardwerte zurücksetzen und neu laden? Gelernte Kampfdaten bleiben erhalten.",
+  ["Could not switch profile (%s)."] = "Profil konnte nicht gewechselt werden (%s).",
+  ["Could not create profile (%s)."] = "Profil konnte nicht erstellt werden (%s).",
+  ["Could not copy profile (%s)."] = "Profil konnte nicht kopiert werden (%s).",
+  ["Could not delete profile (%s)."] = "Profil konnte nicht gelöscht werden (%s).",
+  ["Profiles: %s"] = "Profile: %s",
+  ["Character name is unavailable."] = "Charaktername ist nicht verfügbar.",
+  ["Created and selected profile \"%s\" (copied from current). Use /reload to apply."] =
+    "Profil „%s“ erstellt und gewählt (vom aktuellen kopiert). Mit /reload anwenden.",
+  ["Selected profile \"%s\". Use /reload to apply."] = "Profil „%s“ gewählt. Mit /reload anwenden.",
+  ["Selected the shared Default profile. Use /reload to apply."] =
+    "Gemeinsames Standardprofil gewählt. Mit /reload anwenden.",
+  ["Copied settings from \"%s\" into \"%s\". Use /reload to apply."] =
+    "Einstellungen von „%s“ nach „%s“ kopiert. Mit /reload anwenden.",
+  ["/upt profile opens Profiles; /upt profile list|char|default|use <name>|new <name>|copy <name>|delete <name>"] =
+    "/upt profile öffnet Profile; /upt profile list|char|default|use <Name>|new <Name>|copy <Name>|delete <Name>",
 })

@@ -2863,8 +2863,18 @@ if type(SlashCmdList) == "table" then
 end
 
 local function loadSettings()
-  if type(UsefulPlatesAndTooltips_SpellDamageInfoDB) ~= "table" then UsefulPlatesAndTooltips_SpellDamageInfoDB = {} end
-  db = UsefulPlatesAndTooltips_SpellDamageInfoDB
+  if type(BIT.PortedDB) == "function" then
+    db = BIT.PortedDB("SpellDamageInfo")
+  else
+    if type(UsefulPlatesAndTooltips_SpellDamageInfoDB) ~= "table" then UsefulPlatesAndTooltips_SpellDamageInfoDB = {} end
+    db = UsefulPlatesAndTooltips_SpellDamageInfoDB
+  end
+  if db.interfaceLang == nil and type(BIT.LanguageChoice) == "function" then
+    local choice = BIT.LanguageChoice()
+    if choice == "auto" or choice == "en" then db.interfaceLang = choice
+    elseif choice == "deDE" then db.interfaceLang = "de"
+    elseif choice == "ruRU" then db.interfaceLang = "ru" end
+  end
   for k, v in pairs(DEFAULTS) do
     if db[k] == nil then db[k] = v end
   end

@@ -817,7 +817,8 @@ local function start()
 end
 
 local function prepareShieldSettings()
-  local savedModules = type(UsefulPlatesAndTooltipsDB) == "table" and UsefulPlatesAndTooltipsDB.modules
+  local root = type(BIT.DB) == "function" and BIT.DB() or UsefulPlatesAndTooltipsDB
+  local savedModules = type(root) == "table" and root.modules
   local saved = type(savedModules) == "table" and savedModules.ShieldsInfo
   local previousGroupSwitch = type(saved) == "table" and saved.party
   local hasRaidSwitch = type(saved) == "table" and type(saved.raid) == "boolean"

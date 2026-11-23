@@ -474,7 +474,7 @@ function Plate.ReadOffsets()
   local hs = moduleSettings("HunterRangeFinder")
   if hs and type(hs.plateOffset) == "number" then hunter = hs.plateOffset end
   local dots, shards = -60, -60
-  local rd = UsefulPlatesAndTooltips_ResourceDingDB
+  local rd = (type(BIT.PortedDB) == "function" and BIT.PortedDB("ResourceDing")) or UsefulPlatesAndTooltips_ResourceDingDB
   if type(rd) == "table" then
     if type(rd.dotOffset) == "number" then dots = rd.dotOffset end
     if type(rd.shardOffset) == "number" then shards = rd.shardOffset end
@@ -531,7 +531,7 @@ function Plate.Rows()
     return BIT.IsRunning(name) or (BIT.woke and BIT.woke[name] == true)
   end
   local hunter, dots, shards = Plate.ReadOffsets()
-  local rd = UsefulPlatesAndTooltips_ResourceDingDB or {}
+  local rd = (type(BIT.PortedDB) == "function" and BIT.PortedDB("ResourceDing")) or UsefulPlatesAndTooltips_ResourceDingDB or {}
   local size = math.min(24, math.max(8, tonumber(rd.dotSize) or 14))
   local resource = BIT.modules and BIT.modules.ResourceDing
   local kind = resource and resource.GetResource and resource.GetResource()

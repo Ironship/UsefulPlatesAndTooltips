@@ -215,8 +215,10 @@ function Style.GetDefaults(moduleName)
 end
 
 local function appearanceDB()
-  local d = type(UsefulPlatesAndTooltipsDB) == "table" and UsefulPlatesAndTooltipsDB or nil
-  if not d then return nil end
+  local d = (type(BIT.DB) == "function" and BIT.DB())
+    or (type(UsefulPlatesAndTooltipsDB) == "table" and UsefulPlatesAndTooltipsDB)
+    or nil
+  if type(d) ~= "table" then return nil end
   local a = d.appearance
   return type(a) == "table" and a or nil
 end
@@ -283,9 +285,15 @@ function Style.Resolve(moduleName, legacy)
   ---------------------------------------------------------------------------------------------
 
   local function ensureAppearance()
-    if type(UsefulPlatesAndTooltipsDB) ~= "table" then UsefulPlatesAndTooltipsDB = {} end
-    local a = UsefulPlatesAndTooltipsDB.appearance
-    if type(a) ~= "table" then a = {} UsefulPlatesAndTooltipsDB.appearance = a end
+    local d
+    if type(BIT.DB) == "function" then
+      d = BIT.DB()
+    else
+      if type(UsefulPlatesAndTooltipsDB) ~= "table" then UsefulPlatesAndTooltipsDB = {} end
+      d = UsefulPlatesAndTooltipsDB
+    end
+    local a = d.appearance
+    if type(a) ~= "table" then a = {} d.appearance = a end
     local globals = a.global
     if type(globals) ~= "table" then globals = {} a.global = globals end
     local modules = a.modules

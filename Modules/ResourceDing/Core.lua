@@ -115,26 +115,32 @@ local defaults = {
 Addon.defaults = defaults
 
 local function initializeDatabase()
-  if type(UsefulPlatesAndTooltips_ResourceDingDB) ~= "table" then UsefulPlatesAndTooltips_ResourceDingDB = {} end
+  local store
+  if type(BIT.PortedDB) == "function" then
+    store = BIT.PortedDB("ResourceDing")
+  else
+    if type(UsefulPlatesAndTooltips_ResourceDingDB) ~= "table" then UsefulPlatesAndTooltips_ResourceDingDB = {} end
+    store = UsefulPlatesAndTooltips_ResourceDingDB
+  end
   for key, value in pairs(defaults) do
-    local saved = UsefulPlatesAndTooltips_ResourceDingDB[key]
+    local saved = store[key]
     if type(saved) ~= type(value) or (type(value) == "number"
       and (saved ~= saved or saved == math.huge or saved == -math.huge)) then
-      UsefulPlatesAndTooltips_ResourceDingDB[key] = value
+      store[key] = value
     end
   end
-  if not Addon.SOUNDS[UsefulPlatesAndTooltips_ResourceDingDB.sound] then UsefulPlatesAndTooltips_ResourceDingDB.sound = defaults.sound end
-  if type(UsefulPlatesAndTooltips_ResourceDingDB.dotOffset) ~= "number" then UsefulPlatesAndTooltips_ResourceDingDB.dotOffset = defaults.dotOffset
-  elseif UsefulPlatesAndTooltips_ResourceDingDB.dotOffset < -80 then UsefulPlatesAndTooltips_ResourceDingDB.dotOffset = -80
-  elseif UsefulPlatesAndTooltips_ResourceDingDB.dotOffset > 30 then UsefulPlatesAndTooltips_ResourceDingDB.dotOffset = 30 end
-  if type(UsefulPlatesAndTooltips_ResourceDingDB.shardOffset) ~= "number" then UsefulPlatesAndTooltips_ResourceDingDB.shardOffset = defaults.shardOffset
-  elseif UsefulPlatesAndTooltips_ResourceDingDB.shardOffset < -80 then UsefulPlatesAndTooltips_ResourceDingDB.shardOffset = -80
-  elseif UsefulPlatesAndTooltips_ResourceDingDB.shardOffset > 30 then UsefulPlatesAndTooltips_ResourceDingDB.shardOffset = 30 end
-  local dotSize = tonumber(UsefulPlatesAndTooltips_ResourceDingDB.dotSize)
+  if not Addon.SOUNDS[store.sound] then store.sound = defaults.sound end
+  if type(store.dotOffset) ~= "number" then store.dotOffset = defaults.dotOffset
+  elseif store.dotOffset < -80 then store.dotOffset = -80
+  elseif store.dotOffset > 30 then store.dotOffset = 30 end
+  if type(store.shardOffset) ~= "number" then store.shardOffset = defaults.shardOffset
+  elseif store.shardOffset < -80 then store.shardOffset = -80
+  elseif store.shardOffset > 30 then store.shardOffset = 30 end
+  local dotSize = tonumber(store.dotSize)
   if dotSize ~= dotSize or not dotSize or dotSize < 8 then dotSize = 8
   elseif dotSize > 24 then dotSize = 24 end
-  UsefulPlatesAndTooltips_ResourceDingDB.dotSize = math.floor(dotSize + 0.5)
-  Addon.db = UsefulPlatesAndTooltips_ResourceDingDB
+  store.dotSize = math.floor(dotSize + 0.5)
+  Addon.db = store
   -- The saved table is shared by every character on the account, but the mana level is per class:
   -- each class keeps its own entry, and manaPercent is this character's copy of it.
   local _, class = UnitClass("player")

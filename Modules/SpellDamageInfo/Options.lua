@@ -490,7 +490,9 @@ end)
 local function buildSDIPreview(parent)
   -- OFF previews can be opened before ADDON_LOADED wakes this module's locale.
   if not L.OVER then
-    local saved = type(UsefulPlatesAndTooltips_SpellDamageInfoDB) == "table" and UsefulPlatesAndTooltips_SpellDamageInfoDB
+    local saved = (type(BIT.PortedDB) == "function" and BIT.PortedDB("SpellDamageInfo"))
+      or (type(UsefulPlatesAndTooltips_SpellDamageInfoDB) == "table" and UsefulPlatesAndTooltips_SpellDamageInfoDB)
+      or nil
     ns.InitInterfaceL(saved and saved.interfaceLang or "auto")
   end
   local scene = CreateFrame("Frame", nil, parent)

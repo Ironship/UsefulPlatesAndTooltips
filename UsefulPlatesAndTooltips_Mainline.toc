@@ -102,7 +102,8 @@ Modules\HealPrediction\Core.lua
 Modules\HealPrediction\Hots.lua
 Modules\HealPrediction\Options.lua
 
-# The Frames page: where another unit frame addon's bars are (a tool page, before Debug)
+# Profiles and Frames: tool pages before Debug
+Core\ProfilesPage.lua
 Core\FramesPage.lua
 # The diagnostic commands as buttons; last, so its tab is the last one
 Core\Debug.lua

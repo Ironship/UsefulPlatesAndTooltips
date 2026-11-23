@@ -43,6 +43,21 @@ local HUB_ORDER = {
 local function pageName(name, tab)
   return BIT.L(SHORT_LABEL[name] or (tab and tab.title) or name)
 end
+BIT.ModuleDisplayName = function(name)
+  return pageName(name, BIT.tabs and BIT.tabs[name])
+end
+BIT.HubModuleOrder = function()
+  local list, seen = {}, {}
+  for _, name in ipairs(HUB_ORDER) do
+    local tab = BIT.tabs[name]
+    if tab and not tab.plain then list[#list + 1] = name; seen[name] = true end
+  end
+  for _, name in ipairs(BIT.order) do
+    local tab = BIT.tabs[name]
+    if not seen[name] and tab and not tab.plain then list[#list + 1] = name; seen[name] = true end
+  end
+  return list
+end
 
 local function hubOrder()
   local list, seen = {}, {}
@@ -642,8 +657,9 @@ local WINDOW_POINTS = { TOPLEFT = true, TOP = true, TOPRIGHT = true, LEFT = true
   RIGHT = true, BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true }
 
 local function savedWindowPoint()
-  if type(BIT.DB) ~= "function" then return nil end
-  local saved = BIT.DB()
+  local getDB = type(BIT.GlobalDB) == "function" and BIT.GlobalDB or BIT.DB
+  if type(getDB) ~= "function" then return nil end
+  local saved = getDB()
   local p = type(saved) == "table" and saved.window or nil
   if type(p) ~= "table" or type(p.point) ~= "string" or not WINDOW_POINTS[p.point] then return nil end
   if type(p.x) ~= "number" or type(p.y) ~= "number" then return nil end
@@ -667,8 +683,9 @@ local function rememberWindowPoint()
   if type(window.GetPoint) ~= "function" then return end
   local point, _, relativePoint, x, y = window:GetPoint(1)
   if type(point) ~= "string" or type(x) ~= "number" or type(y) ~= "number" then return end
-  if type(BIT.DB) ~= "function" then return end
-  BIT.DB().window = {
+  local getDB = type(BIT.GlobalDB) == "function" and BIT.GlobalDB or BIT.DB
+  if type(getDB) ~= "function" then return end
+  getDB().window = {
     point = point,
     relativePoint = type(relativePoint) == "string" and relativePoint or point,
     x = x,
@@ -704,7 +721,11 @@ local function resetModule(name)
   end
   local storeName = MODULE_STORES[name]
   local store
-  if storeName then store = _G[storeName] else store = BIT.DB().modules[name] end
+  if storeName then
+    store = (type(BIT.PortedDB) == "function" and BIT.PortedDB(name)) or _G[storeName]
+  else
+    store = BIT.DB().modules[name]
+  end
   if store ~= nil and type(store) ~= "table" then
     BIT.Say(string.format(BIT.L("Cannot reset %s: its settings are invalid."), name))
     return
@@ -916,6 +937,55 @@ local function createWindow()
   end
   close:SetScript("OnClick", function() window:Hide() end)
 
+  -- Active profile badge on the left of the title bar; clicking opens the Profiles tab.
+  if BIT.Profiles and BIT.tabs.Profiles then
+    local function truncateUtf8(str, maxChars)
+      local chars, i, n = 0, 1, #str
+      while i <= n do
+        chars = chars + 1
+        if chars > maxChars then return str:sub(1, i - 1) .. "..." end
+        local b = str:byte(i)
+        if b < 128 then i = i + 1
+        elseif b < 224 then i = i + 2
+        elseif b < 240 then i = i + 3
+        else i = i + 4 end
+      end
+      return str
+    end
+    local function profileDisplay(name)
+      return name == BIT.Profiles.DEFAULT and BIT.L("Default (shared)") or name
+    end
+    local function profileButtonText()
+      local active = BIT.Profiles.Active()
+      local shown = active == BIT.Profiles.DEFAULT and BIT.L("Default") or active
+      shown = truncateUtf8(shown, 15)
+      local suffix = BIT.Profiles.PendingReload() and " *" or ""
+      return string.format(BIT.L("Profile: %s"), shown) .. suffix
+    end
+    local profileBtn = UI.Button(window, "", 165, function()
+      selectTab("Profiles")
+    end)
+    profileBtn:SetHeight(20)
+    profileBtn:SetPoint("TOPLEFT", window, "TOPLEFT", 10, -4)
+    profileBtn:SetText(profileButtonText())
+    profileBtn:HookScript("OnEnter", function(self)
+      if not GameTooltip then return end
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:SetText(BIT.L("Profiles"), 1, 0.82, 0)
+      GameTooltip:AddLine(string.format(BIT.L("Active profile: %s"), profileDisplay(BIT.Profiles.Active())), 1, 1, 1, true)
+      if BIT.Profiles.Selected() ~= BIT.Profiles.Active() then
+        GameTooltip:AddLine(string.format(BIT.L("After reload: %s"), profileDisplay(BIT.Profiles.Selected())), 1, 0.82, 0.2, true)
+      elseif BIT.Profiles.PendingReload() then
+        GameTooltip:AddLine(BIT.L("Changes take effect after a reload of the interface."), 1, 0.82, 0.2, true)
+      end
+      GameTooltip:AddLine(BIT.L("Click to manage character profiles and enabled modules."), 0.85, 0.85, 0.85, true)
+      GameTooltip:Show()
+    end)
+    profileBtn:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    window.profileButton = profileBtn
+    window.refreshProfileButton = function() profileBtn:SetText(profileButtonText()) end
+  end
+
   -- The language of the settings, tooltips and chat lines. Its own label is not translated on purpose: whoever lands in a
   -- language they cannot read must still find it. The change applies after a reload, offered next to it.
   local language = UI.Button(window, "", 150, function(self)
@@ -1007,7 +1077,16 @@ local function createWindow()
     if current and pages[current] then
       refreshSwitch(pages[current])
     end
+    if type(window.refreshProfileButton) == "function" then window.refreshProfileButton() end
   end)
+end
+
+-- Keeps the header profile badge and every already-built module tab's Enable switch in sync
+-- after changes made on the Profiles tab.
+function BIT.RefreshSettingsChrome()
+  if not window then return end
+  if type(window.refreshProfileButton) == "function" then window.refreshProfileButton() end
+  for _, page in pairs(pages) do refreshSwitch(page) end
 end
 
 -- Opens the window, on a module's tab when name is given; a second call without a name closes it.

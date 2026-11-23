@@ -2652,7 +2652,7 @@ function M.Probe()
     end
   end
 
-  local db = BIT.DB()
+  local db = type(BIT.GlobalDB) == "function" and BIT.GlobalDB() or BIT.DB()
   if type(db.probes) ~= "table" then db.probes = {} end
   db.probes[#db.probes + 1] = p
   local count = 0
@@ -2683,7 +2683,8 @@ loader:SetScript("OnEvent", function(self, event, name)
     self:UnregisterEvent("ADDON_LOADED")
     if not BIT.ShouldRun("StatsInfo") then self:UnregisterAllEvents() return end
     prepareStatsSettings()
-    BIT.DB().statsLearned = nil -- what 0.4.x measured in play; the game's own numbers replace it
+    local global = type(BIT.GlobalDB) == "function" and BIT.GlobalDB() or BIT.DB()
+    global.statsLearned = nil -- what 0.4.x measured in play; the game's own numbers replace it
   elseif event == "PLAYER_LOGIN" then
     self:UnregisterEvent("PLAYER_LOGIN")
     -- The tank caps' numbers move with gear, buffs, form and level: on those events the
@@ -3442,7 +3443,8 @@ BIT.RegisterTab("StatsInfo", {
     probeRow:SetHeight(24)
     local count -- declared before the button so its OnClick sees the local
     local function showCount()
-      local probes = BIT.DB().probes
+      local global = type(BIT.GlobalDB) == "function" and BIT.GlobalDB() or BIT.DB()
+      local probes = global.probes
       count:SetText(string.format(BIT.L("%d recorded so far"), type(probes) == "table" and #probes or 0))
     end
     local probeButton = UI.Button(probeRow, BIT.L("Record the probe"), 170, function()

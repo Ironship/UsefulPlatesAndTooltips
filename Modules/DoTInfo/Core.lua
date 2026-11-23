@@ -3294,8 +3294,12 @@ function ns.bindTicks()
 end
 
 function ns.ensureDB()
-    UsefulPlatesAndTooltips_DoTInfoDB = UsefulPlatesAndTooltips_DoTInfoDB or {}
-    db = UsefulPlatesAndTooltips_DoTInfoDB
+    if type(BIT.PortedDB) == "function" then
+        db = BIT.PortedDB("DoTInfo")
+    else
+        UsefulPlatesAndTooltips_DoTInfoDB = UsefulPlatesAndTooltips_DoTInfoDB or {}
+        db = UsefulPlatesAndTooltips_DoTInfoDB
+    end
     if db.version ~= DB_VERSION then
         db.ticks, db.tickWeights, db.intervals, db.chars, db.version = nil, nil, nil, nil, DB_VERSION
     end

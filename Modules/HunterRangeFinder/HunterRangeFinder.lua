@@ -74,7 +74,8 @@ end
 local function migrateHunterShape()
     local own = BIT.Settings("HunterRangeFinder") -- a fresh install has nothing to change and is recorded too
     if own.hunterR1ShapeMigrated == R1_SHAPE_MIGRATION_VERSION then return end
-    local a = UsefulPlatesAndTooltipsDB.appearance
+    local saved = type(BIT.DB) == "function" and BIT.DB() or UsefulPlatesAndTooltipsDB
+    local a = type(saved) == "table" and saved.appearance
     local mmods = type(a) == "table" and a.modules
     local h = type(mmods) == "table" and mmods["HunterRangeFinder"]
     if type(h) == "table" and h.shape == "segments" then h.shape = "dots" end
@@ -628,7 +629,8 @@ local CAPABILITIES = {
 -- never style, and the retired display flags map to nothing visual.
 local function hunterLegacy()
     local legacy = {}
-    local mods = type(UsefulPlatesAndTooltipsDB) == "table" and UsefulPlatesAndTooltipsDB.modules
+    local saved = type(BIT.DB) == "function" and BIT.DB() or UsefulPlatesAndTooltipsDB
+    local mods = type(saved) == "table" and saved.modules
     local s = type(mods) == "table" and mods[M.moduleName]
     if type(s) ~= "table" then return legacy end
     if type(s.scale) == "number" and s.scale ~= 1 then legacy.scale = s.scale end
@@ -907,7 +909,8 @@ local function clamp(value, default, lo, hi)
 end
 
 local function prepareHunterSettings()
-  local rawMods = type(UsefulPlatesAndTooltipsDB) == "table" and UsefulPlatesAndTooltipsDB.modules
+  local saved = type(BIT.DB) == "function" and BIT.DB() or UsefulPlatesAndTooltipsDB
+  local rawMods = type(saved) == "table" and saved.modules
   local rawHunter = type(rawMods) == "table" and rawMods["HunterRangeFinder"]
   local hadOldOffset = type(rawHunter) == "table" and type(rawHunter.plateOffset) == "number"
     and finiteNum(rawHunter.plateOffset, nil) ~= nil

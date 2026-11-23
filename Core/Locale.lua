@@ -55,8 +55,13 @@ local function find(name)
   end
 end
 
+local function langDB()
+  if type(BIT.GlobalDB) == "function" then return BIT.GlobalDB() end
+  return BIT.DB()
+end
+
 local function resolve()
-  local code = find(BIT.DB().language)
+  local code = find(langDB().language)
   if code == nil then
     local get = C_CVar and C_CVar.GetCVar or GetCVar
     if type(get) == "function" then
@@ -81,7 +86,7 @@ end
 
 -- The saved choice as a list id: "auto", "en" or a language code.
 function BIT.LanguageChoice()
-  local saved = BIT.DB().language
+  local saved = langDB().language
   if saved == nil then return "auto" end
   local code = find(saved)
   if code == false then return "en" end
@@ -98,18 +103,32 @@ function BIT.LanguageLabel()
   return choice
 end
 
+local function syncSDILanguageAcrossProfiles(sdi)
+  local legacy = rawget(_G, "UsefulPlatesAndTooltips_SpellDamageInfoDB")
+  if type(legacy) == "table" then legacy.interfaceLang = sdi end
+  local root = langDB()
+  if type(root) == "table" and type(root.profiles) == "table" then
+    for _, prof in pairs(root.profiles) do
+      if type(prof) == "table" and type(prof.ported) == "table" and type(prof.ported.SpellDamageInfo) == "table" then
+        prof.ported.SpellDamageInfo.interfaceLang = sdi
+      end
+    end
+  end
+end
+
 -- Saves the choice for the addon and for SpellDamageInfo, which keeps its own interface-language switch. Both apply
 -- after /reload (the texts already in the windows are not rewritten).
 function BIT.SetLanguage(id)
-  BIT.DB().language = id ~= "auto" and id or nil
+  langDB().language = id ~= "auto" and id or nil
   local sdi = id == "auto" and "auto" or SDI_CODES[id] or "en"
   local ns = BIT.Module and BIT.Module("SpellDamageInfo")
   local saved = type(ns) == "table" and type(ns.SetSetting) == "function" and pcall(ns.SetSetting, "interfaceLang", sdi)
   if not saved then
     -- the module may be switched off: its saved table is still there to write
-    local db = _G.UsefulPlatesAndTooltips_SpellDamageInfoDB
+    local db = (type(BIT.PortedDB) == "function" and BIT.PortedDB("SpellDamageInfo")) or _G.UsefulPlatesAndTooltips_SpellDamageInfoDB
     if type(db) == "table" then db.interfaceLang = sdi end
   end
+  syncSDILanguageAcrossProfiles(sdi)
 end
 
 -- SpellDamageInfo's own language row (its settings tab, /sdi lang) is the same choice as the settings window's button:
@@ -119,7 +138,8 @@ local FROM_SDI = { auto = "auto", en = "en", de = "deDE", ru = "ruRU" }
 function BIT.SetLanguageFromSDI(code)
   local id = FROM_SDI[code]
   if not id then return end
-  BIT.DB().language = id ~= "auto" and id or nil
+  langDB().language = id ~= "auto" and id or nil
+  syncSDILanguageAcrossProfiles(code)
   if BIT.Say then BIT.Say(BIT.L("The language changes after /reload.")) end
 end
 

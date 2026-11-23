@@ -511,4 +511,94 @@ BIT.RegisterLocale("ruRU", {
     "Рамки сброшены: очищено путей: %d, аддон снова находит рамки сам.",
   ["Frames: no path was set, the addon already finds the frames by itself."] =
     "Рамки: ни один путь не был задан, аддон уже находит рамки сам.",
+
+  -- Профили
+  ["Profiles"] = "Профили",
+  ["Profile: %s"] = "Профиль: %s",
+  ["Default"] = "По умолчанию",
+  ["Default (shared)"] = "По умолчанию (общий)",
+  ["Separate settings and enabled modules per character, or shared across characters."] =
+    "Отдельные настройки и включённые модули для каждого персонажа или общие для всех.",
+  ["Profiles save which modules are enabled and all module settings (appearance, frames and options). Learned combat data and language are kept across profiles. Switching profiles reloads the interface."] =
+    "Профили сохраняют список включённых модулей и все настройки модулей (оформление, рамки и параметры). Накопленные боевые данные и язык сохраняются между профилями. Переключение профиля перезагружает интерфейс.",
+  ["Character: %s"] = "Персонаж: %s",
+  ["Unknown"] = "Неизвестно",
+  ["Active profile: %s"] = "Активный профиль: %s",
+  ["After reload: %s"] = "После перезагрузки: %s",
+  ["Active: %s  ->  After reload: %s"] = "Активен: %s  ->  После перезагрузки: %s",
+  ["Click to manage character profiles and enabled modules."] =
+    "Нажмите, чтобы управлять профилями персонажей и включёнными модулями.",
+  ["THIS CHARACTER"] = "ЭТОТ ПЕРСОНАЖ",
+  ["Active profile"] = "Активный профиль",
+  ["Which profile this character uses. Default is shared across characters; choose this character's name or create a named profile for separate settings and enabled modules."] =
+    "Какой профиль использует этот персонаж. Профиль «По умолчанию» общий для всех; выберите имя персонажа или создайте свой профиль для отдельных настроек и модулей.",
+  ["%s (new character profile)"] = "%s (новый профиль персонажа)",
+  ["Create a separate profile for %s (copying current settings) and reload the interface?"] =
+    "Создать отдельный профиль для %s (скопировав текущие настройки) и перезагрузить интерфейс?",
+  ["Switch this character to profile \"%s\" and reload the interface?"] =
+    "Переключить этого персонажа на профиль «%s» и перезагрузить интерфейс?",
+  ["Switch %s back to the shared Default profile and reload the interface?"] =
+    "Вернуть %s на общий профиль «По умолчанию» и перезагрузить интерфейс?",
+  ["Switch %s to its own profile \"%s\" and reload the interface?"] =
+    "Переключить %s на собственный профиль «%s» и перезагрузить интерфейс?",
+  ["Switch & reload"] = "Переключить",
+  ["Switch back to Default (shared)"] = "Вернуться к общему профилю",
+  ["Use %s's profile"] = "Использовать профиль %s",
+  ["Use separate profile for this character"] = "Отдельный профиль для этого персонажа",
+  ["MODULES IN THIS PROFILE"] = "МОДУЛИ В ЭТОМ ПРОФИЛЕ",
+  ["Enable all"] = "Включить все",
+  ["Disable all"] = "Выключить все",
+  ["Reload UI to edit the newly selected profile."] =
+    "Перезагрузите интерфейс, чтобы редактировать выбранный профиль.",
+  ["Changes take effect after a reload of the interface."] =
+    "Изменения вступят в силу после перезагрузки интерфейса.",
+  ["Tick which modules run in this profile."] =
+    "Отметьте модули, которые должны работать в этом профиле.",
+  ["MANAGE PROFILES"] = "УПРАВЛЕНИЕ ПРОФИЛЯМИ",
+  ["New profile"] = "Новый профиль",
+  ["Create a named profile (e.g. Healer, Tank, Alt) and switch this character to it."] =
+    "Создать именованный профиль (например, Лекарь, Танк, Альт) и переключить на него этого персонажа.",
+  ["Copy current"] = "Копия текущего",
+  ["Blank"] = "Пустой",
+  ["Enter a profile name first."] = "Сначала введите название профиля.",
+  ["A profile named \"%s\" already exists."] = "Профиль с названием «%s» уже существует.",
+  ["Create profile \"%s\" (copying current settings), switch this character to it and reload?"] =
+    "Создать профиль «%s» (копию текущих настроек), переключиться на него и перезагрузить интерфейс?",
+  ["Create blank profile \"%s\" (defaults), switch this character to it and reload?"] =
+    "Создать пустой профиль «%s» (по умолчанию), переключиться на него и перезагрузить интерфейс?",
+  ["Create & reload"] = "Создать",
+  ["Copy settings from"] = "Скопировать настройки из",
+  ["Overwrite this profile's settings with a copy from another profile (keeps learned combat data)."] =
+    "Заменить настройки этого профиля копией из другого профиля (накопленные боевые данные сохранятся).",
+  ["Copy"] = "Копировать",
+  ["Copy all settings from \"%s\" into \"%s\" and reload the interface? Learned combat data is kept."] =
+    "Скопировать все настройки из «%s» в «%s» и перезагрузить интерфейс? Накопленные боевые данные сохранятся.",
+  ["Copy & reload"] = "Копировать",
+  ["(no other profiles)"] = "(нет других профилей)",
+  ["Delete profile"] = "Удалить профиль",
+  ["Remove a profile that is not currently in use. Default cannot be deleted."] =
+    "Удалить профиль, который сейчас не используется. Профиль «По умолчанию» удалить нельзя.",
+  ["Delete"] = "Удалить",
+  ["Delete profile \"%s\"? Any character using it will fall back to Default."] =
+    "Удалить профиль «%s»? Все персонажи с этим профилем вернутся к профилю «По умолчанию».",
+  ["Deleted profile \"%s\"."] = "Профиль «%s» удалён.",
+  ["(none to delete)"] = "(нечего удалять)",
+  ["Reset profile"] = "Сбросить профиль",
+  ["Reset all settings in profile \"%s\" to defaults and reload? Learned combat data is kept."] =
+    "Сбросить все настройки профиля «%s» к значениям по умолчанию и перезагрузить? Накопленные боевые данные сохранятся.",
+  ["Could not switch profile (%s)."] = "Не удалось переключить профиль (%s).",
+  ["Could not create profile (%s)."] = "Не удалось создать профиль (%s).",
+  ["Could not copy profile (%s)."] = "Не удалось скопировать профиль (%s).",
+  ["Could not delete profile (%s)."] = "Не удалось удалить профиль (%s).",
+  ["Profiles: %s"] = "Профили: %s",
+  ["Character name is unavailable."] = "Имя персонажа недоступно.",
+  ["Created and selected profile \"%s\" (copied from current). Use /reload to apply."] =
+    "Создан и выбран профиль «%s» (копия текущего). Введите /reload для применения.",
+  ["Selected profile \"%s\". Use /reload to apply."] = "Выбран профиль «%s». Введите /reload для применения.",
+  ["Selected the shared Default profile. Use /reload to apply."] =
+    "Выбран общий профиль «По умолчанию». Введите /reload для применения.",
+  ["Copied settings from \"%s\" into \"%s\". Use /reload to apply."] =
+    "Настройки скопированы из «%s» в «%s». Введите /reload для применения.",
+  ["/upt profile opens Profiles; /upt profile list|char|default|use <name>|new <name>|copy <name>|delete <name>"] =
+    "/upt profile открывает вкладку «Профили»; /upt profile list|char|default|use <имя>|new <имя>|copy <имя>|delete <имя>",
 })
