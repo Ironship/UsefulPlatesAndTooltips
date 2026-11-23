@@ -600,4 +600,11 @@ BIT.RegisterLocale("deDE", {
     "Einstellungen von „%s“ nach „%s“ kopiert. Mit /reload anwenden.",
   ["/upt profile opens Profiles; /upt profile list|char|default|use <name>|new <name>|copy <name>|delete <name>"] =
     "/upt profile öffnet Profile; /upt profile list|char|default|use <Name>|new <Name>|copy <Name>|delete <Name>",
+
+  -- the Debug tab error log
+  ["Clear"] = "Leeren",
+  ["Test"] = "Testen",
+  ["Errors and blocked actions of this addon (%d)"] = "Fehler und blockierte Aktionen dieses Addons (%d)",
+  ["Nothing caught since the last reload. Lua errors and \"blocked action\" reports that name this addon appear here with their stack."] =
+    "Seit dem letzten Neuladen wurde nichts abgefangen. Lua-Fehler und Meldungen über „blockierte Aktionen“, die dieses Addon nennen, erscheinen hier mit ihrem Stack.",
 })

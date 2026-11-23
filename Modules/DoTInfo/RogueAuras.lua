@@ -181,7 +181,8 @@ if forever then
             -- (459713, 1219275, or RAQ 3P 1213708) on the Priest Racial Ability slot (459695 / 1219274), or has the
             -- Devouring Contagion talent (1309950), or has actually cast the spell this session.
             learned = function(spec)
-                if spec and spec.lastCastID then return true end
+                local root = spec and spec.parent or spec
+                if root and root.lastCastID then return true end
                 for _, id in ipairs({ 2944, 19276, 19277, 19280, 19279, 19278, 459713, 1219275, 1213708, 1309950 }) do
                     if known(id) then return true end
                 end
@@ -190,11 +191,28 @@ if forever then
                 end
                 for _, slotID in ipairs({ 459695, 1219274 }) do
                     local over = overrideOf(slotID)
-                    if over and spec and spec.ids[over] then return true end
+                    if over and root and root.ids[over] then return true end
                 end
                 return false
             end,
             size = function(spec) return dotTotal({ 2944, 19276, 19277, 19278, 19279, 19280 }, 19280, spec) end } },
+        -- Forever's bear Lacerate stacks to 5 (ranks 1-5). Its native segment uses Blizzard's own stack bar
+        -- (0..5) and duration bar, stepping aside wherever plain Lacerate is already drawn on that mob, and
+        -- preventing the generic every-DoT pass from drawing a 1-stack duplicate.
+        DRUID = { { key = "lacerate", slot = "lacerate", label = "LACERATE", school = 1, stacked = true,
+            luaName = "Lacerate", verified = true, nameID = 1328617, fallback = "Lacerate",
+            ids = { [1328617] = true, [1328616] = true, [414644] = true, [1235826] = true, [1235827] = true },
+            castIDs = { 1328617, 1328616, 414644, 1235826, 1235827 },
+            -- Only for a druid who knows Lacerate (or has cast it this session): zero containers for casters/cats.
+            learned = function(spec)
+                local root = spec and spec.parent or spec
+                if root and root.lastCastID then return true end
+                for _, id in ipairs(root and root.castIDs or {}) do
+                    if known(id) then return true end
+                end
+                return false
+            end,
+            size = function(spec) return dotTotal(spec.castIDs, nil, spec) end } },
         HUNTER = {
             { key = "trap", slot = "trap", label = "TRAP", ids = { [13797] = true, [14298] = true, [14299] = true,
                 [14300] = true, [14301] = true }, school = 4, covers = "nativeTraps", nameID = 13797,
@@ -586,12 +604,23 @@ local function createNativeDamage(entry, spec, config, signature)
         insetTop = insetTop, insetBottom = insetBottom }
 end
 
+-- Name under which plain DoTs and Nameplates.lua plans index this spec (localized for real cast spells).
+local function specPlanName(spec)
+    if not spec or not spec.luaName then return nil end
+    if spec.generic then return spec.luaName end
+    if spec.castIDs and spec.nameID then
+        return ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.luaName
+    end
+    return spec.luaName
+end
+
 local function updateNativeOffset(entry, unit, enabled, damage)
     if damage.failed then return end
     if damage.spec.gated and gateReplace() then
         local record = plans[entry.parent]
+        local planName = specPlanName(damage.spec)
         local item = enabled and record and not record.reverse and GetTime() - record.at < 0.5
-            and record.items[damage.spec.luaName]
+            and planName and record.items[planName]
         local offset, total = 0, 0
         if item and item.damage > 0 then offset, total = item.offset, item.damage end
         if offset ~= damage.offset or total ~= damage.offsetTotal then
@@ -628,17 +657,18 @@ end
 -- What one application of the effect does over its whole duration, or nil when the segment has nothing to show.
 local function nativeTotal(unit, spec, enabled, entries, entry)
     if not enabled then return nil end
+    local planName = specPlanName(spec)
     if spec.gated then
         if gateReplace() then
             -- In place of the plain segment: its length comes from the plan the nameplate has just drawn with.
             local record = entry and plans[entry.parent]
-            local item = record and not record.reverse and GetTime() - record.at < 0.5 and record.items[spec.luaName]
+            local item = record and not record.reverse and GetTime() - record.at < 0.5 and planName and record.items[planName]
             return item and item.damage > 0 and item.damage or nil
         end
         -- The remaining damage of the plain DoT of the same name (it drops tick by tick); nothing when there is none.
         entries = entries or (ns.dotBreakdownForUnit and ns.dotBreakdownForUnit(unit))
         for _, effect in ipairs(entries or {}) do
-            if effect.name == spec.luaName and type(effect.damage) == "number" and effect.damage > 0 then
+            if (effect.name == planName or effect.name == spec.luaName) and type(effect.damage) == "number" and effect.damage > 0 then
                 return effect.damage
             end
         end
@@ -664,7 +694,8 @@ local function nativeTotal(unit, spec, enabled, entries, entry)
     if entries then
         for _, effect in ipairs(entries) do
             -- Already drawn by the plain DoT segments.
-            if (spec.familyID and effect.familyID == spec.familyID) or (spec.luaName and effect.name == spec.luaName)
+            if (spec.familyID and effect.familyID == spec.familyID) or (planName and effect.name == planName)
+                or (spec.luaName and effect.name == spec.luaName)
                 or (spec.luaName and spec.ids and spec.ids[effect.spellID]) then
                 return nil
             end
@@ -684,9 +715,10 @@ local function updateNativeDamage(entry, unit, enabled, spec, entries)
         if replacement then
             if old then pcall(old.container.SetEnabled, old.container, false); pcall(old.container.Hide, old.container) end
             entry.natives[spec.key] = replacement
-            if spec.gated and spec.luaName then
+            local planName = spec.gated and specPlanName(spec) or nil
+            if planName then
                 entry.gated = entry.gated or {}
-                entry.gated[spec.luaName] = replacement
+                entry.gated[planName] = replacement
             end
         end
         entry.signatures[spec.key] = signature
@@ -823,7 +855,7 @@ local function gatedTwin(spec)
         twin = {}
         for key, value in pairs(spec) do twin[key] = value end
         twin.key, twin.slot, twin.label = spec.key .. "G", spec.slot .. "G", spec.label .. " (GATE)"
-        twin.gated, twin.twin, twin.stacked, twin.size, twin.covers = true, nil, nil, nil, nil
+        twin.gated, twin.twin, twin.parent, twin.stacked, twin.size, twin.covers = true, nil, spec, nil, nil, nil
         spec.twin = twin
     end
     return twin
@@ -967,7 +999,10 @@ function R.NoteCast(spellID, name, total)
             spec.lastCastID = spellID
             if type(total) == "number" and total > 0 and total < math.huge then spec.lastCastTotal = total end
             spec.cached = nil
-            if spec.learned then spec.learnedAt = nil end
+            if spec.learned then
+                spec.learnedAt = nil
+                if spec.twin then spec.twin.learnedAt = nil end
+            end
         end
     end
 end
@@ -1011,7 +1046,7 @@ function R.StartRogueAuras()
     if started or ns.off or not ns.db then return end
     local ok, _, class = pcall(UnitClass, "player")
     if not ok or secret(class) or type(class) ~= "string" then return end
-    -- A class with no fixed segment (warlock, priest, druid, shaman) only has the every-DoT layer.
+    -- A class with no fixed segment (warlock, shaman) only has the every-DoT layer.
     if not SPECS[class] and not wantGeneric() then return end
     if not C_XMLUtil or type(C_XMLUtil.GetTemplateInfo) ~= "function" then return end
     if not events then

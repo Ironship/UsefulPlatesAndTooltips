@@ -960,14 +960,18 @@ function ns._stackOnto(dot, previous, cap)
     local castAt = dot.appliedAt
     local anchor = previous.firstTickAt or previous.appliedAt
     local slot = anchor + math.max(0, math.floor((castAt - anchor) / previous.interval)) * previous.interval
+    -- If a tick already landed slightly early (within TICK_MATCH_WINDOW of the next slot boundary), advance
+    -- `slot` past it so `expiresAt` keeps the full refreshed duration and `nextTickAt` never rolls backwards
+    -- into the already-consumed slot (where a melee swing right after the recast would double-count it).
+    while dot.interval > 0 and previous.nextTickAt and slot + dot.interval < previous.nextTickAt - TICK_MATCH_WINDOW do
+        slot = slot + dot.interval
+    end
     dot.castAt = castAt -- real cast time for ns._verifyAuras (appliedAt is aligned to the tick slot below)
     dot.stacks = math.min(cap, (previous.stacks or 1) + 1)
     dot.appliedAt, dot.expiresAt = slot, slot + dot.duration
-    -- If a hidden tick already landed slightly early in this same slot, don't move nextTickAt backwards or
-    -- drop hiddenSlot (otherwise a white swing right after the recast could double-count that slot).
-    if not previous.firstTickAt and slot == previous.appliedAt then
-        dot.nextTickAt = math.max(slot + dot.interval, previous.nextTickAt)
-        dot.hiddenSlot = previous.hiddenSlot
+    if not previous.firstTickAt and previous.nextTickAt and previous.nextTickAt >= slot + dot.interval then
+        dot.nextTickAt = previous.nextTickAt
+        if slot == previous.appliedAt then dot.hiddenSlot = previous.hiddenSlot end
     else
         dot.nextTickAt = slot + dot.interval
     end

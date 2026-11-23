@@ -601,4 +601,11 @@ BIT.RegisterLocale("ruRU", {
     "Настройки скопированы из «%s» в «%s». Введите /reload для применения.",
   ["/upt profile opens Profiles; /upt profile list|char|default|use <name>|new <name>|copy <name>|delete <name>"] =
     "/upt profile открывает вкладку «Профили»; /upt profile list|char|default|use <имя>|new <имя>|copy <имя>|delete <имя>",
+
+  -- журнал ошибок вкладки отладки
+  ["Clear"] = "Очистить",
+  ["Test"] = "Тест",
+  ["Errors and blocked actions of this addon (%d)"] = "Ошибки и заблокированные действия этого аддона (%d)",
+  ["Nothing caught since the last reload. Lua errors and \"blocked action\" reports that name this addon appear here with their stack."] =
+    "С последней перезагрузки ничего не поймано. Ошибки Lua и сообщения о заблокированных действиях, упоминающие этот аддон, появятся здесь со стеком вызовов.",
 })
