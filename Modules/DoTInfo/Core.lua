@@ -117,9 +117,12 @@ ns.DELAYED_DOTS = { ["Wyvern Sting"] = true }
 ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
 -- This projectile has no direct damage confirming that the cast actually landed.
 ns.CONFIRM_PROJECTILE_DOTS = { ["Serpent Sting"] = true }
+-- DoTs that stack on one mob (cap per mob; Forever's hunters also have a Lacerate that doesn't stack, hence class).
+-- Ported from Does It Die PR #42 (MIT): each recast adds a stack on the running tick rhythm instead of resetting it.
+ns.STACKING_DOTS = { ["Lacerate"] = { cap = 5, class = "DRUID" } }
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
-    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS, ns.AMPLIFY_USES, ns.CONFIRM_PROJECTILE_DOTS }
+    ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS, ns.AMPLIFY_USES, ns.CONFIRM_PROJECTILE_DOTS, ns.STACKING_DOTS }
 ns.locale.addNames(NAME_TABLES)
 
 local SCHOOL_MASKS = {
@@ -494,12 +497,14 @@ local function tickNumberAt(dot, when)
     return math.max(1, math.floor((when - dot.appliedAt) / dot.interval + 0.5))
 end
 
--- The factor for tick `number` (1 for evenly ticking DoTs). Shapes are stretched to the DoT's tick count.
+-- The factor for tick `number` (1 for evenly ticking DoTs). Shapes are stretched to the DoT's tick count. A
+-- stacking DoT's ticks are also times its stacks, so sizes are learned and tallied per application.
 local function tickShape(dot, number)
+    local stacks = dot.stacks or 1
     local shape = dot.shape
-    if not shape then return 1 end
+    if not shape then return stacks end
     local i = math.ceil(math.min(math.max(number, 1), dot.totalTicks) / dot.totalTicks * #shape)
-    return shape[math.max(1, math.min(i, #shape))]
+    return shape[math.max(1, math.min(i, #shape))] * stacks
 end
 
 -- A waiting DoT doesn't count toward the marker until its first tick lands (see WAIT_MODES).
@@ -744,6 +749,7 @@ local function onCastSent(spellID, castGUID, targetName)
         castGUID = not isSecret(castGUID) and castGUID or nil, sentAt = GetTime() }
     if ns.Retail and type(pendingCast.castGUID) == "string" then ns._retailPending[pendingCast.castGUID] = pendingCast end
     comboAtSend = nil
+    ns._builderAtSend = nil
     local ok, name, desc
     if ns.Retail then
         lastComboPoints, lastComboAt = nil, 0
@@ -753,7 +759,15 @@ local function onCastSent(spellID, castGUID, targetName)
         pendingCast.name, pendingCast.desc = name, desc -- Capture before a finisher spends its points.
     end
     local finisher = isFinisherDescription(desc) or (ns.Retail and ns.Retail.IsFinisher(spellID))
-    if not ok or not finisher then return end
+    if not ok then return end
+    if not finisher then
+        -- A builder's combo points before it lands, for judging an avoid right after it (ns._resolveComboCheck).
+        if not ns.Retail and type(desc) == "string" and not isSecret(desc)
+            and (desc:match("Awards (%d+) combo point") or ns.locale.comboPointsAwarded(desc)) then
+            ns._builderAtSend = readComboPoints()
+        end
+        return
+    end
     local points, readings = readComboPoints()
     comboAtSend = points
     if ns.Retail then pendingCast.comboPoints = points end
@@ -814,18 +828,28 @@ local function removeAvoidedDot(cast, action, school)
             return true
         end
     end
+    dot.avoided = true -- dealt nothing, so its missing ticks don't stop meter learning (MeterLearning.lua)
     if cast.previous then
         dots[cast.name] = cast.previous
+        cast.previous.stackedInto = nil
         trace("AVOID " .. action .. " right after " .. cast.name .. " recast; keeping the earlier one")
     else
         dots[cast.name] = nil
         trace("AVOID " .. action .. " right after " .. cast.name .. "; dropped")
     end
-    -- A cat's or rogue's white swing missing in that instant looks the same as the finisher missing. A finisher
-    -- that misses keeps its combo points, one that lands spends them, so a finisher whose points were read at
-    -- send is judged again once they have settled (ns._resolveFinisherCheck). From Does It Die v0.9.4 (MIT).
+    -- A cat's or rogue's white swing missing in that instant looks the same as the cast missing. A finisher that
+    -- misses keeps its combo points, one that lands spends them; a builder DoT (Rake) does the opposite, gaining
+    -- points when it lands (at the cap they can't rise, so it stays dropped). Judged again once points settle
+    -- (ns._resolveComboCheck). From Does It Die v0.9.4 / PR #46 (MIT).
     if cast.comboRead then
-        ns._finisherCheck = { cast = cast, dot = dot, replaced = dots[cast.name], action = action, at = GetTime() + 0.5 }
+        ns._comboCheck = { cast = cast, dot = dot, replaced = dots[cast.name], action = action, at = GetTime() + 0.5 }
+    elseif cast.builderRead then
+        if cast.builderRead >= COMBO_CAP then
+            trace(string.format("COMBO after %s's %s: already %d points, can't tell, stays dropped", cast.name,
+                action, cast.builderRead))
+        else
+            ns._comboCheck = { cast = cast, dot = dot, replaced = dots[cast.name], action = action, at = GetTime() + 0.5 }
+        end
     end
     return true
 end
@@ -926,6 +950,34 @@ local function newDot(spellID, tickKey, name, total, school, duration, statedInt
     }
     if ns.Retail then ns.Retail.Prepare(dot) end
     return dot
+end
+
+-- A stacking DoT cast on a mob that already has it: one more application (up to `cap`), on the running tick
+-- rhythm. The refreshed duration is counted from the latest tick slot, so a partial tick at the very end isn't
+-- counted and the estimate errs low. `previous` is kept so an avoided stack puts it back (removeAvoidedDot).
+-- Field on ns: this file is at Lua 5.1's 200-local limit.
+function ns._stackOnto(dot, previous, cap)
+    local castAt = dot.appliedAt
+    local anchor = previous.firstTickAt or previous.appliedAt
+    local slot = anchor + math.max(0, math.floor((castAt - anchor) / previous.interval)) * previous.interval
+    dot.castAt = castAt -- real cast time for ns._verifyAuras (appliedAt is aligned to the tick slot below)
+    dot.stacks = math.min(cap, (previous.stacks or 1) + 1)
+    dot.appliedAt, dot.expiresAt = slot, slot + dot.duration
+    -- If a hidden tick already landed slightly early in this same slot, don't move nextTickAt backwards or
+    -- drop hiddenSlot (otherwise a white swing right after the recast could double-count that slot).
+    if not previous.firstTickAt and slot == previous.appliedAt then
+        dot.nextTickAt = math.max(slot + dot.interval, previous.nextTickAt)
+        dot.hiddenSlot = previous.hiddenSlot
+    else
+        dot.nextTickAt = slot + dot.interval
+    end
+    if previous.firstTickAt then dot.firstTickAt, dot.lastTickIndex = slot, 0 end
+    dot.ticksSeen, dot.tickSum, dot.normalTicks = previous.ticksSeen, previous.tickSum, previous.normalTicks
+    dot.lastTickAt, dot.lastTickAmount = previous.lastTickAt, previous.lastTickAmount
+    dot.lastTickShape, dot.lastTickCrit = previous.lastTickShape, previous.lastTickCrit
+    dot.missed, dot.missedUnseen = previous.missed, previous.missedUnseen
+    dot.doubtful, dot.learnedAtApply = previous.doubtful, previous.learnedAtApply
+    previous.stackedInto = dot -- its own ticks now count for this one (MeterLearning.lua)
 end
 
 ns.TraceRogueAura = trace
@@ -1062,8 +1114,11 @@ local function onPlayerCast(spellID, castGUID)
     local amplified = ns._amplifyCast(spellID, ok and name or nil)
     if not ok or not name or isSecret(name) then return end
     if ns.ProcDots then ns.ProcDots.NoteCast(key, spellID, name, desc) end
+    local awarded
+    local pointsBefore = ns._builderAtSend
+    ns._builderAtSend = nil
     if type(desc) == "string" and not isSecret(desc) then
-        local awarded = tonumber(desc:match("Awards (%d+) combo point")) or ns.locale.comboPointsAwarded(desc)
+        awarded = tonumber(desc:match("Awards (%d+) combo point")) or ns.locale.comboPointsAwarded(desc)
         if awarded and not ns.Retail then onBuilderCast(awarded, key) end
     end
     if IGNORED_SPELLS[name] then
@@ -1142,9 +1197,15 @@ local function onPlayerCast(spellID, castGUID)
     dot.boost = amplified
     dot.confirmationPending = not ns.Retail and ns.CONFIRM_PROJECTILE_DOTS[name] or nil
     if ns.Retail then ns.Retail.ApplyRefresh(dot, previous, now) end
+    local stacking = not ns.Retail and ns.STACKING_DOTS[name] or nil
+    if stacking and stacking.class then
+        local okClass, _, playerClass = pcall(UnitClass, "player")
+        if not okClass or playerClass ~= stacking.class then stacking = nil end
+    end
+    if previous and stacking then ns._stackOnto(dot, previous, stacking.cap) end
     -- A recast may keep the old DoT's tick timer: remember its rhythm and tick size (ns.discoverRhythm), unbuffed:
     -- the old DoT may have had Amplify Curse's buff and this one may not, or the other way round.
-    if not ns.Retail and previous and previous.lastTickAt and previous.interval == dot.interval then
+    if not ns.Retail and not dot.stacks and previous and previous.lastTickAt and previous.interval == dot.interval then
         dot.oldRhythmAt = previous.lastTickAt
         dot.oldTickSize = previous.normalTicks > 0 and previous.tickSum / previous.normalTicks / (previous.boost or 1) or nil
     end
@@ -1157,15 +1218,19 @@ local function onPlayerCast(spellID, castGUID)
     end
     dotsByTarget[key][name] = dot
     lastDotCast = { key = key, name = name, dot = dot, previous = previous, at = now,
-        comboRead = not ns.Retail and isFinisher and comboSource == "read" and comboPoints or nil }
+        comboRead = not ns.Retail and isFinisher and comboSource == "read" and comboPoints or nil,
+        builderRead = not ns.Retail and awarded and pointsBefore or nil,
+        awarded = not ns.Retail and awarded or nil }
     -- The damage meter teaches this DoT's real tick size after the fight (MeterLearning.lua).
     if ns.Learn and not ns.Retail then ns.Learn.Cast(dot, ns.Learn.Upfront(spellID, isFinisher), name) end
     local learned = not ns.Retail and tickKey and db.ticks[tickKey]
     -- The starting estimate is shaky without a learned tick size (description numbers leave out spell power
     -- and attack power) or, for finishers, without knowing the combo points.
     dot.unsure = not learned
-    trace(string.format("CAST %s (id %d)%s: %d dmg over %ss, school %d, tick every %ss, per-tick %s%s%s", name, spellID,
+    trace(string.format("CAST %s (id %d)%s%s: %d dmg over %ss, school %d, tick every %ss, per-tick %s%s%s", name, spellID,
         isFinisher and string.format(" %s combo points (%s)", comboPoints or "?", comboSource) or "",
+        dot.stacks and string.format(" stack %d (ticks kept on the beat, next at %+.1fs)", dot.stacks,
+            dot.nextTickAt - now) or "",
         total, duration, dot.school, dot.interval, learned and ("learned " .. learned) or "from description",
         amplified and string.format(", amplified x%.2f -> %.1f", amplified, expectedTick(dot)) or "",
         isWaiting(dot) and ", waiting for first tick" or ""))
@@ -1238,7 +1303,7 @@ local function onCastEnded(event, castGUID, spellID)
         if event == "UNIT_SPELLCAST_STOP" then
             sent.stoppedAt = sent.stoppedAt or GetTime()
         else
-            if pendingCast == sent then pendingCast, comboAtSend = nil, nil end
+            if pendingCast == sent then pendingCast, comboAtSend, ns._builderAtSend = nil, nil, nil end
             if ns.Retail and type(sent.castGUID) == "string" then ns._retailPending[sent.castGUID] = nil end
         end
     end
@@ -1774,7 +1839,9 @@ function ns._verifyAuras(now)
                     local replaced = dot.replaced
                     if found then
                         db.auras[name] = true
-                        if replaced and startedAt and startedAt < dot.appliedAt - check.startSlack then
+                        if replaced and startedAt and startedAt < (dot.castAt or dot.appliedAt) - check.startSlack then
+                            dot.avoided = true
+                            replaced.stackedInto = nil
                             dots[name] = replaced
                             trace(string.format("AURA %s on %s is still the earlier one (%.1fs old): the recast did not land; keeping the earlier one",
                                 name, unit, now - startedAt))
@@ -1790,6 +1857,7 @@ function ns._verifyAuras(now)
                             end
                         end
                     elseif db.auras[name] then
+                        dot.avoided = true
                         dots[name] = nil
                         trace(string.format("AURA %s is not on %s: resisted or missed; dropped", name, unit))
                     else
@@ -1805,35 +1873,46 @@ function ns._verifyAuras(now)
     end
 end
 
--- The combo points after a dropped finisher: spent means it landed (the avoid was a white swing), so it is put
--- back; still there, unreadable, or the target changed (the points belong to the target) leaves it dropped.
-function ns._resolveFinisherCheck(now)
-    local check = ns._finisherCheck
+-- The combo points after a dropped finisher or builder DoT: spent (finisher) or gained (builder) means the cast
+-- landed (the avoid was a white swing), so it is put back; unchanged, unreadable, or a target change leaves it dropped.
+function ns._resolveComboCheck(now)
+    local check = ns._comboCheck
     if not check or now < check.at then return end
-    ns._finisherCheck = nil
+    ns._comboCheck = nil
     local cast = check.cast
     if unitKey("target") ~= cast.key then
         trace("COMBO after " .. cast.name .. "'s " .. check.action .. ": target changed, stays dropped")
         return
     end
     local points, readings = readComboPoints()
-    if not points or points >= cast.comboRead then
-        trace(string.format("COMBO after %s's %s: %s (had %d), it missed", cast.name, check.action, readings,
-            cast.comboRead))
+    local had = cast.comboRead or cast.builderRead
+    local landed
+    if cast.comboRead then
+        landed = points and points < cast.comboRead
+    else
+        landed = points and points > cast.builderRead
+    end
+    if not landed then
+        trace(string.format("COMBO after %s's %s: %s (had %d), it missed", cast.name, check.action, readings, had))
         return
     end
     local dots = dotsByTarget[cast.key]
-    if (dots and dots[cast.name]) ~= check.replaced or now >= check.dot.expiresAt then return end
+    local current = dots and dots[cast.name]
+    local replacedExpired = current == nil and check.replaced and now > check.replaced.expiresAt + TICK_MATCH_WINDOW
+    if (current ~= check.replaced and not replacedExpired) or now >= check.dot.expiresAt then return end
     dotsByTarget[cast.key] = dots or {}
     dotsByTarget[cast.key][cast.name] = check.dot
-    trace(string.format("COMBO after %s's %s: %s (had %d), spent: it landed, restored", cast.name, check.action,
-        readings, cast.comboRead))
+    check.dot.avoided = nil
+    if cast.previous and check.dot.stacks then cast.previous.stackedInto = check.dot end
+    if cast.awarded then countedPoints = math.min(COMBO_CAP, countedPoints + cast.awarded) end
+    trace(string.format("COMBO after %s's %s: %s (had %d), %s: it landed, restored", cast.name, check.action,
+        readings, had, cast.comboRead and "spent" or "gained"))
 end
 
 local function housekeep(now)
     if ns.ProcDots then ns.ProcDots.Housekeep(now) end
     if not ns.Retail then
-        ns._resolveFinisherCheck(now)
+        ns._resolveComboCheck(now)
         ns._verifyAuras(now)
     end
     for guid, sent in pairs(ns._retailPending) do
@@ -1842,7 +1921,7 @@ local function housekeep(now)
     end
     if pendingCast and ((pendingCast.stoppedAt and now - pendingCast.stoppedAt > CAST_STOP_GRACE)
         or now - pendingCast.sentAt > CAST_MAX_SECONDS) then
-        pendingCast, comboAtSend = nil, nil
+        pendingCast, comboAtSend, ns._builderAtSend = nil, nil, nil
     end
     for key, dots in pairs(dotsByTarget) do
         local onToken -- whether a unit token shows the mob now: ticks only arrive (UNIT_COMBAT) for a mob on one
@@ -1901,7 +1980,7 @@ local function remainingDamage(dot)
     end
     if dot.nextTickAt > dot.expiresAt + dot.interval / 2 then return 0 end
     local ticksLeft = math.floor((dot.expiresAt - dot.nextTickAt) / dot.interval + 0.5) + 1
-    if not dot.shape then return ticksLeft * expectedTick(dot) end
+    if not dot.shape then return ticksLeft * expectedTick(dot) * (dot.stacks or 1) end
     local average, total = expectedTick(dot), 0
     for number = math.max(1, dot.totalTicks - ticksLeft + 1), dot.totalTicks do
         total = total + average * tickShape(dot, number)
@@ -1950,7 +2029,7 @@ local function dotBreakdown(key)
             end
             table.insert(list, { name = name, spellID = dot.spellID, school = dot.school, appliedAt = dot.appliedAt,
                 expiresAt = dot.expiresAt, damage = remainingDamage(dot), familyID = dot.familyID, segmentOrder = dot.segmentOrder,
-                refreshDue = refreshDueFor(name, dot) })
+                refreshDue = refreshDueFor(name, dot), stacks = dot.stacks })
         end
     end
     if castVisible then
@@ -2066,7 +2145,8 @@ local function dotColor(entry, mode)
     if (mode or db.dotColors) ~= "rainbow" then
         return SCHOOL_COLORS[entry.school] or COLOR_BY_ID.white
     end
-    local color = paletteColorByName[entry.name]
+    local key = entry.name or tostring(entry.spellID)
+    local color = paletteColorByName[key]
     if not color then
         color = DOT_PALETTE[nextPaletteIndex]
         if not color then
@@ -2077,7 +2157,7 @@ local function dotColor(entry, mode)
             color = ({ { 1, rising, 0.25 }, { falling, 1, 0.25 }, { 0.25, 1, rising },
                 { 0.25, falling, 1 }, { rising, 0.25, 1 }, { 1, 0.25, falling } })[math.floor(hue) + 1]
         end
-        paletteColorByName[entry.name], nextPaletteIndex = color, nextPaletteIndex + 1
+        paletteColorByName[key], nextPaletteIndex = color, nextPaletteIndex + 1
     end
     return color
 end
@@ -2759,8 +2839,13 @@ local function targetFrameTopLayer()
     local root = targetHost or healthBar
     -- Hidden custom frames resolve to nil. Never scan the entire UI as a fallback.
     if not root or root == UIParent then return end
-    local topStrata, topLevel = "BACKGROUND", 0
+    -- Other addons can hang hundreds or thousands of frames under the target frame over a session;
+    -- stop after 300 so a walk never stalls a frame (Does It Die PR #40).
+    local maxFrames = 300
+    local topStrata, topLevel, visited = "BACKGROUND", 0, 0
     local function visit(frame, depth)
+        visited = visited + 1
+        if visited > maxFrames then return end
         if BIT.OwnOverlays[frame] then return end
         if depth > 0 then
             -- hidden only when the client says so: an unreadable or secret answer counts as shown
@@ -2783,12 +2868,15 @@ local function targetFrameTopLayer()
         if depth < 6 then
             local children = { pcall(frame.GetChildren, frame) }
             if children[1] then
-                for i = 2, #children do visit(children[i], depth + 1) end
+                for i = 2, #children do
+                    if visited > maxFrames then break end
+                    visit(children[i], depth + 1)
+                end
             end
         end
     end
     visit(root, 0)
-    return topStrata, topLevel
+    return topStrata, topLevel, visited
 end
 
 -- Keeps our marker and skull above everything on the target frame. Checked while displaying (throttled)
@@ -2832,20 +2920,39 @@ function ns.anchorMarker()
     end
 end
 
+-- Cheap parent/anchor sync that runs once a second even while nothing is showing, so the marker moves onto the
+-- health bar out of combat before the next fight begins, without triggering the target frame tree walk.
+function ns._syncMarkerHost(now)
+    if ns._hostSyncedAt and now - ns._hostSyncedAt < LAYER_CHECK_INTERVAL then return end
+    ns._hostSyncedAt = now
+    ns.applyMarkerParent()
+    ns.anchorMarker()
+end
+
 local function updateLayering(now)
     if now - layerCheckedAt < LAYER_CHECK_INTERVAL then return end
     layerCheckedAt = now
     ns.applyMarkerParent()
     ns.anchorMarker()
-    local ok, strata, level
+    local ok, strata, level, visited
     if previewHost then
         -- One strata above the options window: it's a top-level frame, which WoW raises above everything else
         -- in its own strata (our frames included) when it's shown or clicked. Dropdowns and tooltips sit higher.
         ok, strata, level = true, "FULLSCREEN", 1
     else
         local t0 = BIT.Perf and BIT.Perf.Begin()
-        ok, strata, level = pcall(targetFrameTopLayer)
+        local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
+        local started = clock and clock()
+        ok, strata, level, visited = pcall(targetFrameTopLayer)
+        local ms = started and (clock() - started)
         if BIT.Perf then BIT.Perf.End("DoTInfo layer scan", t0) end
+        local capped = ok and type(visited) == "number" and visited > 300
+        if ok and not ns._slowLayerLogged and (capped or (ms and ms > 10)) then
+            ns._slowLayerLogged = true
+            trace(string.format("SLOW layer check (logged once): %s frames under %s, %.1f ms",
+                capped and "over 300 (stopped there)" or tostring(visited),
+                regionName(targetHost or healthBar), ms or -1))
+        end
     end
     if not ok then
         if not layerErrorLogged then
@@ -3004,10 +3111,11 @@ local function refresh()
     end
     if ns.RogueEffects then ns.RogueEffects.Refresh(unitKey) end
     housekeep(now)
-    updateLayering(now)
+    ns._syncMarkerHost(now)
     applyAppearance()
 
     if skullTestUntil and now < skullTestUntil then
+        updateLayering(now)
         skullBar:SetMinMaxValues(0, 1)
         skullBar:SetValue(1)
         skullWindow:Show()
@@ -3028,6 +3136,7 @@ local function refresh()
         end
         if total <= 0 or (previewState.health or 1) <= 0 then return hideAll() end
         -- UI-4: a dead mock shows "Target died", not a kill skull on a corpse.
+        updateLayering(now)
         skullBar:SetMinMaxValues(0, math.max(previewState.health, 0.01))
         skullBar:SetValue(ns.lethalDamage(entries))
         -- the sample swing is 8% of the mock mob's health
@@ -3071,6 +3180,7 @@ local function refresh()
         return hideAll()
     end
 
+    updateLayering(now)
     skullWindow:SetShown(db.showSkull and not ns.shielded("target", breakdown))
     if healthBar then
         label:SetText(perDot and breakdownText(breakdown) or string.format(BIT.L("DoTs: %d"), damage))
@@ -3431,6 +3541,7 @@ function ns.setDisplayHost(host)
     previewHost = host
     layerCheckedAt = 0
     attach()
+    updateLayering(GetTime()) -- once now, so the widgets don't keep the preview's strata until they next show
     safeRefresh()
     if host then
         -- Where things ended up on screen, once layout has settled (for diagnosing an invisible preview).
@@ -3507,7 +3618,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
         wipe(dotsByTarget)
         if ns._absorbedAt then wipe(ns._absorbedAt) end
         if ns.ProcDots then ns.ProcDots.Reset() end
-        pendingCast, comboAtSend = nil, nil
+        pendingCast, comboAtSend, ns._builderAtSend, ns._comboCheck = nil, nil, nil, nil
         forgetPendingOutcomes()
         resetComboCount()
         dropCastInProgress("loading screen")

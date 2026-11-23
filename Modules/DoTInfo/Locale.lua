@@ -54,6 +54,11 @@ L.SPELL_IDS = {
     ["Black Arrow"] = 3674,
 }
 
+-- Extra IDs whose localized names also alias to an English entry (Forever's druid Lacerate vs hunter Lacerate 24118).
+L.EXTRA_SPELL_IDS = {
+    ["Lacerate"] = 1328617,
+}
+
 ---------------------------------------------------------------------------
 -- Names
 ---------------------------------------------------------------------------
@@ -83,10 +88,12 @@ end
 -- getName(spellID) returns the client's name for a spell, or nil. Returns what was added, for the log.
 function L.addClientNames(tables, getName)
     local added = {}
-    for englishName, spellID in pairs(L.SPELL_IDS) do
-        local ok, name = pcall(getName, spellID)
-        if ok and addAlias(tables, englishName, name) then
-            table.insert(added, name .. " = " .. englishName)
+    for _, ids in ipairs({ L.SPELL_IDS, L.EXTRA_SPELL_IDS }) do
+        for englishName, spellID in pairs(ids) do
+            local ok, name = pcall(getName, spellID)
+            if ok and addAlias(tables, englishName, name) then
+                table.insert(added, name .. " = " .. englishName)
+            end
         end
     end
     table.sort(added)

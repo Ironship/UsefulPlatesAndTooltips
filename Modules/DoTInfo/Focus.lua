@@ -56,15 +56,19 @@ end
 local STRATA_RANK = {
     BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
 }
-local layerCheckedAt, layerBar, topStrata, topLevel = -math.huge, nil, nil, nil
+local layerCheckedAt, layerBar, topStrata, topLevel, slowLayerLogged = -math.huge, nil, nil, nil, false
+local MAX_LAYER_FRAMES = 300 -- other addons can hang many frames under a unit frame (Does It Die PR #40)
+local SLOW_LAYER_MS = 10
 
 -- Hidden frames are left out (the frame itself always counts): they draw nothing, so they cannot cover the marker,
 -- and counting them pulled it out of the focus frame's layer. Edit Mode keeps a hidden selection frame (MEDIUM,
 -- level 1000) under every Blizzard unit frame whose own art is LOW, and the marker followed it into the strata of the
 -- world map, above the map's art.
 local function topLayer(root)
-    local bestStrata, bestLevel = "BACKGROUND", 0
+    local bestStrata, bestLevel, visited = "BACKGROUND", 0, 0
     local function visit(frame, depth)
+        visited = visited + 1
+        if visited > MAX_LAYER_FRAMES then return end
         if BIT.OwnOverlays and BIT.OwnOverlays[frame] then return end -- our own mark on the bar is not the frame's art
         if depth > 0 then
             -- hidden only when the client says so: an unreadable or secret answer counts as shown
@@ -85,12 +89,15 @@ local function topLayer(root)
         if depth < 6 then
             local okC, children = pcall(function() return { frame:GetChildren() } end)
             if okC then
-                for _, child in ipairs(children) do visit(child, depth + 1) end
+                for _, child in ipairs(children) do
+                    if visited > MAX_LAYER_FRAMES then break end
+                    visit(child, depth + 1)
+                end
             end
         end
     end
     visit(root, 0)
-    return bestStrata, bestLevel
+    return bestStrata, bestLevel, visited
 end
 
 -- The frame that holds `bar`: its topmost ancestor below UIParent.
@@ -109,7 +116,16 @@ local function updateLayering(w, bar, now)
     if bar ~= layerBar or now - layerCheckedAt >= LAYER_CHECK_INTERVAL then
         layerCheckedAt, layerBar = now, bar
         local root = BIT.Frames and BIT.Frames.Root(bar, "focus") or frameRoot(bar)
-        local ok, strata, level = pcall(topLayer, root)
+        local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
+        local started = clock and clock()
+        local ok, strata, level, visited = pcall(topLayer, root)
+        local ms = started and (clock() - started)
+        local capped = ok and type(visited) == "number" and visited > MAX_LAYER_FRAMES
+        if ok and not slowLayerLogged and (capped or (ms and ms > SLOW_LAYER_MS)) and ns.trace then
+            slowLayerLogged = true
+            ns.trace(string.format("SLOW focus layer check (logged once): %s frames, %.1f ms",
+                capped and ("over " .. MAX_LAYER_FRAMES .. " (stopped there)") or tostring(visited), ms or -1))
+        end
         if ok and (strata ~= topStrata or level ~= topLevel) then
             topStrata, topLevel = strata, level
             if ns.trace then

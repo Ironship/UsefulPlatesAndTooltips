@@ -1296,8 +1296,13 @@ local layerCheckedAt, lastStrata, lastLevel = 0, nil, nil
 local function topLayerOf(frame)
     -- A missing custom unit frame must not expand the scan to the whole UI.
     if not frame or frame == UIParent then return end
-    local topStrata, topLevel = "BACKGROUND", 0
+    -- Other addons can hang hundreds or thousands of frames under a unit frame over a session;
+    -- stop after 300 so a walk never stalls a frame (Does It Die PR #40).
+    local maxFrames = 300
+    local topStrata, topLevel, visited = "BACKGROUND", 0, 0
     local function visit(f, depth)
+        visited = visited + 1
+        if visited > maxFrames then return end
         if f == markerClip or (BIT.OwnOverlays and BIT.OwnOverlays[f]) then return end
         if depth > 0 then
             -- hidden only when the client says so: an unreadable or secret answer counts as shown
@@ -1318,7 +1323,10 @@ local function topLayerOf(frame)
         if depth < 6 then
             local children = { pcall(f.GetChildren, f) }
             if children[1] then
-                for i = 2, #children do visit(children[i], depth + 1) end
+                for i = 2, #children do
+                    if visited > maxFrames then break end
+                    visit(children[i], depth + 1)
+                end
             end
         end
     end

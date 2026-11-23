@@ -49,7 +49,7 @@ local function tallyFor(dot, name)
   if not dot.tickKey then return nil end
   local t = tally[dot.tickKey]
   if not t then
-    t = { spellID = dot.spellID, name = name, factors = 0, ticks = 0, direct = 0,
+    t = { spellID = dot.spellID, name = name, factors = 0, ticks = 0,
       descTick = dot.total / dot.totalTicks, dots = {} }
     tally[dot.tickKey] = t
   end
@@ -71,10 +71,15 @@ end
 function Learn.Cast(dot, upfront, name)
   local t = tallyFor(dot, name)
   if not t then return end
-  t.dots[#t.dots + 1] = dot
   -- A physical hit with its amount hidden cannot be told from a white swing at the same moment (a bleed's ticks are
   -- matched by timing alone), so a bleed's ticks may be miscounted: not learned.
-  if upfront == nil or (dot.boost and dot.boost ~= 1) or dot.school == 1 then t.unclear = true else t.direct = t.direct + upfront end
+  if upfront == nil or (dot.boost and dot.boost ~= 1) or dot.school == 1 then
+    t.unclear = true
+    t.dots[#t.dots + 1] = { dot = dot, direct = 0 }
+  else
+    -- Keep upfront per cast so an avoided cast's upfront hit isn't subtracted from the meter total (FromMeter).
+    t.dots[#t.dots + 1] = { dot = dot, direct = upfront }
+  end
 end
 
 -- A cast whose mob was not known: the meter has its damage, the tally has not.
@@ -107,8 +112,13 @@ local function skipReason(key, t, counted, totals, keysPerSpell)
   -- this tally, so nothing can say whether every tick was seen.
   if #t.dots == 0 then return "not cast this fight" end
   if counted.untracked[t.spellID] then return "a cast had no known target, so the meter has damage not counted here" end
-  for _, dot in ipairs(t.dots) do
-    if dot.ticksSeen == 0 then return "a cast's DoT never showed a tick (out of sight, or the mob died first)" end
+  -- Not counted: an avoided cast (it dealt nothing) and a stack's earlier application (its ticks went on in the
+  -- stack that replaced it).
+  for _, entry in ipairs(t.dots) do
+    local dot = entry.dot
+    if dot.ticksSeen == 0 and not dot.avoided and not dot.stackedInto then
+      return "a cast's DoT never showed a tick (out of sight, or the mob died first)"
+    end
   end
   if not totals[t.spellID] then return "no damage meter total under this spell id" end
   if keysPerSpell[t.spellID] > 1 then return "several combo point sizes share one meter total" end
@@ -129,7 +139,11 @@ function Learn.FromMeter(totals, counted)
     if skip then
       if skip ~= "" then trace(string.format("LEARN %s skipped: %s", name, skip)) end
     else
-      local ratio = total / (t.direct + t.descTick * t.factors)
+      local direct = 0
+      for _, entry in ipairs(t.dots) do
+        if not entry.dot.avoided then direct = direct + entry.direct end
+      end
+      local ratio = total / (direct + t.descTick * t.factors)
       if ratio < RATIO_MIN or ratio > RATIO_MAX then
         trace(string.format("LEARN %s skipped: meter %d over %d tick(s) is %.2fx the description", name, total, t.ticks, ratio))
       else
@@ -142,7 +156,7 @@ function Learn.FromMeter(totals, counted)
         if ns.dropSnapshots then ns.dropSnapshots(key) end
         learned = learned + 1
         trace(string.format("LEARN %s: meter %d over %d tick(s)%s = %.1f per tick (description %.1f), saved %.1f", name, total,
-          t.ticks, t.direct > 0 and " minus the upfront hit" or "", tick, t.descTick, db.ticks[key]))
+          t.ticks, direct > 0 and " minus the upfront hit" or "", tick, t.descTick, db.ticks[key]))
       end
     end
   end
