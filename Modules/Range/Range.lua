@@ -258,6 +258,13 @@ local function anchorOnPlate(mark, plate, bar)
   local oy = tonumber(settings.offset) or 0
   local host = bar or plate
   if pos == "above" then
+    if plate and BIT.Plate and type(BIT.Plate.HunterOwnsNameplate) == "function"
+      and BIT.Plate.HunterOwnsNameplate(plate) then
+      local hunterOffset = type(BIT.Plate.ReadOffsets) == "function" and select(1, BIT.Plate.ReadOffsets()) or -52
+      local barH = (bar and ask(bar.GetHeight, bar)) or 13
+      local minAbove = math.max(0, -(tonumber(hunterOffset) or -52) - barH) + 6
+      if oy < minAbove then oy = minAbove end
+    end
     mark:SetPoint("BOTTOM", host, "TOP", ox, oy)
   elseif pos == "below" then
     mark:SetPoint("TOP", host, "BOTTOM", ox, -4 + oy)
@@ -305,12 +312,6 @@ local function update()
   local want = (state == "in" and settings.showIn) or (state == "out" and settings.showOut)
   if not want then icon:Hide() return end
   local plate = targetPlate()
-  -- The hunter rail owns this plate, so the check would sit on top of it.
-  if plate and BIT.Plate and type(BIT.Plate.HunterOwnsNameplate) == "function"
-    and BIT.Plate.HunterOwnsNameplate(plate) then
-    icon:Hide()
-    return
-  end
   if not place(plate) then icon:Hide() return end
   icon:SetSize(settings.size, settings.size)
   icon.texture:SetTexture(rangeIcon(state))

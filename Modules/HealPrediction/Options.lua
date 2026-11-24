@@ -204,9 +204,9 @@ local function buildPreview(pane)
 
     -- The frame the sample sits on: target, player or party, each with its own "Show on" switch.
     local kits = {
-        target = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 60 }),
-        player = BIT.UI.Preview.PlayerFrame(scene, { name = "You", health = 60 }),
-        party = BIT.UI.Preview.PartyBar(scene, { name = "Kaya", width = 190, health = 60 }),
+        target = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = 45 }),
+        player = BIT.UI.Preview.PlayerFrame(scene, { name = "You", health = 45 }),
+        party = BIT.UI.Preview.PartyBar(scene, { name = "Kaya", width = 190, health = 45 }),
     }
     local FRAMES = { { id = "target", label = "Target" }, { id = "player", label = "Player" }, { id = "party", label = "Party" } }
     local which = "target"
@@ -214,7 +214,7 @@ local function buildPreview(pane)
     for id, kit in pairs(kits) do
         kit.frame:SetPoint("CENTER", scene, "CENTER", 0, 0)
         kit.bar:SetMinMaxValues(0, 100)
-        kit.bar:SetValue(60)
+        kit.bar:SetValue(45)
         kit.frame:SetShown(id == which)
     end
 
@@ -224,7 +224,7 @@ local function buildPreview(pane)
         player = "Show on player frame",
         party = "Show on party frames",
     }
-    local state = { health = 60, heal = 25, others = 12 }
+    local state = { health = 45, heal = 20, others = 10 }
     local sampleHotTotal, sampleHotDuration = 30, 12
 
     local statusBar = CreateFrame("Frame", nil, pane, "BackdropTemplate")

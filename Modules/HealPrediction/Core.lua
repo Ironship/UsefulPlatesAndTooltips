@@ -39,7 +39,7 @@ local DEFAULTS = {
     hotHorizon = 4,     -- seconds of each heal over time drawn ahead, when hotWhole is off
     showFood = true,    -- the health the food you are eating still has to give, as one more heal over time on your frame
     showDrink = true,   -- the mana the drink you are drinking still has to give, on your mana bar
-    heightPercent = 45, -- the segment's share of the bar's height, anchored to the top edge
+    heightPercent = 100, -- full interior height by default (matches DoTInfo / CastPrediction / Blizzard native)
     showText = false,   -- a small number at the segment's right end ("~120")
     debug = false,
 }
@@ -223,10 +223,11 @@ local function layoutOverlay(o, healthBar, hasDirectHeal, hasOthers)
         topInset, bottomInset = BIT.Plate.BarInset(healthBar)
     end
     local visibleHeight = math.max(2, height - topInset - bottomInset)
-    local fraction = (tonumber(db().heightPercent) or 45) / 100
+    local fraction = (tonumber(db().heightPercent) or 100) / 100
+    local fullHeight = fraction >= 1
     local segmentHeight = math.max(2, math.floor(visibleHeight * fraction + 0.5))
     local signature = width .. ":" .. height .. ":" .. topInset .. ":" .. bottomInset .. ":" .. segmentHeight
-        .. ":" .. tostring(hasDirectHeal and true or false) .. ":" .. tostring(hasOthers and true or false)
+        .. ":" .. tostring(fullHeight) .. ":" .. tostring(hasDirectHeal and true or false) .. ":" .. tostring(hasOthers and true or false)
     local fill = ask(healthBar.GetStatusBarTexture, healthBar)
     if isSecret(fill) then fill = nil end
     local ownFill = ask(o.bar.GetStatusBarTexture, o.bar)
@@ -247,21 +248,29 @@ local function layoutOverlay(o, healthBar, hasDirectHeal, hasOthers)
             clip:SetAllPoints(healthBar)
         end
     end
-    -- Top edge of the visible bar is the anchor (no BOTTOMLEFT anchor, so SetHeight applies).
+    -- Full height (100%) pins both TOPLEFT and BOTTOMLEFT to the visible interior (pixel-exact);
+    -- partial height (< 100%) pins only TOPLEFT so SetHeight takes effect cleanly.
     local function sizeBar(layer, barAnchor, anchorPoint, yOffset)
+        local anchor = barAnchor or layer.clip
+        local point = anchorPoint or "TOPLEFT"
         layer.bar:ClearAllPoints()
-        layer.bar:SetPoint("TOPLEFT", barAnchor or layer.clip, anchorPoint or "TOPLEFT", 0, yOffset ~= nil and yOffset or -topInset)
+        layer.bar:SetPoint("TOPLEFT", anchor, point, 0, yOffset ~= nil and yOffset or -topInset)
         layer.bar:SetWidth(width)
-        layer.bar:SetHeight(segmentHeight)
+        if fullHeight then
+            layer.bar:SetPoint("BOTTOMLEFT", anchor, point == "TOPRIGHT" and "BOTTOMRIGHT" or "BOTTOMLEFT", 0, bottomInset)
+        else
+            layer.bar:SetHeight(segmentHeight)
+        end
     end
     anchorClip(o.clip, hasFill and fill or nil)
     sizeBar(o)
     if o.others then
         -- Other healers' StatusBar receives the total incoming heal (own + others, secret-safe), so it
-        -- begins at the health edge while its clip begins at ownFill's right edge: zero overlap with own.
+        -- begins at o.clip's TOPLEFT (identical anchor to o.bar — zero vertical rounding drift) while
+        -- its own clip begins at ownFill's right edge (zero overlap with own).
         if hasOwnFill then
             anchorClip(o.others.clip, ownFill)
-            sizeBar(o.others, hasFill and fill or healthBar, hasFill and "TOPRIGHT" or "TOPLEFT")
+            sizeBar(o.others, o.clip, "TOPLEFT")
         else
             anchorClip(o.others.clip, hasFill and fill or nil)
             sizeBar(o.others)
@@ -633,6 +642,14 @@ local UNIT_EVENTS = {
     UNIT_MAXHEALTH = true,
 }
 
+local function migrateSettings(s)
+    if type(s) ~= "table" then return end
+    if s.heightDefaultVersion ~= 1 then
+        if s.heightPercent == 45 then s.heightPercent = 100 end
+        s.heightDefaultVersion = 1
+    end
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -651,6 +668,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             return
         end
         settings = BIT.Settings("HealPrediction", DEFAULTS)
+        migrateSettings(settings)
         ns.settings = settings
         updateAll()
         self:UnregisterEvent("ADDON_LOADED")
@@ -811,6 +829,7 @@ if BIT.RegisterWaker then
     BIT.RegisterWaker("HealPrediction", function()
         if not settings and type(BIT.Settings) == "function" then
             settings = BIT.Settings("HealPrediction", DEFAULTS)
+            migrateSettings(settings)
             ns.settings = settings
         end
     end)
