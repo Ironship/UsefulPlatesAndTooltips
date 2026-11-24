@@ -398,6 +398,7 @@ local function focusBar()
 end
 
 local function targetTargetBar()
+    if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("targettarget")) end
     local frame = _G.TargetFrameToT or (type(_G.TargetFrame) == "table" and _G.TargetFrame.totFrame)
     if type(frame) == "table" then
         local bar = frame.HealthBar or frame.healthbar or frame.healthBar
@@ -467,25 +468,9 @@ local function groupBars()
             poolFrames(crc, bars)
         end
     end
-    local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
-    local eui = type(modules) == "table" and modules.EllesmereUIRaidFrames
-    local internals = type(eui) == "table" and eui._internals
-    local function addMembers(members)
-        if type(members) ~= "table" then return end
-        for unit, frame in pairs(members) do
-            if not isSecret(unit) and type(unit) == "string" and (unit == "player"
-                or unit:match("^party%d+$") or unit:match("^raid%d+$")) then
-                local data = ask(eui.GetFFD, frame)
-                local current = type(frame) == "table" and ask(frame.GetAttribute, frame, "unit")
-                if not isSecret(current) and current == unit and type(data) == "table" and type(data.health) == "table"
-                    and ask(frame.IsVisible, frame) == true then
-                    bars[#bars + 1] = { unit = unit, bar = data.health }
-                end
-            end
-        end
+    if BIT.Plate and BIT.Plate.CollectGroupFrames then
+        BIT.Plate.CollectGroupFrames(bars)
     end
-    addMembers(type(internals) == "table" and internals.unitToButton)
-    addMembers(type(eui) == "table" and eui._partyUnitToButton)
     local seen, out = {}, {}
     for _, b in ipairs(bars) do
         if not seen[b.bar] then
@@ -502,26 +487,23 @@ end
 
 -- The segment starts at the end of the current mana and runs on to what the drink will have restored, like the heal segment
 -- on the health bar. It is a StatusBar anchored to the mana bar's fill (the maximum may be secret in combat; a StatusBar
--- takes it), clipped to the mana bar. Frames: ElvUI, EllesmereUI, then Blizzard's mana bar (as CastPrediction's mana cost).
+-- takes it), clipped to the mana bar. Uses BIT.Plate.PowerBar (ElvUI, DaylightUI, EllesmereUI, Blizzard).
 local manaOverlay -- { clip, bar, host }
 
-local function usableBar(bar)
+local function usableManaBar(bar)
     return type(bar) == "table" and ask(bar.IsForbidden, bar) ~= true and ask(bar.IsVisible, bar) == true
         and ask(bar.GetObjectType, bar) == "StatusBar"
 end
 
 local function playerManaBar()
-    local elv = type(_G.ElvUI) == "table" and _G.ElvUF_Player
-    if type(elv) == "table" and usableBar(elv.Power) then return elv.Power end
-    local eui = _G.EllesmereUIUnitFrames_Player
-    if type(eui) == "table" and usableBar(eui.Power) then return eui.Power end
+    if BIT.Plate and BIT.Plate.PowerBar then return BIT.Plate.PowerBar("player") end
     local frame = _G.PlayerFrame
     local content = type(frame) == "table" and frame.PlayerFrameContent
     local main = type(content) == "table" and content.PlayerFrameContentMain
     local area = type(main) == "table" and main.ManaBarArea
     local bar = type(area) == "table" and area.ManaBar
-    if usableBar(bar) then return bar end
-    if usableBar(_G.PlayerFrameManaBar) then return _G.PlayerFrameManaBar end
+    if usableManaBar(bar) then return bar end
+    if usableManaBar(_G.PlayerFrameManaBar) then return _G.PlayerFrameManaBar end
 end
 
 local function hideMana()
@@ -575,7 +557,7 @@ local function updateAll()
     update("targettarget", targetTargetBar(), settings.targettarget)
     if settings.party or settings.raid then
         for _, entry in ipairs(groupBars()) do
-            local isRaid = entry.unit:match("^raid%d+$") ~= nil
+            local isRaid = entry.kind == "raid" or (entry.kind == nil and entry.unit:match("^raid%d+$") ~= nil)
             local wanted
             if isRaid then wanted = settings.raid else wanted = settings.party end
             update(entry.unit, entry.bar, wanted)
@@ -591,6 +573,7 @@ local function updateAll()
         hideMana()
         trace("ERROR in mana update: " .. tostring(errMana))
     end
+    if ns.afterRefresh then pcall(ns.afterRefresh) end
 end
 ns.UpdateAll = updateAll
 
@@ -631,6 +614,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     if UNIT_EVENTS[event] then
         -- The events fire for every unit and every change; one bounded pass on the tick keeps
         -- the group scans off the event path (a 40-man health tick storm stays cheap).
+        if event == "UNIT_HEAL_PREDICTION" and ns.onHealPredictionEvent then
+            ns.onHealPredictionEvent(arg1)
+        end
         return
     end
     -- World, group, target or focus changes.

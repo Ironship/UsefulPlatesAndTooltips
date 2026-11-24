@@ -18,11 +18,17 @@ local function declared(event)
     return events[event]
 end
 
+local function isSubAvailable(sub)
+    if not sub then return false end
+    if sub.core then return true end
+    return BIT.IsRunning(sub.module)
+end
+
 function internal.Register(name, api, opts)
     assert(type(name) == "string" and type(api) == "table" and type(api.API_VERSION) == "number",
         "BIT.API.Register: a name and versioned API are required")
     if not subs[name] then subOrder[#subOrder + 1] = name end
-    subs[name] = { api = api, module = opts and opts.module or name }
+    subs[name] = { api = api, module = opts and opts.module or name, core = opts and opts.core == true or false }
 end
 
 function internal.DeclareEvent(event, module, log)
@@ -67,7 +73,7 @@ end
 function Root.Get(name)
     if isSecret(name) or type(name) ~= "string" then return nil end
     local sub = subs[name]
-    if sub and BIT.IsRunning(sub.module) then return sub.api end
+    if isSubAvailable(sub) then return sub.api end
 end
 
 function Root.GetVersion(name)
@@ -118,6 +124,52 @@ function Root.UnregisterCallback(owner, event)
     else
         for _, entry in pairs(events) do drop(entry) end
     end
+end
+
+-- Frames API (version 1): lets unit frame, raid frame, nameplate and action bar addons
+-- register their own frames directly with DoesItDiePlus (see API.md).
+if type(BIT.Plate) == "table" then
+    local Plate = BIT.Plate
+    local framesAPI = { API_VERSION = 1 }
+
+    local function checkOwnerAndFn(method, owner, fn)
+        assert(not isSecret(owner) and owner ~= nil,
+            "UsefulPlatesAndTooltips_API.Frames." .. method .. ": owner is required")
+        assert(type(fn) == "function",
+            "UsefulPlatesAndTooltips_API.Frames." .. method .. ": func must be a function")
+    end
+
+    function framesAPI.RegisterUnitFrameSource(owner, fn)
+        checkOwnerAndFn("RegisterUnitFrameSource", owner, fn)
+        Plate.RegisterUnitFrameSource(owner, fn)
+    end
+
+    function framesAPI.RegisterPlateBarSource(owner, fn)
+        checkOwnerAndFn("RegisterPlateBarSource", owner, fn)
+        Plate.RegisterPlateBarSource(owner, fn)
+    end
+
+    function framesAPI.RegisterGroupFramesSource(owner, fn)
+        checkOwnerAndFn("RegisterGroupFramesSource", owner, fn)
+        Plate.RegisterGroupFramesSource(owner, fn)
+    end
+
+    function framesAPI.RegisterPowerBarSource(owner, fn)
+        checkOwnerAndFn("RegisterPowerBarSource", owner, fn)
+        Plate.RegisterPowerBarSource(owner, fn)
+    end
+
+    function framesAPI.RegisterActionButtonSource(owner, fn)
+        checkOwnerAndFn("RegisterActionButtonSource", owner, fn)
+        Plate.RegisterActionButtonSource(owner, fn)
+    end
+
+    function framesAPI.Unregister(owner)
+        if isSecret(owner) or owner == nil then return end
+        Plate.UnregisterSources(owner)
+    end
+
+    internal.Register("Frames", framesAPI, { core = true })
 end
 
 UsefulPlatesAndTooltips_API = Root

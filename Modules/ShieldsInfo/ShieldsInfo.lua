@@ -565,9 +565,9 @@ local function compactGroup(frame)
   return frame.unit:match("^party%d+$") or frame.unit:match("^raid%d+$") or frame.unit:match("^arena%d+$")
 end
 
-local function groupEnabled(unit)
+local function groupEnabled(unit, kind)
   if type(unit) ~= "string" then return false end
-  if unit:match("^raid%d+$") then return settings and settings.raid end
+  if kind == "raid" or (kind == nil and unit:match("^raid%d+$")) then return settings and settings.raid end
   return settings and settings.party
 end
 
@@ -616,25 +616,9 @@ local function partyBars()
     poolFrames(pf.PartyMemberFramePool, bars)
   end
   compactBars(bars)
-  local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
-  local eui = type(modules) == "table" and modules.EllesmereUIRaidFrames
-  local internals = type(eui) == "table" and eui._internals
-  local function addMembers(members)
-    if type(members) ~= "table" then return end
-    for unit, frame in pairs(members) do
-      if not isSecret(unit) and type(unit) == "string" and (unit == "player"
-          or unit:match("^party%d+$") or unit:match("^raid%d+$")) then
-        local data = ask(eui.GetFFD, frame)
-        local current = type(frame) == "table" and ask(frame.GetAttribute, frame, "unit")
-        if not isSecret(current) and current == unit and type(data) == "table" and type(data.health) == "table"
-            and ask(frame.IsVisible, frame) == true then
-          bars[#bars + 1] = { unit = unit, bar = data.health }
-        end
-      end
-    end
+  if BIT.Plate and BIT.Plate.CollectGroupFrames then
+    BIT.Plate.CollectGroupFrames(bars)
   end
-  addMembers(type(internals) == "table" and internals.unitToButton)
-  addMembers(type(eui) == "table" and eui._partyUnitToButton)
   local seen, out = {}, {}
   for _, b in ipairs(bars) do
     if not seen[b.bar] then
@@ -691,7 +675,7 @@ local function updateAll()
   local partySeen = {}
   for _, pb in ipairs(partyBars()) do
     partySeen[pb.bar] = true
-    updateBar(pb.unit, pb.bar, groupEnabled(pb.unit))
+    updateBar(pb.unit, pb.bar, groupEnabled(pb.unit, pb.kind))
     local o = overlays[pb.bar]
     if o then o.party = true; o.plate = false end
   end

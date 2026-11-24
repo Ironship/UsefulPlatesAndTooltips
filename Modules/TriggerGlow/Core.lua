@@ -195,9 +195,15 @@ local BAR_PREFIXES = {
 }
 
 local buttons, seenButton = {}, {}
-local gamepadButtons, euiButtons, labButtons = {}, {}, {}
+local gamepadButtons, euiButtons, labButtons, sourceSlots = {}, {}, {}, {}
 local labHooked, labOwner, gamepadHosts = {}, {}, {}
 local scheduleRescan
+
+if type(BIT.Plate) == "table" and type(BIT.Plate.OnActionButtonSourcesChanged) == "function" then
+  BIT.Plate.OnActionButtonSourcesChanged(function()
+    if scheduleRescan then scheduleRescan() end
+  end)
+end
 
 local function labLibraries()
   local libs = {}
@@ -239,6 +245,14 @@ local function collectButtons()
       local b = _G["EABButton" .. i]
       if type(b) == "table" then euiButtons[b] = true; addButton(b) end
     end
+  end
+  if type(BIT.Plate) == "table" and type(BIT.Plate.CollectActionButtons) == "function" then
+    BIT.Plate.CollectActionButtons(function(b, getSlot)
+      if type(b) == "table" then
+        if type(getSlot) == "function" then sourceSlots[b] = getSlot end
+        addButton(b)
+      end
+    end)
   end
   for _, lib in ipairs(labLibraries()) do
     local found
@@ -349,6 +363,10 @@ local function buttonSpell(button)
   elseif euiButtons[button] then
     if type(button.GetAttribute) ~= "function" then return nil end
     local ok, value = pcall(button.GetAttribute, button, "action")
+    if ok and not isSecret(value) and type(value) == "number" and value > 0 then return spellOnSlot(value) end
+    return nil
+  elseif sourceSlots[button] then
+    local ok, value = pcall(sourceSlots[button], button)
     if ok and not isSecret(value) and type(value) == "number" and value > 0 then return spellOnSlot(value) end
     return nil
   elseif labButtons[button] then
