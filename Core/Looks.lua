@@ -31,6 +31,7 @@ local DOT_DIR = "Interface\\AddOns\\" .. (ADDON or "UsefulPlatesAndTooltips") ..
 local RANGE_DIR = "Interface\\AddOns\\" .. (ADDON or "UsefulPlatesAndTooltips") .. "\\Modules\\Range\\Textures\\"
 local RD_DIR = "Interface\\AddOns\\" .. (ADDON or "UsefulPlatesAndTooltips") .. "\\Modules\\ResourceDing\\Textures\\"
 local STATS_DIR = "Interface\\AddOns\\" .. (ADDON or "UsefulPlatesAndTooltips") .. "\\Modules\\StatsInfo\\Textures\\"
+local HUNTER_DIR = "Interface\\AddOns\\" .. (ADDON or "UsefulPlatesAndTooltips") .. "\\Modules\\HunterRangeFinder\\Textures\\"
 
 ---------------------------------------------------------------------------------------------
 -- Art style (Stylized 2D / Pixel Art / Classic): switches icons, gems, orbs, arrows & markers live
@@ -64,6 +65,7 @@ local ART_TEXTURES = {
         arrowUp = STATS_DIR .. "ArrowUp",
         arrowDown = STATS_DIR .. "ArrowDown",
         deadZoneSkull = DOT_DIR .. "KillSkull2D",
+        meleeSword = HUNTER_DIR .. "MeleeSword",
     },
     pixel = {
         shardGem = RD_DIR .. "ShardGem_px",
@@ -81,6 +83,7 @@ local ART_TEXTURES = {
         arrowUp = STATS_DIR .. "ArrowUp_px",
         arrowDown = STATS_DIR .. "ArrowDown_px",
         deadZoneSkull = DOT_DIR .. "KillSkull_px",
+        meleeSword = HUNTER_DIR .. "MeleeSword_px",
     },
     classic = {
         shardGem = WHITE,
@@ -98,6 +101,7 @@ local ART_TEXTURES = {
         arrowUp = "Interface\\Buttons\\UI-MicroStream-Green",
         arrowDown = "Interface\\Buttons\\UI-MicroStream-Red",
         deadZoneSkull = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8",
+        meleeSword = "Interface\\Icons\\INV_Sword_04",
     },
 }
 

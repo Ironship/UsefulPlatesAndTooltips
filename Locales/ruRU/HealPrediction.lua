@@ -8,6 +8,21 @@ BIT.RegisterLocale("ruRU", {
   ["Incoming heal"] = "Входящее исцеление",
   ["HealPrediction sample"] = "Пример HealPrediction",
   ["+25 incoming, from the health edge"] = "+25 исцеления от края полосы здоровья",
+  ["Hidden (%s is off)"] = "Скрыто (%s выкл.)",
+  ["All"] = "Все",
+  ["Own"] = "Своё",
+  ["Others"] = "Другие",
+  ["HoT"] = "Период.",
+  ["No incoming heal"] = "Нет входящего исцеления",
+  ["Wounded (40% HP)"] = "Ранен (40% здоровья)",
+  ["Casting direct heal (+20%)"] = "Применение прямого исцеления (+20%)",
+  ["Other healer joins (+10%)"] = "Присоединяется другой целитель (+10%)",
+  ["Heal landed - HoT tick %d/4"] = "Исцеление прошло — такт %d/4",
+  ["Full health"] = "Полное здоровье",
+  ["A direct heal is cast, another healer joins, both land, and a heal over time ticks the target to full."] =
+    "Применяется прямое исцеление, присоединяется другой целитель, оба срабатывают, затем периодическое исцеление доводит здоровье до максимума.",
+  ["The %s option controls this sample; the other Show on options control live frames. The segment starts at the health edge (the green bar's end) and is cropped at the bar's right end when the heal would overheal."] =
+    "Этим примером управляет параметр «%s»; остальные параметры отображения относятся к игровым рамкам. Сегмент начинается у края здоровья (конца зелёной полосы) и обрезается у правого края полосы, если исцеление превысит недостающее здоровье.",
   ["The Target frame option controls this sample; the other frame options control live frames. The segment starts at the health edge (the green bar's end) and is cropped at the bar's right end when the heal would overheal."] =
     "Этим примером управляет настройка рамки цели; остальные настройки рамок относятся к игровым рамкам. Сегмент начинается у края здоровья (конца зелёной полосы) и обрезается у правого края полосы, если исцеление превысит недостающее здоровье.",
   ["The client already knows how much healing is coming (UnitGetIncomingHeals). This module redraws direct heals and adds estimates for your own heals over time."] =

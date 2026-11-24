@@ -495,6 +495,43 @@ ARROW_DOWN_PX_PAL = {
     "g": (158,  18,  24, 255),
 }
 
+# ---------------------------------------------------------------------------
+# 13. HunterRangeFinder Pixel Art Melee Broadsword (MeleeSword_px.tga)
+# ---------------------------------------------------------------------------
+
+MELEE_SWORD_PX_GRID = [
+    "...........KKKKK",
+    "..........KWWWSK",
+    ".........KWWWSsK",
+    "........KWWWSsK.",
+    ".......KWWWSsK..",
+    "......KWWWSsK...",
+    "..KK.KWWWSsK....",
+    "..KGKWWWSsK.....",
+    "...KGGWSsK......",
+    "...KggGgK.......",
+    "..KhhgDGK.......",
+    ".KhHKhgDGK......",
+    "KEEK..KDDK......",
+    "KeEK...KK.......",
+    "KKK.............",
+    "................",
+]
+MELEE_SWORD_PX_PAL = {
+    ".": T,
+    "K": K,
+    "W": (250, 254, 255, 255),  # razor specular edge
+    "S": (204, 218, 236, 255),  # lit steel blade
+    "s": (128, 146, 170, 255),  # shaded steel facet
+    "G": (255, 224,  96, 255),  # bright gold crossguard
+    "g": (214, 154,  34, 255),  # mid gold
+    "D": (146,  92,  16, 255),  # dark gold
+    "H": (156,  98,  54, 255),  # lit leather grip
+    "h": (106,  60,  30, 255),  # shaded leather grip
+    "E": ( 56, 236, 110, 255),  # bright emerald pommel
+    "e": ( 18, 154,  60, 255),  # shaded emerald pommel
+}
+
 
 def main():
     rd = ROOT / "Modules" / "ResourceDing" / "Textures"
@@ -523,6 +560,9 @@ def main():
     st = ROOT / "Modules" / "StatsInfo" / "Textures"
     write_pixel_tga(st / "ArrowUp_px.tga", ARROW_UP_PX_GRID, ARROW_UP_PX_PAL, scale=4)
     write_pixel_tga(st / "ArrowDown_px.tga", ARROW_DOWN_PX_GRID, ARROW_DOWN_PX_PAL, scale=4)
+
+    hr = ROOT / "Modules" / "HunterRangeFinder" / "Textures"
+    write_pixel_tga(hr / "MeleeSword_px.tga", MELEE_SWORD_PX_GRID, MELEE_SWORD_PX_PAL, scale=4)
 
 
 if __name__ == "__main__":

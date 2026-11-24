@@ -889,6 +889,75 @@ def kill_blades_2d(nx, ny):
     return col
 
 
+# 11. MeleeSword.tga — Crisp stylized 2D diagonal hunter broadsword (emerald gem pommel)
+def melee_sword_2d(nx, ny):
+    # Diagonal pointing top-right (+45 deg): rotate sample coords by +pi/4
+    ang = 0.785398
+    ca, sa = math.cos(ang), math.sin(ang)
+    lx = (nx * ca + ny * sa) * 0.94
+    ly = (-nx * sa + ny * ca) * 0.94
+
+    # Broad angular sword blade (tip at y=-0.92, shoulders at y=-0.56, base at y=0.22)
+    blade_poly = [(0.0, -0.92), (0.185, -0.54), (0.145, 0.22), (-0.145, 0.22), (-0.185, -0.54)]
+    d_blade, _ = signed_dist_convex(lx, ly, poly_edges(blade_poly))
+    # Winged faceted gold crossguard
+    guard_poly = [(-0.42, 0.26), (-0.26, 0.17), (0.26, 0.17), (0.42, 0.26), (0.26, 0.35), (-0.26, 0.35)]
+    d_guard, _ = signed_dist_convex(lx, ly, poly_edges(guard_poly))
+    # Wrapped dark leather grip
+    d_grip = sd_round_box(lx, ly - 0.50, 0.075, 0.17, 0.024)
+    # Faceted diamond emerald-in-gold pommel
+    pom_poly = [(0.0, 0.62), (0.14, 0.76), (0.0, 0.90), (-0.14, 0.76)]
+    d_pom, _ = signed_dist_convex(lx, ly, poly_edges(pom_poly))
+
+    d_all = min(d_blade, d_guard, d_grip, d_pom)
+    col = (0.0, 0.0, 0.0, 0.0)
+
+    # Crisp obsidian 2D outline
+    rim_a = 1.0 - smooth(0.025, 0.078, d_all)
+    if rim_a > 0.0:
+        col = (0.04, 0.03, 0.05, rim_a * 0.98)
+
+    # Leather grip (cel-shaded warm umber)
+    grip_a = 1.0 - smooth(-0.012, 0.015, d_grip)
+    if grip_a > 0.0:
+        gcol = (0.44, 0.28, 0.15) if lx < 0 else (0.24, 0.14, 0.08)
+        col = over(col, (gcol[0], gcol[1], gcol[2], grip_a))
+
+    # Steel broadsword blade (razor 2-facet light/shadow split + bright tip bevel + emerald fuller glint)
+    blade_a = 1.0 - smooth(-0.012, 0.015, d_blade)
+    if blade_a > 0.0:
+        tone = 0.95 if lx < 0.0 else 0.44
+        if ly < -0.54:
+            tone += 0.10
+        spine = math.exp(-((lx / 0.020) ** 2)) * 0.28
+        sr, sg, sb = ramp(clamp(tone + spine, 0.05, 1.08), STEEL_2D)
+        # Subtle bright emerald edge sheen near crossguard to pair with Hunter MELEE green
+        if ly > -0.18 and abs(lx) < 0.045:
+            sr, sg, sb = lerp3((sr, sg, sb), (0.18, 0.90, 0.44), 0.30 * (1.0 - smooth(-0.18, 0.20, -ly)))
+        col = over(col, (sr, sg, sb, blade_a))
+
+    # Faceted gold crossguard
+    guard_a = 1.0 - smooth(-0.012, 0.015, d_guard)
+    if guard_a > 0.0:
+        tone = 0.95 if (ly < 0.26) else 0.42
+        if lx < 0:
+            tone += 0.08
+        gr, gg, gb = ramp(clamp(tone, 0.05, 1.08), GOLD_2D)
+        col = over(col, (gr, gg, gb, guard_a))
+
+    # Emerald crystal-in-gold pommel
+    pom_a = 1.0 - smooth(-0.012, 0.015, d_pom)
+    if pom_a > 0.0:
+        inner = abs(lx) + abs(ly - 0.76) < 0.080
+        if inner:
+            pr, pg, pb = ramp(0.95 if lx < 0 else 0.55, EMERALD_CRYSTAL)
+        else:
+            pr, pg, pb = ramp(0.92 if ly < 0.76 else 0.42, GOLD_2D)
+        col = over(col, (pr, pg, pb, pom_a))
+
+    return col
+
+
 def main():
     write_rgba_tga(ROOT / "Modules" / "Range" / "Textures" / "RangeIn.tga", 64, 64, range_in)
     write_rgba_tga(ROOT / "Modules" / "Range" / "Textures" / "RangeOut.tga", 64, 64, range_out)
@@ -897,6 +966,7 @@ def main():
     write_rgba_tga(ROOT / "Modules" / "DoTInfo" / "Textures" / "KillSkull2D.tga", 64, 64, kill_skull_2d)
     write_rgba_tga(ROOT / "Modules" / "DoTInfo" / "Textures" / "KillCrosshair.tga", 64, 64, kill_crosshair_2d)
     write_rgba_tga(ROOT / "Modules" / "DoTInfo" / "Textures" / "KillBlades.tga", 64, 64, kill_blades_2d)
+    write_rgba_tga(ROOT / "Modules" / "HunterRangeFinder" / "Textures" / "MeleeSword.tga", 64, 64, melee_sword_2d)
     write_rgba_tga(ROOT / "Core" / "Textures" / "MarkerDiamond.tga", 64, 64, marker_diamond)
     write_rgba_tga(ROOT / "Core" / "Textures" / "MarkerDiamondBezel.tga", 64, 64, marker_diamond_bezel)
     write_rgba_tga(ROOT / "Core" / "Textures" / "MarkerSegment.tga", 64, 32, marker_segment)

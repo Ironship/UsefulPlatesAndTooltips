@@ -47,12 +47,18 @@ local DEFAULTS = {
 --   Melee mark: Interface\Icons\INV_Sword_04 (public Blizzard bag/inventory
 --     sword icon, used as a static melee glyph; never a RaidTarget assignment).
 local DEAD_ZONE_SKULL = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\DoTInfo\\Textures\\KillSkull2D"
-local MELEE_ICON = "Interface\\Icons\\INV_Sword_04"
+local MELEE_ICON = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\HunterRangeFinder\\Textures\\MeleeSword"
 local function deadZoneTexture()
     if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
         return BIT.Art.Texture("deadZoneSkull") or DEAD_ZONE_SKULL
     end
     return DEAD_ZONE_SKULL
+end
+local function meleeTexture()
+    if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
+        return BIT.Art.Texture("meleeSword") or MELEE_ICON
+    end
+    return MELEE_ICON
 end
 -- One-time narrow shape migration version (own module key only).
 local R1_SHAPE_MIGRATION_VERSION = 1
@@ -433,16 +439,16 @@ local function buildScene(parent)
     zone:SetPoint("TOP", rail, "BOTTOM", 0, -4)
     zone:SetJustifyH("CENTER")
     frame.zone = zone
-    -- Native status icons: static textures, no unit/spell/game probes.
+    -- Status icons: style-aware textures (2D / Pixel Art / Classic), no unit/spell/game probes.
     local deadIcon = frame:CreateTexture(nil, "OVERLAY")
-    deadIcon:SetTexture(DEAD_ZONE_SKULL)
+    deadIcon:SetTexture(deadZoneTexture())
     deadIcon:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     deadIcon:SetSize(24, 24)
     if deadIcon.SetVertexColor then deadIcon:SetVertexColor(1, 1, 1, 1) end
     deadIcon:Hide()
     frame.deadIcon = deadIcon
     local meleeIcon = frame:CreateTexture(nil, "OVERLAY")
-    meleeIcon:SetTexture(MELEE_ICON)
+    meleeIcon:SetTexture(meleeTexture())
     meleeIcon:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     meleeIcon:SetSize(24, 24)
     if meleeIcon.SetVertexColor then meleeIcon:SetVertexColor(1, 1, 1, 1) end
@@ -514,6 +520,7 @@ local function renderScene(frame, style, bandName, scatter)
     end
     if frame.meleeIcon then
         if showMelee then
+            frame.meleeIcon:SetTexture(meleeTexture())
             frame.meleeIcon:Show()
             frame.meleeIcon:SetSize(iconSize, iconSize)
             frame.meleeIcon:ClearAllPoints()
@@ -998,9 +1005,9 @@ local DISABLED_ALPHA = 0.35
 -- The TRY IT switch: every band the rail can show, nearest first (the order the dots light).
 local BAND_ORDER = { "Y10", "Y15", "Y20", "Y25", "Y30", "Y35", "MAX", "MELEE", "DEAD" }
 local BAND_SWITCH_TEXT = {
-    Y10 = "Y10  8-10 yd", Y15 = "Y15  10-15 yd", Y20 = "Y20  15-20 yd",
-    Y25 = "Y25  20-25 yd", Y30 = "Y30  25-30 yd", Y35 = "Y35  30-35 yd",
-    MAX = "MAX  35+ yd (seventh dot)", MELEE = "MELEE  Wing Clip's reach", DEAD = "DEAD  5-8 yd dead zone",
+    Y10 = "8-10 yd", Y15 = "10-15 yd", Y20 = "15-20 yd",
+    Y25 = "20-25 yd", Y30 = "25-30 yd", Y35 = "30-35 yd",
+    MAX = "35+ yd", MELEE = "MELEE", DEAD = "DEAD",
 }
 local previewBand = SAMPLE_BAND
 local previewBar -- the mock health bar the preview rail is seated on
