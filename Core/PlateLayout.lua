@@ -470,16 +470,64 @@ end
 
 -- Hunter rail offset, combo-dot offset, shard offset. Missing saved values are the defaults.
 function Plate.ReadOffsets()
-  local hunter = -60
+  local hunter = -52
   local hs = moduleSettings("HunterRangeFinder")
   if hs and type(hs.plateOffset) == "number" then hunter = hs.plateOffset end
-  local dots, shards = -60, -60
+  local dots, shards = -52, -52
   local rd = (type(BIT.PortedDB) == "function" and BIT.PortedDB("ResourceDing")) or UsefulPlatesAndTooltips_ResourceDingDB
   if type(rd) == "table" then
     if type(rd.dotOffset) == "number" then dots = rd.dotOffset end
     if type(rd.shardOffset) == "number" then shards = rd.shardOffset end
   end
   return hunter, dots, shards
+end
+
+-- Horizontal offset past healthBar's RIGHT edge for right-side nameplate icons so they clear
+-- Blizzard's external level badge (e.g. Forever's [12] indicator) while sitting tight (+4) on
+-- wide/custom plates (Plater, ElvUI, Threat Plates) that have no external right-side badge.
+function Plate.RightEdgeOffset(plate, healthBar)
+  if type(plate) ~= "table" or type(healthBar) ~= "table" then return 4 end
+  local badge = plate.uptLevelBadge
+  if not badge then
+    local uf = read(function() return plate.UnitFrame end)
+    if type(uf) == "table" then
+      badge = read(function() return uf.LevelFrame or uf.levelFrame or uf.LevelIndicator end)
+    end
+  end
+  if type(badge) == "table" and read(badge.IsShown, badge) == true then
+    local br = read(badge.GetRight, badge)
+    local hr = read(healthBar.GetRight, healthBar)
+    if type(br) == "number" and type(hr) == "number" then
+      local extra = math.floor(br - hr + 0.5)
+      if extra > 0 and extra < 60 then return extra + 4 end
+    end
+    return 36
+  end
+  return 4
+end
+
+-- DoTInfo's lethal DoT damage on this unit when DoTInfo is actively showing a kill icon for that
+-- surface (target frame vs nameplate). Used by CastPrediction to hide its competing kill icon.
+function Plate.DotKillDamage(unit, forPlate)
+  if type(unit) ~= "string" then return 0 end
+  if type(BIT.IsRunning) == "function" and not BIT.IsRunning("DoTInfo") then return 0 end
+  local dot = BIT.modules and BIT.modules.DoTInfo
+  if type(dot) ~= "table" or type(dot.LethalKillDamage) ~= "function" then return 0 end
+  local ok, amount = pcall(dot.LethalKillDamage, unit, forPlate)
+  if ok and type(amount) == "number" and amount > 0 then return amount end
+  return 0
+end
+
+-- Whether DoTInfo's Execute/Finisher icon is currently occupying the right-hand slot on this plate.
+-- Range uses this to dock cleanly beside Execute in the same horizontal row.
+function Plate.ExecuteShownOnPlate(plate)
+  if type(plate) ~= "table" then return false, 0 end
+  if type(BIT.IsRunning) == "function" and not BIT.IsRunning("DoTInfo") then return false, 0 end
+  local dot = BIT.modules and BIT.modules.DoTInfo
+  if type(dot) ~= "table" or type(dot.HasPlateExecute) ~= "function" then return false, 0 end
+  local ok, shown, size = pcall(dot.HasPlateExecute, plate)
+  if ok and shown then return true, tonumber(size) or 22 end
+  return false, 0
 end
 
 -- The hunter rail is actually on the plate: the module is running, the player is a hunter,

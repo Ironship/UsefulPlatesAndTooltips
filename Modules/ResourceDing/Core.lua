@@ -105,8 +105,8 @@ local defaults = {
   fullSound = true, -- the sound at a full bar; off keeps the dots and diamonds without it
   dots = true,     -- combo points as dots under the target's nameplate (Dots.lua)
   dotSize = 14,
-  dotOffset = -60,   -- vertical offset from the health bar (negative = above)
-  shardOffset = -60, -- the warlock diamonds' own offset: dots and diamonds move independently
+  dotOffset = -52,   -- vertical offset from the health bar (negative = above)
+  shardOffset = -52, -- the warlock diamonds' own offset: dots and diamonds move independently
   shards = true,         -- a warlock's Soul Shard coming in plays the sound (Shards.lua)
   shardDiamonds = true,  -- and they show as purple diamonds under the target's nameplate
   mana = true,           -- a sound when mana climbs to manaPercent (Mana.lua); manaPercent is
@@ -131,11 +131,11 @@ local function initializeDatabase()
   end
   if not Addon.SOUNDS[store.sound] then store.sound = defaults.sound end
   if type(store.dotOffset) ~= "number" then store.dotOffset = defaults.dotOffset
-  elseif store.dotOffset < -80 then store.dotOffset = -80
-  elseif store.dotOffset > 30 then store.dotOffset = 30 end
+  elseif store.dotOffset < -140 then store.dotOffset = -140
+  elseif store.dotOffset > 80 then store.dotOffset = 80 end
   if type(store.shardOffset) ~= "number" then store.shardOffset = defaults.shardOffset
-  elseif store.shardOffset < -80 then store.shardOffset = -80
-  elseif store.shardOffset > 30 then store.shardOffset = 30 end
+  elseif store.shardOffset < -140 then store.shardOffset = -140
+  elseif store.shardOffset > 80 then store.shardOffset = 80 end
   local dotSize = tonumber(store.dotSize)
   if dotSize ~= dotSize or not dotSize or dotSize < 8 then dotSize = 8
   elseif dotSize > 24 then dotSize = 24 end

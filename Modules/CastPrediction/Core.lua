@@ -72,7 +72,7 @@ local DEFAULTS = {
     showNameplates = true,
     showManaCost = true,
     fillColor = "school",
-    fillOpacity = 45,
+    fillOpacity = 70,
     outlineStyle = "solid",
     outlineColor = "white",
     outlineOpacity = 100,
@@ -90,17 +90,17 @@ local DEFAULTS = {
     labelPosition = "center",
     labelSize = 10,
     labelColor = "white",
-    -- Nameplates: their own look, since enemy plates are red. Defaults read well on red.
-    nameplateMode = "marker", -- off | marker | markerIcon
+    -- Nameplates: unified Juicy look + aligned side row (y=0; kill icon auto-hides when DoTInfo kills the mob).
+    nameplateMode = "markerIcon", -- off | marker | markerIcon
     plateFillColor = "school",
-    plateFillOpacity = 45,
+    plateFillOpacity = 75,
     plateOutlineStyle = "solid",
     plateOutlineColor = "white",
     plateOutlineOpacity = 100,
-    plateIconSize = 24,
-    plateIconPosition = "left", -- the level badge sits right of the bar on Forever's plates
+    plateIconSize = 22,
+    plateIconPosition = "left", -- aligned with DoTInfo kill icon on the left; level badge sits right on Forever plates
     plateIconOffsetX = 0,
-    plateIconOffsetY = 15,
+    plateIconOffsetY = 0,
     -- The prediction itself
     estimate = "average", -- average | min | max
     learn = true,         -- calibrate the estimate from hits seen in combat
@@ -109,7 +109,7 @@ local DEFAULTS = {
     castOnly = true,      -- only spells that are actually cast (not instant casts)
     finisherPreview = true, -- show what the finisher on your action bars would deal at the current combo points
     -- Fill textures (the shared catalog, Core/Looks.lua): a cast, a channel, and the finisher preview each have their own
-    castTexture = "flat",
+    castTexture = "bevel",
     channelTexture = "dash_v",
     finisherTexture = "fire_v", -- Flame (top to bottom): a texture with its own colours
     finisherColor = "school",
@@ -1152,8 +1152,64 @@ end
 -- StatusBar can position it, but clipping alone reveals part of it before lethal.
 -- Readable health gates visibility exactly; secret health retains the native clipping transition.
 local KILL_BAR_LENGTH = 10000
+local DOT_GATE_LENGTH = 9999 -- distinct from KILL_BAR_LENGTH; drives secret-safe suppression when DoTs already kill
 local killHealthUnavailableReported = false
-local function setKillValue(bar, health, minimum)
+
+-- Secret-safe suppression of CastPrediction's kill icon whenever DoTInfo's own kill icon is active
+-- and lethal on the same unit: readable health gates alpha directly, while secret health uses a
+-- CLAMPTOBLACKADDITIVE mask from dotGate's right edge to window's right edge (0 px wide once lethal).
+local function applyDotKillSuppression(window, bar, icon, health, dotLethal)
+    dotLethal = type(dotLethal) == "number" and dotLethal or 0
+    local readableHealth = number(health)
+    if dotLethal <= 0 then
+        if icon._dotMasked and window._dotMask and type(icon.RemoveMaskTexture) == "function" then
+            pcall(icon.RemoveMaskTexture, icon, window._dotMask)
+            icon._dotMasked = false
+        end
+        return false
+    end
+    if readableHealth then
+        if icon._dotMasked and window._dotMask and type(icon.RemoveMaskTexture) == "function" then
+            pcall(icon.RemoveMaskTexture, icon, window._dotMask)
+            icon._dotMasked = false
+        end
+        if readableHealth > 0 and dotLethal >= readableHealth then
+            bar:SetAlpha(0)
+            return true
+        end
+        return false
+    end
+    if type(icon.AddMaskTexture) ~= "function" or type(window.CreateMaskTexture) ~= "function" then
+        return false
+    end
+    local gate = window._dotGate
+    if not gate then
+        gate = CreateFrame("StatusBar", nil, window)
+        gate:SetPoint("RIGHT", window, "RIGHT")
+        gate:SetStatusBarTexture(WHITE)
+        gate:SetStatusBarColor(0, 0, 0, 0)
+        window._dotGate = gate
+    end
+    local h = (type(window.GetHeight) == "function" and number(window:GetHeight())) or 24
+    gate:SetSize(DOT_GATE_LENGTH, h)
+    gate:SetMinMaxValues(0, health)
+    gate:SetValue(dotLethal)
+    local mask = window._dotMask
+    if not mask then
+        mask = window:CreateMaskTexture()
+        mask:SetTexture(WHITE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetPoint("TOPLEFT", gate:GetStatusBarTexture(), "TOPRIGHT")
+        mask:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT")
+        window._dotMask = mask
+    end
+    if not icon._dotMasked then
+        pcall(icon.AddMaskTexture, icon, mask)
+        icon._dotMasked = true
+    end
+    return false
+end
+
+local function setKillValue(bar, health, minimum, window, icon, dotLethal)
     bar:SetMinMaxValues(0, health)
     bar:SetValue(minimum)
     local readableHealth = number(health)
@@ -1163,6 +1219,9 @@ local function setKillValue(bar, health, minimum)
     end
     bar:SetAlpha(not readableHealth and 1
         or (readableHealth > 0 and minimum >= readableHealth and 1 or 0))
+    if window and icon then
+        applyDotKillSuppression(window, bar, icon, health, dotLethal)
+    end
 end
 local killWindow = CreateFrame("Frame", "UsefulPlatesAndTooltips_CastPredictionKill", UIParent)
 killWindow:SetClipsChildren(true)
@@ -1497,7 +1556,11 @@ local function drawMarker(damage, maxHealth, health, state)
     end
     marker:SetMinMaxValues(0, maxHealth)
     marker:SetValue(damage)
-    setKillValue(killBar, health, killValue)
+    local dotLethal = state and state.dotLethal
+    if dotLethal == nil and not previewState and BIT.Plate and type(BIT.Plate.DotKillDamage) == "function" then
+        dotLethal = BIT.Plate.DotKillDamage("target", false)
+    end
+    setKillValue(killBar, health, killValue, killWindow, killIcon, dotLethal or 0)
     applyAppearance(state)
     markerClip:SetShown(settings.showMarker)
     marker:SetShown(settings.showMarker)
@@ -1879,7 +1942,7 @@ local function applyPlateStyle(w, state)
     w.icon:SetTexture((settings.showKillSpellIcon and spellTexture(state and state.spellID))
         or findById(KILL_ICONS, settings.killIcon).path)
     w.iconWindow:ClearAllPoints()
-    local x, y = settings.plateIconOffsetX, settings.plateIconOffsetY
+    local x, y = settings.plateIconOffsetX or 0, settings.plateIconOffsetY or 0
     if settings.plateIconPosition == "left" then
         w.iconWindow:SetPoint("RIGHT", w.healthBar, "LEFT", -4 + x, y)
     elseif settings.plateIconPosition == "above" then
@@ -1887,7 +1950,9 @@ local function applyPlateStyle(w, state)
     elseif settings.plateIconPosition == "below" then
         w.iconWindow:SetPoint("TOP", w.healthBar, "BOTTOM", x, -4 + y)
     else
-        w.iconWindow:SetPoint("LEFT", w.healthBar, "RIGHT", 4 + x, y)
+        local rightPad = (BIT.Plate and type(BIT.Plate.RightEdgeOffset) == "function")
+            and BIT.Plate.RightEdgeOffset(w.plate, w.healthBar) or 4
+        w.iconWindow:SetPoint("LEFT", w.healthBar, "RIGHT", rightPad + x, y)
     end
 end
 
@@ -1936,7 +2001,8 @@ local function drawPlate(w, damage, maxHealth, health, state)
     w.clip:SetShown(settings.showMarker)
     w.displayDamage = settings.showMarker and damage or 0
     local minimum = number(state and state.min) or damage
-    setKillValue(w.iconBar, health, minimum)
+    local dotLethal = state and state.dotLethal or 0
+    setKillValue(w.iconBar, health, minimum, w.iconWindow, w.icon, dotLethal)
     w.iconBar:SetShown(settings.showKillIcon and (not state or state.kill ~= false))
     w.iconWindow:SetShown(settings.showMarker and settings.showKillIcon and settings.nameplateMode == "markerIcon")
     return true
@@ -2028,9 +2094,11 @@ local function refreshPlates(now, unit)
                 local healthBar = BIT.Plate and BIT.Plate.HealthBar and BIT.Plate.HealthBar(plate)
                 if healthBar then
                     local w = widgetsFor(plate, healthBar)
+                    local dotLethal = (BIT.Plate and type(BIT.Plate.DotKillDamage) == "function")
+                        and BIT.Plate.DotKillDamage(unit, true) or 0
                     drawPlate(w, cast.prediction.value, UnitHealthMax(unit), UnitHealth(unit), {
                         school = cast.view.school, channel = cast.channel, preview = cast.preview,
-                        spellID = cast.spellID, min = cast.prediction.min,
+                        spellID = cast.spellID, min = cast.prediction.min, dotLethal = dotLethal,
                     })
                 end
             end

@@ -30,7 +30,7 @@ local DEFAULTS = {
     -- values still map onto the shared style (the legacy fallback below).
     chevronHeight = 1, chevronWidth = 1,
     locked = true,
-    attachToPlate = true, plateOffset = -60,
+    attachToPlate = true, plateOffset = -52,
     longRange = false,
     -- Retired display flags, kept so saved values survive: they never restore
     -- the old artwork. A stored animation flag maps onto reducedMotion = false.
@@ -405,7 +405,7 @@ local function reanchorHunterHud()
     local plate = hunterTargetPlate()
     if not plate then return noPlate() end
     local offset = finiteNum(tonumber(settings.plateOffset), DEFAULTS.plateOffset)
-    if offset < -80 then offset = -80 elseif offset > 30 then offset = 30 end
+    if offset < -140 then offset = -140 elseif offset > 80 then offset = 80 end
     local bar = hunterHealthBarOf(plate)
     if not bar then return noPlate() end
     if reanchorKey ~= bar or reanchorOffset ~= offset then
@@ -619,8 +619,15 @@ local function renderScene(frame, style, bandName, scatter)
         end
     else
         local markers = style.shape == "bar" and frame.bar or frame.rail
-        frame.zone:SetPoint("TOP", markers, "BOTTOM", 0, -4)
-        frame:SetSize(math.max(markers:GetWidth(), labelW), markers:GetHeight() + (showText and (4 + labelH) or 0))
+        markers:ClearAllPoints()
+        markers:SetPoint("LEFT", frame, "LEFT", 0, 0)
+        if showText then
+            frame.zone:SetPoint("LEFT", markers, "RIGHT", 6, 0)
+            frame:SetSize(markers:GetWidth() + 6 + labelW, math.max(markers:GetHeight(), labelH))
+        else
+            frame.zone:SetPoint("LEFT", markers, "RIGHT", 0, 0)
+            frame:SetSize(markers:GetWidth(), markers:GetHeight())
+        end
     end
 end
 
@@ -943,8 +950,8 @@ local function prepareHunterSettings()
   if hadOldOffset then settings.plateOffset = -(tonumber(settings.plateOffset) or 0) end
   settings.plateScheme = 2
   settings.plateOffset = finiteNum(tonumber(settings.plateOffset), DEFAULTS.plateOffset)
-  if settings.plateOffset < -80 then settings.plateOffset = -80
-  elseif settings.plateOffset > 30 then settings.plateOffset = 30 end
+  if settings.plateOffset < -140 then settings.plateOffset = -140
+  elseif settings.plateOffset > 80 then settings.plateOffset = 80 end
   settings.scale = clamp(settings.scale, DEFAULTS.scale, 0.5, 3)
   settings.opacity = clamp(settings.opacity, DEFAULTS.opacity, 0.1, 1)
   settings.chevronHeight = clamp(settings.chevronHeight, DEFAULTS.chevronHeight, 0.5, 1.5)
@@ -1315,7 +1322,7 @@ local function buildTabs(parent, isHunter)
         { enabledIf = hunterOnly,
             tooltip = "The rail rides above the target's nameplate, like the ResourceDing dots. "
                 .. "It is hidden when that plate is not visible. Unchecked keeps the draggable screen position." })
-    parent.plateOffset = display:slider("plateOffset", "Height above the bar", -80, 30, 1,
+    parent.plateOffset = display:slider("plateOffset", "Height above the bar", -140, 80, 1,
         { up = true, enabledIf = function(s) return isHunter and s.attachToPlate ~= false end,
             tooltip = "How high the rail sits above the plate's health bar. Positive is up, negative is under the bar. The same seat as the combo dots." })
     plateClashLine = display:note(BIT.L("Nameplate lanes"))

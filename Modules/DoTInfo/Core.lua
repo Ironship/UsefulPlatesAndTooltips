@@ -139,7 +139,7 @@ local SCHOOL_MASKS = {
 local DEFAULTS = {
     -- Skull
     showSkull = true,
-    skullIcon = "skull",
+    skullIcon = "skull2d",
     skullSize = 72,
     skullPosition = "portrait",
     skullPulse = true,
@@ -192,24 +192,24 @@ local DEFAULTS = {
     swingKill = true, -- a weapon icon shows when the DoTs plus one average weapon hit (melee swing, wand or ranged shot) kill
     killMargin = 90, -- % of the estimate the kill icon trusts: heals, regen and estimate error eat the rest
     targetOverMouseover = false, -- a same-named mob under the mouse doesn't blank a target cast (_namedEnemyKey)
-    -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
+    -- Nameplates (Nameplates.lua): unified Juicy look + aligned side row (y=0, clears mob name & level badge).
     nameplateMode = "markerIcon",
     focusMode = "markerIcon",       -- the focus frame's marker (Focus.lua), in the nameplates' look
-    nameplateIconSize = 24,
-    nameplateIconPosition = "above",
+    nameplateIconSize = 22,
+    nameplateIconPosition = "left",
     plateIconOffsetX = 0,
     plateIconOffsetY = 0,
-    plateIcon = "skull",
-    plateDotColors = "rainbow",
+    plateIcon = "skull2d",
+    plateDotColors = "each",
     plateFillDirection = "auto",
-    plateFillTexture = "flat",
-    plateFillColor = "white",
-    plateFillOpacity = 45,
-    plateOutlineStyle = "solid",
-    plateDashLength = 2,
+    plateFillTexture = "stripes",
+    plateFillColor = "red",
+    plateFillOpacity = 80,
+    plateOutlineStyle = "dashed",
+    plateDashLength = 4,
     plateOutlineThickness = 1,
-    plateOutlineColor = "white",
-    plateOutlineOpacity = 100,
+    plateOutlineColor = "gold",
+    plateOutlineOpacity = 90,
     -- Party DoTs (Party.lua, DoesItDie PR #37 + #51)
     partyDots = false,
     partyDotColor = "green",
@@ -218,6 +218,9 @@ local DEFAULTS = {
     execPlates = true,
     execSize = 32,
     execPlateSize = 22,
+    execPlatePosition = "right",
+    execPlateOffsetX = 0,
+    execPlateOffsetY = 0,
     execOffsetX = 0,
     execOffsetY = 8,
 }
@@ -3327,6 +3330,8 @@ end
 ---------------------------------------------------------------------------
 
 local function applyDefaults()
+    -- Brand-new profiles take DEFAULTS straight away without legacy migrations overwriting them.
+    local isFresh = db.defaultsRev == nil and db.showMarkers == nil and db.nameplateMode == nil and db.plateDotColors == nil
     -- Settings from earlier versions.
     if db.dotColors == "school" then db.dotColors = "each" end
     if db.plateDotColors == "school" then db.plateDotColors = "each" end
@@ -3336,6 +3341,10 @@ local function applyDefaults()
     db.preview, db.previewPercent, db.previewOffInCombat = nil, nil, nil
     for key, value in pairs(DEFAULTS) do
         if db[key] == nil then db[key] = value end
+    end
+    if isFresh then
+        db.defaultsRev = 2
+        return
     end
     -- Defaults changed in 0.9.128: "Count one weapon hit" is on and the nameplate DoT colors are Rainbow. A saved value
     -- that is still what the old defaults gave (or, for the colors, the other mode the presets wrote) follows them once.
@@ -3572,6 +3581,27 @@ function ns.HasMarker(unit)
     local total = 0
     for _, entry in ipairs(list) do total = total + (tonumber(entry.damage) or 0) end
     return total > 0
+end
+
+-- Remaining lethal DoT damage on `unit` when DoTInfo's kill icon is active for that surface
+-- (target frame when forPlate is falsy, nameplate when forPlate is true). CastPrediction uses
+-- this to hide its own competing kill icon when your DoTs already finish the mob (secret-safe).
+function ns.LethalKillDamage(unit, forPlate)
+    if not db or type(unit) ~= "string" or db.showMarkers == false then return 0 end
+    if forPlate then
+        if db.nameplateMode ~= "markerIcon" then return 0 end
+    else
+        if db.showSkull == false then return 0 end
+    end
+    if type(UnitIsDeadOrGhost) == "function" then
+        local ok, dead = pcall(UnitIsDeadOrGhost, unit)
+        if ok and not isSecret(dead) and dead == true then return 0 end
+    end
+    local entries = dotBreakdown(unitKey(unit))
+    if type(entries) ~= "table" or #entries == 0 then return 0 end
+    if ns.shielded and ns.shielded(unit, entries) then return 0 end
+    local dmg = ns.lethalDamage and ns.lethalDamage(entries, false) or 0
+    return (type(dmg) == "number" and dmg > 0) and dmg or 0
 end
 ns.print = print
 ns.trace = trace

@@ -361,6 +361,8 @@ function P.Nameplate(parent, opts)
   if not P.setAtlas(levelBadge, "UI-HUD-Nameplates-LevelIndicator") then
     levelBadge:Hide()
     levelText:Hide()
+  else
+    plate.uptLevelBadge = levelBadge
   end
   local nameText = plate:CreateFontString(nil, "OVERLAY",
     P.fontOr("SystemFont_NamePlate_Outlined", "GameFontHighlightSmallOutline"))

@@ -453,7 +453,7 @@ local PLATE_LEVEL_ABOVE, FALLBACK_LEVEL = 22, 200
 local plateIcons = {}
 local shownHosts = {}
 
-local function plateIconFor(host, healthBar, pooled)
+local function plateIconFor(host, plate, healthBar, pooled)
     local p = plateIcons[host]
     if not p then
         p = { window = CreateFrame("Frame", nil, host) }
@@ -470,7 +470,7 @@ local function plateIconFor(host, healthBar, pooled)
         plateIcons[host] = p
     end
     if p.healthBar ~= healthBar then
-        p.healthBar, p.size = healthBar, nil
+        p.healthBar, p.layoutKey = healthBar, nil
         local strata = readable("string", healthBar.GetFrameStrata, healthBar)
         if strata then
             p.window:SetFrameStrata(strata)
@@ -481,26 +481,45 @@ local function plateIconFor(host, healthBar, pooled)
         p.bar:SetFrameLevel(level + PLATE_LEVEL_ABOVE + 1)
     end
     local size = db.execPlateSize or 22
-    if p.size ~= size or p.texture ~= ability.icon then
-        p.size, p.texture = size, ability.icon
+    local pos = db.execPlatePosition or "right"
+    local ox, oy = db.execPlateOffsetX or 0, db.execPlateOffsetY or 0
+    local rightPad = pos == "right" and BIT.Plate and type(BIT.Plate.RightEdgeOffset) == "function"
+        and BIT.Plate.RightEdgeOffset(plate, healthBar) or 4
+    local layoutKey = size .. ":" .. pos .. ":" .. ox .. ":" .. oy .. ":" .. rightPad .. ":" .. tostring(ability.icon)
+    if p.layoutKey ~= layoutKey then
+        p.layoutKey, p.size, p.texture = layoutKey, size, ability.icon
         p.window:SetSize(size, size)
         p.bar:SetSize(BAR_LENGTH, size)
         p.icon:SetSize(size, size)
         p.icon:SetTexture(ability.icon)
         p.window:ClearAllPoints()
-        p.window:SetPoint("LEFT", healthBar, "RIGHT", 4, 0)
+        if pos == "left" then
+            p.window:SetPoint("RIGHT", healthBar, "LEFT", -4 + ox, oy)
+        elseif pos == "above" then
+            p.window:SetPoint("BOTTOM", healthBar, "TOP", ox, 4 + oy)
+        elseif pos == "below" then
+            p.window:SetPoint("TOP", healthBar, "BOTTOM", ox, -4 + oy)
+        else
+            p.window:SetPoint("LEFT", healthBar, "RIGHT", rightPad + ox, oy)
+        end
     end
     return p
 end
 
-local function drawPlateIcon(host, healthBar, pooled, health, hit)
-    local p = plateIconFor(host, healthBar, pooled)
+local function drawPlateIcon(host, plate, healthBar, pooled, health, hit)
+    local p = plateIconFor(host, plate, healthBar, pooled)
     local ok = pcall(function()
         p.bar:SetMinMaxValues(0, health)
         p.bar:SetValue(hit)
     end)
     p.window:SetShown(ok)
     shownHosts[host] = ok or nil
+    if ok then
+        local readableHealth = not isSecret(health) and type(health) == "number" and health or nil
+        p.active = readableHealth == nil or hit >= readableHealth
+    else
+        p.active = false
+    end
 end
 
 local function updatePlate(unit, plate, targetPlate, testing)
@@ -511,10 +530,10 @@ local function updatePlate(unit, plate, targetPlate, testing)
     local healthBar = ns.plateHealthBar(plate)
     if not healthBar then return end
     local host = BIT.Plate and BIT.Plate.WidgetHost and BIT.Plate.WidgetHost(plate) or plate
-    if testing then return drawPlateIcon(host, healthBar, host ~= plate, 1, 1) end
+    if testing then return drawPlateIcon(host, plate, healthBar, host ~= plate, 1, 1) end
     local hit = estimate()
     if not hit or (isTarget and not usable()) then return end
-    drawPlateIcon(host, healthBar, host ~= plate, UnitHealth(unit), hit)
+    drawPlateIcon(host, plate, healthBar, host ~= plate, UnitHealth(unit), hit)
 end
 
 local function updatePlates()
@@ -522,7 +541,7 @@ local function updatePlates()
     shownHosts = {}
     if db.execShow and db.execPlates and ability and ns.plateHealthBar then
         local preview = ns.platePreview and ns.platePreview()
-        if preview then drawPlateIcon(preview.plate, preview.healthBar, false, 1, 1) end
+        if preview then drawPlateIcon(preview.plate, preview.plate, preview.healthBar, false, 1, 1) end
         if C_NamePlate and C_NamePlate.GetNamePlateForUnit and db.nameplateMode ~= "off" then
             local testing = testUntil and GetTime() < testUntil
             local okTarget, targetPlate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
@@ -538,8 +557,22 @@ local function updatePlates()
         end
     end
     for host in pairs(previousHosts) do
-        if not shownHosts[host] and plateIcons[host] then plateIcons[host].window:Hide() end
+        if not shownHosts[host] and plateIcons[host] then
+            plateIcons[host].window:Hide()
+            plateIcons[host].active = false
+        end
     end
+end
+
+function ns.HasPlateExecute(plate)
+    if not (db and db.execShow and db.execPlates and ability and type(plate) == "table") then return false, 0 end
+    if (db.execPlatePosition or "right") ~= "right" then return false, 0 end
+    local host = BIT.Plate and BIT.Plate.WidgetHost and BIT.Plate.WidgetHost(plate) or plate
+    local p = plateIcons[host]
+    if p and shownHosts[host] and p.active then
+        return true, p.size or db.execPlateSize or 22
+    end
+    return false, 0
 end
 
 local events = CreateFrame("Frame")

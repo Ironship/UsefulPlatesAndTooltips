@@ -327,7 +327,7 @@ local function applyStyle(w, db)
     w.icon:SetTexture(ns.findById(lists.icons, db.plateIcon).path)
     if w.swing then ns.SwingIcon.Style(w.swing, size, db.swingKill) end
     w.iconWindow:ClearAllPoints()
-    local x, y = db.plateIconOffsetX, db.plateIconOffsetY
+    local x, y = db.plateIconOffsetX or 0, db.plateIconOffsetY or 0
     if db.nameplateIconPosition == "left" then
         w.iconWindow:SetPoint("RIGHT", w.healthBar, "LEFT", -4 + x, y)
     elseif db.nameplateIconPosition == "above" then
@@ -335,7 +335,9 @@ local function applyStyle(w, db)
     elseif db.nameplateIconPosition == "below" then
         w.iconWindow:SetPoint("TOP", w.healthBar, "BOTTOM", x, -4 + y)
     else
-        w.iconWindow:SetPoint("LEFT", w.healthBar, "RIGHT", 4 + x, y)
+        local rightPad = (BIT.Plate and type(BIT.Plate.RightEdgeOffset) == "function")
+            and BIT.Plate.RightEdgeOffset(w.plate, w.healthBar) or 4
+        w.iconWindow:SetPoint("LEFT", w.healthBar, "RIGHT", rightPad + x, y)
     end
 end
 

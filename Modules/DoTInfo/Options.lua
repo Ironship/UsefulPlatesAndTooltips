@@ -484,9 +484,9 @@ local function buildTabs()
         { id = "below", label = "Below the bar" },
     }, { enabledIf = killOn })
     icon:checkbox("skullPulse", "Pulse", { enabledIf = killOn, tooltip = "Gently pulses the icon while it's showing." })
-    icon:slider("skullOffsetX", "Icon horizontal offset", -60, 60, 1,
+    icon:slider("skullOffsetX", "Icon horizontal offset", -120, 120, 1,
         { enabledIf = killOn, tooltip = "Pixels right (+) or left (-) of the chosen position." })
-    icon:slider("skullOffsetY", "Icon vertical offset", -60, 60, 1,
+    icon:slider("skullOffsetY", "Icon vertical offset", -120, 120, 1,
         { enabledIf = killOn, tooltip = "Pixels up (+) or down (-) from the chosen position." })
     if not ns.Retail then
         local execOn = function(s) return s.execShow end
@@ -498,11 +498,16 @@ local function buildTabs()
         icon:checkbox("execPlates", "Also on enemy nameplates", { enabledIf = execOn,
             tooltip = "Shows the execute icon beside enemy nameplates too. Finishers (Ferocious Bite, Eviscerate) show only on the target's plate." })
         icon:slider("execSize", "Execute icon size", 16, 64, 1, { enabledIf = execOn })
-        icon:slider("execPlateSize", "Nameplate execute icon size", 12, 48, 1, { enabledIf = execPlatesOn })
         icon:slider("execOffsetX", "Execute horizontal offset", -120, 120, 1,
             { enabledIf = execOn, tooltip = "Pixels right (+) or left (-) of the portrait." })
         icon:slider("execOffsetY", "Execute vertical offset", -120, 120, 1,
             { enabledIf = execOn, tooltip = "Pixels up (+) or down (-) above the portrait." })
+        icon:slider("execPlateSize", "Nameplate execute icon size", 12, 48, 1, { enabledIf = execPlatesOn })
+        icon:choice("execPlatePosition", "Nameplate execute position", lists.nameplateIconPositions, { enabledIf = execPlatesOn })
+        icon:slider("execPlateOffsetX", "Nameplate execute horizontal offset", -180, 180, 1,
+            { enabledIf = execPlatesOn, tooltip = "Pixels right (+) or left (-) of the chosen nameplate position." })
+        icon:slider("execPlateOffsetY", "Nameplate execute vertical offset", -120, 120, 1,
+            { enabledIf = execPlatesOn, tooltip = "Pixels up (+) or down (-) from the chosen nameplate position." })
     end
     icon:gap()
     icon:note("Cast prediction has its own kill icon (Cast > Marker). If you use both, set both, or switch one off.")
@@ -583,9 +588,9 @@ local function buildTabs()
     plates:slider("nameplateIconSize", "Kill icon size", 12, 128, 1, { enabledIf = plateIcon })
     plates:choice("nameplateIconPosition", "Kill icon position", lists.nameplateIconPositions,
         { enabledIf = plateIcon })
-    plates:slider("plateIconOffsetX", "Icon horizontal offset", -40, 40, 1,
+    plates:slider("plateIconOffsetX", "Icon horizontal offset", -180, 180, 1,
         { enabledIf = plateIcon, tooltip = "Pixels right (+) or left (-) of the chosen position." })
-    plates:slider("plateIconOffsetY", "Icon vertical offset", -40, 40, 1,
+    plates:slider("plateIconOffsetY", "Icon vertical offset", -120, 120, 1,
         { enabledIf = plateIcon, tooltip = "Pixels up (+) or down (-) from the chosen position." })
     plates:header("FILL")
     plates:choice("plateDotColors", "DoT colors", lists.dotColors, { enabledIf = platesOn,

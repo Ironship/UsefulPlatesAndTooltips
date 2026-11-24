@@ -331,6 +331,11 @@ BIT.RegisterLocale("ruRU", {
   ["Execute vertical offset"] = "Смещение добивания по вертикали",
   ["Pixels right (+) or left (-) of the portrait."] = "Пиксели вправо (+) или влево (−) от портрета.",
   ["Pixels up (+) or down (-) above the portrait."] = "Пиксели вверх (+) или вниз (−) над портретом.",
+  ["Nameplate execute position"] = "Положение добивания на индикаторе",
+  ["Nameplate execute horizontal offset"] = "Горизонтальное смещение добивания (индикатор)",
+  ["Nameplate execute vertical offset"] = "Вертикальное смещение добивания (индикатор)",
+  ["Pixels right (+) or left (-) of the chosen nameplate position."] = "Пиксели вправо (+) или влево (−) от выбранного положения на индикаторе.",
+  ["Pixels up (+) or down (-) from the chosen nameplate position."] = "Пиксели вверх (+) или вниз (−) от выбранного положения на индикаторе.",
   ["Execute icon is not available on this client."] = "Значок добивания недоступен на этом клиенте.",
   ["/dotinfo exec - show what execute/finisher is watched and test its icon for 5 seconds"] =
     "/dotinfo exec — показать отслеживаемую способность добивания и проверить значок на 5 секунд",

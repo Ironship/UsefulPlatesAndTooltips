@@ -37,12 +37,19 @@ local DEFAULTS = {
   showOut = true,     -- the red X
   besideFrame = true, -- without a nameplate: beside the target frame
   frameFirst = false, -- beside the target frame even where there is a nameplate
-  size = 26,
-  -- above the nameplate's health bar: over the row of debuff icons there, and above ResourceDing's combo point dots
-  -- (their row tops out 60 above the bar's bottom edge by default), so the two do not overlap on a fresh install
-  offset = 56,
+  size = 22,
+  -- Inline right row on the nameplate (y=0, aligned with kill/execute icons; auto-clears level badge & docks beside Execute).
+  position = "right",
+  offsetX = 0,
+  offset = 0,
   spell = "",         -- a spell name or id to measure by; empty: the class's main attacks
   dimIcons = true,    -- action bar icons grey and dim while the target is out of their range
+}
+local POSITIONS = {
+  { id = "right", label = "Right of the bar" },
+  { id = "left",  label = "Left of the bar" },
+  { id = "above", label = "Above the bar" },
+  { id = "below", label = "Below the bar" },
 }
 
 -- The class's main attacks, by first-rank spell id (every one of them is in Forever's spellbook
@@ -245,6 +252,28 @@ local function sitOver(anchor)
   icon:SetFrameLevel(type(level) == "number" and math.min(level + LAYER.over, LAYER.maxLevel) or LAYER.fallbackLevel)
 end
 
+local function anchorOnPlate(mark, plate, bar)
+  local pos = settings.position or "right"
+  local ox = tonumber(settings.offsetX) or 0
+  local oy = tonumber(settings.offset) or 0
+  local host = bar or plate
+  if pos == "above" then
+    mark:SetPoint("BOTTOM", host, "TOP", ox, oy)
+  elseif pos == "below" then
+    mark:SetPoint("TOP", host, "BOTTOM", ox, -4 + oy)
+  elseif pos == "left" then
+    mark:SetPoint("RIGHT", host, "LEFT", -4 + ox, oy)
+  else
+    local pad = (BIT.Plate and type(BIT.Plate.RightEdgeOffset) == "function")
+      and BIT.Plate.RightEdgeOffset(plate, bar) or 4
+    if plate and BIT.Plate and type(BIT.Plate.ExecuteShownOnPlate) == "function" then
+      local execShown, execSize = BIT.Plate.ExecuteShownOnPlate(plate)
+      if execShown then pad = pad + execSize + 4 end
+    end
+    mark:SetPoint("LEFT", host, "RIGHT", pad + ox, oy)
+  end
+end
+
 local function place(plate)
   icon:ClearAllPoints()
   local beside = settings.frameFirst and shownTargetFrame()
@@ -257,7 +286,7 @@ local function place(plate)
     local bar = BIT.Plate.HealthBar(plate)
     if not bar then return false end
     icon:SetParent(plate)
-    icon:SetPoint("BOTTOM", bar or plate, "TOP", 0, settings.offset)
+    anchorOnPlate(icon, plate, bar)
     anchor = bar
   else
     local frame = BIT.Plate.UnitFrame("target")
@@ -555,13 +584,17 @@ end
 -- Start, and the settings tab
 ---------------------------------------------------------------------------------------------
 
--- Settings only: the 0.1.0 height migration and the defaults. No icon and no dimming.
+-- Settings only: preserve existing saved profiles' legacy "above" layout without overwriting them;
+-- new profiles (and Reset profile / Reset this tab) get the aligned inline-row DEFAULTS.
 local function prepareRangeSettings()
   local saved = BIT.DB().modules.Range
-  local oldDefault = type(saved) == "table" and saved.version == nil and saved.offset == 2
+  local legacyAbove = type(saved) == "table" and saved.position == nil and saved.offset ~= nil
   settings = BIT.Settings("Range", DEFAULTS)
-  if oldDefault then settings.offset = DEFAULTS.offset end
-  settings.version = 2
+  if legacyAbove then
+    settings.position = "above"
+    settings.offsetX = 0
+  end
+  settings.version = 3
   M.settings = settings
 end
 if BIT.RegisterWaker then BIT.RegisterWaker("Range", prepareRangeSettings) end
@@ -707,11 +740,17 @@ local function updatePreview()
   if beside or preview.noPlate then
     window.previewTarget.frame:ClearAllPoints()
     window.previewTarget.frame:SetPoint("CENTER", window.previewScene, "CENTER", -settings.size / 2, 0)
+  else
+    window.previewPlate.frame:ClearAllPoints()
+    local pos = settings.position or "right"
+    local plateY = pos == "above" and -140 or (pos == "below" and -70 or -106)
+    local plateX = pos == "right" and -14 or (pos == "left" and 14 or 0)
+    window.previewPlate.frame:SetPoint("TOP", window.previewScene, "TOP", plateX, plateY)
   end
   if beside then
     mark:SetPoint("LEFT", window.previewTarget.frame, "RIGHT", 2, 8)
   else
-    mark:SetPoint("BOTTOM", window.previewBar, "TOP", 0, settings.offset)
+    anchorOnPlate(mark, window.previewPlate.frame, window.previewBar)
   end
   mark:SetSize(settings.size, settings.size)
   mark.texture:SetTexture(rangeIcon(state))
@@ -781,6 +820,10 @@ local function slider(parent, key, labelText, min, max, step, opts)
   return sliderRow(parent, labelText, min, max, step, get(key), set(key), opts)
 end
 
+local function choice(parent, key, labelText, list, opts)
+  return BIT.Looks.Rows.Choice(parent, labelText, list, get(key), set(key), rowOpts(opts))
+end
+
 -- A one-line text setting: a spell name or id.
 local function editRow(parent, key, labelText, opts)
   opts = opts or {}
@@ -845,6 +888,7 @@ local function addTab(name)
   end
   function tab:checkbox(key, ...) return place(checkbox(self.content, key, ...), key) end
   function tab:slider(key, ...) return place(slider(self.content, key, ...), key) end
+  function tab:choice(key, ...) return place(choice(self.content, key, ...), key) end
   function tab:edit(key, ...) return place(editRow(self.content, key, ...), key) end
   function tab:gap() self.y = self.y + 8 end
   function tab:finish() self.column:Fit(math.max(self.y + 12, 1)) end
@@ -975,9 +1019,12 @@ local function buildTabs()
   local shown = function(s) return s.showIn or s.showOut end
   iconTab:slider("size", "Mark size", 12, 64, 2,
     { enabledIf = shown, tooltip = "The mark's size in pixels." })
-  iconTab:slider("offset", "Height above the bar", -20, 80, 1,
-    { enabledIf = shown, tooltip = "Pixels above the nameplate's health bar: over the row of "
-      .. "debuff icons there." })
+  iconTab:choice("position", "Nameplate position", POSITIONS,
+    { enabledIf = shown, tooltip = "Where the range mark sits around the target's nameplate health bar." })
+  iconTab:slider("offsetX", "Horizontal offset", -180, 180, 1,
+    { enabledIf = shown, tooltip = "Pixels right (+) or left (-) of the chosen nameplate position." })
+  iconTab:slider("offset", "Vertical offset", -120, 140, 1,
+    { enabledIf = shown, tooltip = "Pixels up (+) or down (-) from the chosen nameplate position." })
 
   local barTab = addTab("Action bar")
   barTab:checkbox("dimIcons", "Grey out action bar icons",

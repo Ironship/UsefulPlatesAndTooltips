@@ -188,4 +188,6 @@ BIT.RegisterLocale("deDE", {
     "Während Ihr einen Zauber mit Zauberzeit wirkt, markiert ein Abschnitt auf Eurer Manaleiste seine geschätzten Manakosten.",
   ["While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. This illustrates mana already spent, not another deduction."] =
     "Während Ihr einen Zauber mit Zauberzeit wirkt, markiert ein Abschnitt rechts vom verbleibenden Mana seine geschätzten Kosten. Er zeigt bereits verbrauchtes Mana, keinen weiteren Abzug.",
+  ["When DoTs already finish the target and DoTs' kill icon is active, CastPrediction's kill icon automatically hides so the two never overlap."] =
+    "Wenn Eure DoTs das Ziel bereits töten und das Kill-Symbol von DoTs aktiv ist, blendet sich das Kill-Symbol von CastPrediction automatisch aus, damit beide sich nie überlagern.",
 })

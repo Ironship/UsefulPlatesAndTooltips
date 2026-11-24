@@ -331,6 +331,11 @@ BIT.RegisterLocale("deDE", {
   ["Execute vertical offset"] = "Hinrichten vertikaler Versatz",
   ["Pixels right (+) or left (-) of the portrait."] = "Pixel rechts (+) oder links (-) vom Porträt.",
   ["Pixels up (+) or down (-) above the portrait."] = "Pixel nach oben (+) oder unten (-) über dem Porträt.",
+  ["Nameplate execute position"] = "Hinrichten-Position (Namensplakette)",
+  ["Nameplate execute horizontal offset"] = "Hinrichten horizontaler Versatz (Plakette)",
+  ["Nameplate execute vertical offset"] = "Hinrichten vertikaler Versatz (Plakette)",
+  ["Pixels right (+) or left (-) of the chosen nameplate position."] = "Pixel nach rechts (+) oder links (-) von der gewählten Position an der Namensplakette.",
+  ["Pixels up (+) or down (-) from the chosen nameplate position."] = "Pixel nach oben (+) oder unten (-) von der gewählten Position an der Namensplakette.",
   ["Execute icon is not available on this client."] = "Das Hinrichten-Symbol ist auf diesem Client nicht verfügbar.",
   ["/dotinfo exec - show what execute/finisher is watched and test its icon for 5 seconds"] =
     "/dotinfo exec - zeigt den überwachten Hinrichten-/Abschlusszauber und testet sein Symbol 5 Sekunden lang",

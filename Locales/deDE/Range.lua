@@ -59,6 +59,12 @@ BIT.RegisterLocale("deDE", {
   ["%s preset applied."] = "Vorlage %s angewendet.",
 
   -- the appearance sample
+  ["Nameplate position"] = "Position an Namensplakette",
+  ["Where the range mark sits around the target's nameplate health bar."] = "Wo das Reichweitensymbol um die Gesundheitsleiste der Ziel-Namensplakette sitzt.",
+  ["Horizontal offset"] = "Horizontaler Versatz",
+  ["Pixels right (+) or left (-) of the chosen nameplate position."] = "Pixel nach rechts (+) oder links (-) von der gewählten Position an der Namensplakette.",
+  ["Vertical offset"] = "Vertikaler Versatz",
+  ["Pixels up (+) or down (-) from the chosen nameplate position."] = "Pixel nach oben (+) oder unten (-) von der gewählten Position an der Namensplakette.",
   ["Range sample (not your target)"] = "Reichweiten-Beispiel (nicht Euer Ziel)",
   ["In range - above nameplate"] = "In Reichweite - über der Namensplakette",
   ["Out of range - beside target frame"] = "Außer Reichweite - neben dem Zielfenster",

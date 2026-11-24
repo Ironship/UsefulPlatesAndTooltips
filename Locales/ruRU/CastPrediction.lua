@@ -188,4 +188,6 @@ BIT.RegisterLocale("ruRU", {
     "Пока вы произносите заклинание со временем сотворения, на полосе маны отмечается его примерная стоимость.",
   ["While you cast a spell with a cast time, marks its estimated cost to the right of your remaining mana. This illustrates mana already spent, not another deduction."] =
     "Пока вы произносите заклинание со временем сотворения, его примерная стоимость отмечается справа от оставшейся маны. Это уже потраченная мана, а не дополнительное списание.",
+  ["When DoTs already finish the target and DoTs' kill icon is active, CastPrediction's kill icon automatically hides so the two never overlap."] =
+    "Если ваши периодические эффекты уже добивают цель и значок убийства DoTs активен, значок убийства CastPrediction автоматически скрывается, чтобы они не перекрывали друг друга.",
 })

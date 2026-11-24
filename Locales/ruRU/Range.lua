@@ -59,6 +59,12 @@ BIT.RegisterLocale("ruRU", {
   ["%s preset applied."] = "Применён шаблон «%s».",
 
   -- пример оформления
+  ["Nameplate position"] = "Положение на индикаторе",
+  ["Where the range mark sits around the target's nameplate health bar."] = "Где располагается значок дальности вокруг полосы здоровья индикатора цели.",
+  ["Horizontal offset"] = "Смещение по горизонтали",
+  ["Pixels right (+) or left (-) of the chosen nameplate position."] = "Пиксели вправо (+) или влево (−) от выбранного положения на индикаторе.",
+  ["Vertical offset"] = "Смещение по вертикали",
+  ["Pixels up (+) or down (-) from the chosen nameplate position."] = "Пиксели вверх (+) или вниз (−) от выбранного положения на индикаторе.",
   ["Range sample (not your target)"] = "Пример дальности (не ваша цель)",
   ["In range - above nameplate"] = "В пределах дальности — над табличкой",
   ["Out of range - beside target frame"] = "Вне дальности — рядом с рамкой цели",
