@@ -383,6 +383,20 @@ ns.UpdateBar = updateBar
 ---------------------------------------------------------------------------------------------
 
 local function playerBar()
+    local chosen = BIT.Frames and BIT.Frames.Get("player")
+    if not chosen or chosen == "" then
+        local daylight = _G.DaylightUI and _G.DaylightUI.API
+        if daylight and type(daylight.Frames) == "function" and type(daylight.Parts) == "function" then
+            for frame, unit in daylight.Frames("unit") do
+                if not isSecret(unit) and unit == "player" and ask(frame.IsVisible, frame) == true then
+                    local parts = daylight.Parts(frame)
+                    if type(parts) == "table" and type(parts.health) == "table" then
+                        return parts.health
+                    end
+                end
+            end
+        end
+    end
     if BIT.Plate and BIT.Plate.UnitFrame then return select(2, BIT.Plate.UnitFrame("player")) end
     return type(_G.PlayerFrameHealthBar) == "table" and _G.PlayerFrameHealthBar or nil
 end
@@ -486,6 +500,21 @@ local function groupBars()
     end
     addMembers(type(internals) == "table" and internals.unitToButton)
     addMembers(type(eui) == "table" and eui._partyUnitToButton)
+    local daylight = _G.DaylightUI and _G.DaylightUI.API
+    if daylight and type(daylight.Frames) == "function" and type(daylight.Parts) == "function" then
+        for _, kind in ipairs({ "party", "raid" }) do
+            for frame, unit in daylight.Frames(kind) do
+                if not isSecret(unit) and type(unit) == "string"
+                    and (unit == "player" or unit:match("^party%d+$") or unit:match("^raid%d+$"))
+                    and ask(frame.IsVisible, frame) == true then
+                    local parts = daylight.Parts(frame)
+                    if type(parts) == "table" and type(parts.health) == "table" then
+                        bars[#bars + 1] = { unit = unit, bar = parts.health, kind = kind }
+                    end
+                end
+            end
+        end
+    end
     local seen, out = {}, {}
     for _, b in ipairs(bars) do
         if not seen[b.bar] then
@@ -575,7 +604,7 @@ local function updateAll()
     update("targettarget", targetTargetBar(), settings.targettarget)
     if settings.party or settings.raid then
         for _, entry in ipairs(groupBars()) do
-            local isRaid = entry.unit:match("^raid%d+$") ~= nil
+            local isRaid = entry.kind == "raid" or (entry.kind == nil and entry.unit:match("^raid%d+$") ~= nil)
             local wanted
             if isRaid then wanted = settings.raid else wanted = settings.party end
             update(entry.unit, entry.bar, wanted)
