@@ -97,6 +97,14 @@ These are aliases for `API.RegisterCallback(owner, "DOTS_CHANGED", func)` and
 `API.UnregisterCallback(owner, "DOTS_CHANGED")`; registering through both with the same owner replaces, rather
 than duplicates, the callback.
 
+### DaylightUI compatibility
+
+When DaylightUI is installed and DoTInfo is enabled, DoesItDiePlus offers this API under the legacy `DoesItDie`
+global only if no standalone Does It Die API already owns that name. DaylightUI can then render its native DoT tint
+and kill skull from DoesItDiePlus estimates. DoesItDiePlus suppresses its duplicate tint or skull on matching
+DaylightUI frames when the corresponding native indicator is enabled. The native indicators remain controlled by
+DaylightUI's own settings. A standalone Does It Die addon keeps precedence.
+
 ## CastPrediction API (version 1)
 
 `API.Get("CastPrediction")` returns the API while CastPrediction is enabled, on Forever and Retail.

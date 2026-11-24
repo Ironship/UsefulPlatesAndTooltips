@@ -1,6 +1,7 @@
 -- UsefulPlatesAndTooltips module DoTInfo: a public API for other addons (unit frames, nameplates, UI suites), so they
 -- can show the DoT estimate on their own frames. Adapted from Does It Die v0.9.0's API.lua by Joe Greive (MIT; issue
--- #24 there). The global is UsefulPlatesAndTooltips_DoTAPI, not DoesItDie: both addons can be installed together.
+-- #24 there). The public global is UsefulPlatesAndTooltips_DoTAPI. DaylightUI compatibility may offer the legacy
+-- DoesItDie name only when no standalone Does It Die API already owns it.
 -- Usage and the StatusBar trick a consumer needs are in API.md at the repository root.
 --
 -- What it hands out is the tracking's own numbers: the remaining damage of the player's DoTs on the mob behind a
@@ -95,8 +96,9 @@ function ns.afterRefresh()
     end
     for _, unit in ipairs(WATCHED) do
         local state
-        local exists = UnitExists(unit)
-        local key = exists == true and trackedKey(unit)
+        local ok, exists = pcall(UnitExists, unit)
+        local key = ok and not (type(issecretvalue) == "function" and issecretvalue(exists))
+            and exists == true and trackedKey(unit)
         if key then
             local total, count = api.GetRemainingDamage(unit)
             state = key .. "|" .. (identityVersions[key] or 0) .. "|" .. total .. "|" .. count
@@ -111,3 +113,19 @@ end
 api.API_VERSION = API_VERSION
 UsefulPlatesAndTooltips_DoTAPI = api
 bus.Register("DoT", api, { module = "DoTInfo" })
+
+local function offerDaylightCompatibility()
+    if type(_G.DaylightUI) == "table" and _G.DoesItDie == nil and BIT.IsRunning("DoTInfo") then
+        _G.DoesItDie = api
+    end
+end
+ns.offerDaylightCompatibility = offerDaylightCompatibility
+
+local compatibility = CreateFrame("Frame")
+compatibility:RegisterEvent("ADDON_LOADED")
+compatibility:SetScript("OnEvent", function(_, _, name)
+    if type(issecretvalue) == "function" and issecretvalue(name) then return end
+    if name == ADDON_NAME or name == "DaylightUI" then
+        offerDaylightCompatibility()
+    end
+end)

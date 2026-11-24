@@ -69,6 +69,30 @@ local function findUnitFrame(api, wantedUnit)
   return foundFrame, foundParts
 end
 
+function Plate.DaylightDotDisplay(kind, unit, bar)
+  local api = daylightAPI()
+  if not api or type(api.GetSetting) ~= "function" or type(bar) ~= "table" then return false, false end
+
+  if kind == "unit" and unit == "target" then
+    local _, parts = findUnitFrame(api, unit)
+    if not parts or parts.health ~= bar or read(bar.IsVisible, bar) == false then return false, false end
+    return read(api.GetSetting, "UnitFrames", "target.dotTint") == true,
+        read(api.GetSetting, "UnitFrames", "target.dotSkull") == true
+  end
+
+  if kind == "nameplate" and type(unit) == "string" and type(api.GetNameplate) == "function" then
+    local frame = read(api.GetNameplate, unit)
+    if type(frame) ~= "table" or read(frame.IsForbidden, frame) == true
+        or read(frame.IsVisible, frame) ~= true then return false, false end
+    local parts = partsOf(api, frame)
+    if not parts or parts.health ~= bar or read(bar.IsVisible, bar) == false then return false, false end
+    return read(api.GetSetting, "Nameplates", "dotTint") == true,
+        read(api.GetSetting, "Nameplates", "dotSkull") == true
+  end
+
+  return false, false
+end
+
 local UNIT_FOR_PART = {
   Player = "player",
   Target = "target",
@@ -117,6 +141,9 @@ Plate.RegisterPlateBarSource("DaylightUI", function(plate)
   local api = daylightAPI()
   if not api or type(api.GetNameplate) ~= "function" then return end
   local token = read(function() return plate.namePlateUnitToken end)
+  if type(token) ~= "string" then
+    token = read(function() return plate.unitToken end)
+  end
   if type(token) ~= "string" then
     token = read(function() return plate.UnitFrame and plate.UnitFrame.unit end)
   end

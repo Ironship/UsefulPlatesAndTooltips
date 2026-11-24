@@ -2615,10 +2615,16 @@ function ns._applyMarkerDirection(reverse)
 end
 
 local function applyAppearance()
+    local daylightTint = false
+    if not previewHost and healthBar and BIT.Plate and BIT.Plate.DaylightDotDisplay then
+        daylightTint = select(1, BIT.Plate.DaylightDotDisplay("unit", "target", healthBar))
+    end
+    ns._daylightTint = daylightTint
     local parts = {}
     for i, key in ipairs(APPEARANCE_KEYS) do parts[i] = tostring(db[key]) end
     local reverse = ns._markerReversed()
     parts[#parts + 1] = tostring(reverse)
+    parts[#parts + 1] = tostring(daylightTint)
     local signature = table.concat(parts, "|")
     if signature == appliedSignature then return end
     appliedSignature = signature
@@ -2747,7 +2753,7 @@ local function applyAppearance()
         shine:Hide()
     end
 
-    local markersOn = db.showMarkers and db.targetMarkers ~= false
+    local markersOn = db.showMarkers and db.targetMarkers ~= false and not daylightTint
     fillLayer:SetShown(markersOn)
     clipLayer:SetShown(markersOn)
     outlineLayer:SetShown(markersOn)
@@ -2864,7 +2870,7 @@ local function breakdownText(entries)
 end
 
 local function playFlash()
-    if db.flashOnApply and db.showMarkers and db.targetMarkers ~= false and remainingBar:IsShown() then
+    if db.flashOnApply and db.showMarkers and db.targetMarkers ~= false and not ns._daylightTint and remainingBar:IsShown() then
         flashAnim:Stop()
         flashAnim:Play()
         if db.showSpark then
@@ -3095,8 +3101,8 @@ local function hideAll()
 end
 
 -- The label lives on the marker bar, so the bar stays up if either is wanted.
-local function showMarkers()
-    if (db.showMarkers and db.targetMarkers ~= false) or db.showLabel then
+local function showMarkers(daylightTint)
+    if (db.showMarkers and db.targetMarkers ~= false and not daylightTint) or db.showLabel then
         remainingBar:Show()
     else
         hideMarkers()
@@ -3285,10 +3291,14 @@ local function refresh()
     end
 
     updateLayering(now)
-    skullWindow:SetShown(db.showSkull and not ns.shielded("target", breakdown))
+    local daylightTint, daylightSkull = false, false
+    if not previewHost and healthBar and BIT.Plate and BIT.Plate.DaylightDotDisplay then
+        daylightTint, daylightSkull = BIT.Plate.DaylightDotDisplay("unit", "target", healthBar)
+    end
+    skullWindow:SetShown(db.showSkull and not daylightSkull and not ns.shielded("target", breakdown))
     if healthBar then
         label:SetText(perDot and breakdownText(breakdown) or string.format(BIT.L("DoTs: %d"), damage))
-        showMarkers()
+        showMarkers(daylightTint)
     else
         hideMarkers()
     end
@@ -3442,7 +3452,7 @@ ns.textureDir = TEXTURE_DIR
 -- Plain display amounts only; native poison uses them as its starting point on the HP scale.
 function ns.nativePoisonBase(unit, parent, bar)
     if unit == "target" then
-        return not previewHost and healthBar == bar and remainingBar:IsShown() and markerShownValue or 0
+        return not previewHost and healthBar == bar and remainingBar:IsShown() and not ns._daylightTint and markerShownValue or 0
     end
     return ns.nameplateDamageBase and ns.nameplateDamageBase(parent, bar) or 0
 end
@@ -3751,6 +3761,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
             return
         end
         ns.ensureDB()
+        if ns.offerDaylightCompatibility then ns.offerDaylightCompatibility() end
         trace("===== session start =====")
         if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).StartRogueAuras then (ns.Retail or ns.RogueNative).StartRogueAuras() end
         if ns.RogueEffects then ns.RogueEffects.Start(unitKey) end

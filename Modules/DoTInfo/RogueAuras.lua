@@ -938,7 +938,11 @@ local function update(refresh)
         display(targetEntry, nil, false)
         targetEntry = nil
     end
-    if markers and ns.db.targetMarkers ~= false and targetHost and targetBar and hostile("target") then
+    local targetDaylightTint = false
+    if targetBar and BIT.Plate and BIT.Plate.DaylightDotDisplay then
+        targetDaylightTint = select(1, BIT.Plate.DaylightDotDisplay("unit", "target", targetBar)) == true
+    end
+    if markers and ns.db.targetMarkers ~= false and not targetDaylightTint and targetHost and targetBar and hostile("target") then
         targetEntry = targetEntry or create(targetHost, targetBar, false)
         display(targetEntry, "target", true, refresh)
     else
@@ -951,7 +955,11 @@ local function update(refresh)
         if bar then
             local entry = byPlate[plate]
             if entry and entry.bar ~= bar then display(entry, nil, false); entry = nil end
-            local enabled = markers and ns.db.nameplateMode ~= "off" and hostile(unit)
+            local plateDaylightTint = false
+            if BIT.Plate and BIT.Plate.DaylightDotDisplay then
+                plateDaylightTint = select(1, BIT.Plate.DaylightDotDisplay("nameplate", unit, bar)) == true
+            end
+            local enabled = markers and ns.db.nameplateMode ~= "off" and not plateDaylightTint and hostile(unit)
             if enabled and not entry then entry = create(plate, bar, true); byPlate[plate] = entry end
             if entry then
                 current[entry] = true

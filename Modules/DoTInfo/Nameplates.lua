@@ -351,7 +351,7 @@ end
 
 -- Draws one plate's widgets. maxHealth and health may be secret (real plates) or plain (the options preview):
 -- they only ever go into StatusBar min/max, never into Lua math. Returns false if drawing failed.
-local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, unit)
+local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, unit, daylightTint, daylightSkull)
     keepAbove(w)
     applyStyle(w, db)
     local perDot = db.plateDotColors ~= "single"
@@ -371,7 +371,7 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
             local entry = entries[i]
             local covered = false
             if i <= count then
-                if items and entry.name then
+                if items and not daylightTint and not iconOnly and entry.name then
                     local item = items[entry.name]
                     if not item then
                         item = {}
@@ -412,14 +412,16 @@ local function drawPlate(w, entries, total, maxHealth, health, db, iconOnly, uni
         hideWidgets(w)
         return false
     end
-    w.marker:SetShown(db.showMarkers and not iconOnly)
-    w.displayDamage = db.showMarkers and not iconOnly and total or 0
+    local showMarker = db.showMarkers and not iconOnly and not daylightTint
+    w.marker:SetShown(showMarker)
+    w.displayDamage = showMarker and total or 0
     if (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(w.plate) end
     -- UI-3: the kill icon is part of the marker set: with showMarkers off it
     -- must hide too, not linger alone on the plate.
     -- A window going hidden -> shown renders one frame with the icon bar's stale/unlaid-out fill (full width),
     -- flashing the icon on every new DoT. Show it transparent first; the next draw (one refresh later) reveals it.
-    if not (db.showMarkers and db.nameplateMode == "markerIcon" and (not unit or not ns.shielded(unit, entries))) then
+    if not (db.showMarkers and db.nameplateMode == "markerIcon" and not daylightSkull
+        and (not unit or not ns.shielded(unit, entries))) then
         w.iconWindow:Hide()
         w.iconArmed = nil
     elseif w.iconArmed then
@@ -496,8 +498,12 @@ local function updatePlate(unit, plate, db)
         return
     end
     -- Without a visible bar, seat only the native health-clipped kill icon beside the plate.
+    local daylightTint, daylightSkull = false, false
+    if healthBar and BIT.Plate.DaylightDotDisplay then
+        daylightTint, daylightSkull = BIT.Plate.DaylightDotDisplay("nameplate", unit, healthBar)
+    end
     drawPlate(widgetsFor(plate, healthBar or plate), entries, total,
-        UnitHealthMax(unit), UnitHealth(unit), db, iconOnly, unit)
+        UnitHealthMax(unit), UnitHealth(unit), db, iconOnly, unit, daylightTint, daylightSkull)
 end
 
 -- For Focus.lua: the same widgets on another health bar (the focus frame's), hosted by a frame of its own.
