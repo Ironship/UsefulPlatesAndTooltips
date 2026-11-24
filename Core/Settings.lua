@@ -1150,6 +1150,23 @@ local function createWindow()
   end
   close:SetScript("OnClick", function() window:Hide() end)
 
+  -- ButtonFrameTemplate's NineSlice / TitleContainer can sit hundreds of levels above window on Forever/Retail;
+  -- keep all title-bar controls above them so they are never hidden behind the title border.
+  local titleBarControls = {}
+  local function liftTitleBarControls()
+    local lvl = type(window.GetFrameLevel) == "function" and (window:GetFrameLevel() or 1) or 1
+    if type(window.NineSlice) == "table" and type(window.NineSlice.GetFrameLevel) == "function" then
+      lvl = math.max(lvl, window.NineSlice:GetFrameLevel() or 0)
+    end
+    if type(window.TitleContainer) == "table" and type(window.TitleContainer.GetFrameLevel) == "function" then
+      lvl = math.max(lvl, window.TitleContainer:GetFrameLevel() or 0)
+    end
+    for _, ctrl in ipairs(titleBarControls) do
+      if type(ctrl.SetFrameLevel) == "function" then ctrl:SetFrameLevel(lvl + 10) end
+    end
+  end
+  window:HookScript("OnShow", liftTitleBarControls)
+
   -- Active profile badge on the left of the title bar; clicking opens the Profiles tab.
   if BIT.Profiles and BIT.tabs.Profiles then
     local function truncateUtf8(str, maxChars)
@@ -1197,6 +1214,7 @@ local function createWindow()
     profileBtn:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     window.profileButton = profileBtn
     window.refreshProfileButton = function() profileBtn:SetText(profileButtonText()) end
+    titleBarControls[#titleBarControls + 1] = profileBtn
   end
 
   -- Global art style selector (Stylized 2D / Pixel Art / Classic): updates HUD and open previews live.
@@ -1227,6 +1245,7 @@ local function createWindow()
     artBtn:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     window.artButton = artBtn
     window.refreshArtButton = function() artBtn:SetLabel(artButtonText()) end
+    titleBarControls[#titleBarControls + 1] = artBtn
     BIT.Art.Subscribe(function()
       if window and window.refreshArtButton then window.refreshArtButton() end
     end)
@@ -1263,6 +1282,9 @@ local function createWindow()
   reload:SetPoint("TOPRIGHT", language, "TOPLEFT", -4, 0)
   reload:Hide()
   window.languageReload = reload
+  titleBarControls[#titleBarControls + 1] = language
+  titleBarControls[#titleBarControls + 1] = reload
+  liftTitleBarControls()
 
   for _, name in ipairs(hubOrder()) do
     local tab = BIT.tabs[name] or {}

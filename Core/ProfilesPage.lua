@@ -177,6 +177,27 @@ local function build(content)
   quickBtn:SetPoint("LEFT", quickRow, "LEFT", activeRow.layout.label - 6, 0)
   cy = UI.PlaceRow(quickRow, cy, 32)
 
+  -- Global art style selector (Stylized 2D / Pixel Art / Classic): reachable via Gamepad and synced live with header & /upt art.
+  local artBtn
+  if BIT.Art and Looks and Looks.PickList then
+    local artRow = Rows.Row(card, "Art style", {
+      tooltip = "Switches Soul Shards, combo orbs, range marks, upgrade arrows and markers between Stylized 2D, Pixel Art and Classic. Takes effect at once.",
+    })
+    artBtn = UI.DropdownButton(artRow, activeRow.layout.control + 20, function(self)
+      Looks.PickList(self, BIT.Art.List(), BIT.Art.Get(), function(id)
+        BIT.Art.Set(id)
+        self:SetLabel(BIT.Art.Label())
+      end)
+    end)
+    artBtn:SetPoint("LEFT", artRow, "LEFT", artRow.layout.label, 0)
+    artBtn:SetLabel(BIT.Art.Label())
+    artRow:SetPoint("TOPLEFT", 0, -cy)
+    cy = cy + ROW + 6
+    BIT.Art.Subscribe(function()
+      if artBtn then artBtn:SetLabel(BIT.Art.Label()) end
+    end)
+  end
+
   -------------------------------------------------------------------------------------------
   -- Section 2: Modules in this profile (quick toggle checklist)
   -------------------------------------------------------------------------------------------
@@ -395,6 +416,7 @@ local function build(content)
     statusReload:SetShown(pendingProfile or pendingMods)
 
     activeBtn:SetLabel(labelForProfile(selected))
+    if artBtn and BIT.Art then artBtn:SetLabel(BIT.Art.Label()) end
     if charKey then
       quickBtn:Show()
       if selected == charKey then
