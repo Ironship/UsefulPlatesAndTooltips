@@ -652,4 +652,12 @@ BIT.RegisterLocale("deDE", {
   ["Pixel cross"] = "Pixel-Kreuz",
   ["Show what execute/finisher is watched and test its icon for 5 seconds."] =
     "Zeigt den überwachten Hinrichten-/Abschlusszauber und testet sein Symbol 5 Sekunden lang.",
+  ["Manage profiles..."] = "Profile verwalten...",
+  ["Click to switch profile or manage character profiles."] =
+    "Klicken, um das Profil zu wechseln oder Charakterprofile zu verwalten.",
+  ["Changes saved. Type /reload to apply."] = "Änderungen gespeichert. Tippe /reload zum Anwenden.",
+  ["Profile \"%s\" reset to defaults. Type /reload to apply."] =
+    "Profil \"%s\" auf Standard zurückgesetzt. Tippe /reload zum Anwenden.",
+  ["%s settings reset to defaults. Type /reload to apply."] =
+    "Einstellungen von %s auf Standard zurückgesetzt. Tippe /reload zum Anwenden.",
 })

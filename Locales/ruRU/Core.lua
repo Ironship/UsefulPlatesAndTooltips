@@ -653,4 +653,12 @@ BIT.RegisterLocale("ruRU", {
   ["Pixel cross"] = "Пиксельный крест",
   ["Show what execute/finisher is watched and test its icon for 5 seconds."] =
     "Показать отслеживаемую способность добивания и проверить её значок в течение 5 секунд.",
+  ["Manage profiles..."] = "Управление профилями...",
+  ["Click to switch profile or manage character profiles."] =
+    "Нажмите, чтобы переключить профиль или управлять профилями персонажей.",
+  ["Changes saved. Type /reload to apply."] = "Изменения сохранены. Введите /reload для применения.",
+  ["Profile \"%s\" reset to defaults. Type /reload to apply."] =
+    "Профиль \"%s\" сброшен к стандартным настройкам. Введите /reload для применения.",
+  ["%s settings reset to defaults. Type /reload to apply."] =
+    "Настройки %s сброшены к стандартным. Введите /reload для применения.",
 })

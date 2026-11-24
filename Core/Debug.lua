@@ -170,7 +170,7 @@ local function build(content)
     .. "What the dump commands save is written to disk at logout or with Reload UI."))
   y = y - math.max(30, (note:GetStringHeight() or 24) + 8)
   local reload = UI.Button(content, BIT.L("Reload UI"), BUTTON_WIDTH, function()
-    if type(ReloadUI) == "function" then ReloadUI() end
+    if type(UI.RequestReload) == "function" then UI.RequestReload() end
   end)
   reload:SetPoint("TOPLEFT", 10, y)
   y = y - ROW - 4

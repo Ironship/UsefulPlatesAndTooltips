@@ -338,6 +338,17 @@ function UI.IsGamepadMode()
     or false
 end
 
+-- Safe reload notification: C_UI.Reload() (ReloadUI) is a protected function on Forever and Retail 12.x
+-- and fires ADDON_ACTION_BLOCKED whenever invoked from insecure addon code. Never call it directly;
+-- instead refresh the settings chrome and tell the player to run /reload in chat.
+function UI.RequestReload(fallbackMessage)
+  if BIT.RefreshSettingsChrome then BIT.RefreshSettingsChrome() end
+  if BIT.Say then
+    BIT.Say(fallbackMessage or BIT.L("Changes saved. Type /reload to apply."))
+  end
+  return false
+end
+
 -- Escape closes an addon frame without inserting into Blizzard's UISpecialFrames (which taints
 -- CloseSpecialWindows() for Blizzard panels closed in the same pass). Out of combat only:
 -- SetPropagateKeyboardInput is protected in combat, so keyboard capture turns off while fighting.
@@ -937,7 +948,7 @@ local function resetModule(name)
   elseif name == "HunterRangeFinder" then
     store.plateScheme = 2
   end
-  ReloadUI()
+  UI.RequestReload(string.format(BIT.L("%s settings reset to defaults. Type /reload to apply."), pageName(name, tab)))
 end
 
 local function confirmResetModule(name)
@@ -986,7 +997,7 @@ local function buildPage(name)
   page.stateLine:SetHeight(16)
   page.stateLine:SetJustifyH("LEFT")
   page.reload = UI.Button(page, BIT.L("Reload UI"), 100, function()
-    if type(ReloadUI) == "function" then ReloadUI() end
+    UI.RequestReload()
   end)
   page.reload:SetWidth(math.max(100, math.ceil(page.reload:GetFontString():GetStringWidth() or 0) + 24))
   page.reload:SetPoint("TOPRIGHT", -10, -7)
@@ -1167,7 +1178,11 @@ local function createWindow()
   end
   window:HookScript("OnShow", liftTitleBarControls)
 
-  -- Active profile badge on the left of the title bar; clicking opens the Profiles tab.
+  -- Unified title-bar controls: identical compact DropdownButton chrome (19px tall, centered at y = -3 inside
+  -- the 23px title bar channel) so Profile, Style, Language, DoesItDiePlus and Close share one baseline.
+  local TITLE_BTN_H = 19
+  local TITLE_BTN_Y = -3
+
   if BIT.Profiles and BIT.tabs.Profiles then
     local function truncateUtf8(str, maxChars)
       local chars, i, n = 0, 1, #str
@@ -1188,16 +1203,61 @@ local function createWindow()
     local function profileButtonText()
       local active = BIT.Profiles.Active()
       local shown = active == BIT.Profiles.DEFAULT and BIT.L("Default") or active
-      shown = truncateUtf8(shown, 15)
+      shown = truncateUtf8(shown, 13)
       local suffix = BIT.Profiles.PendingReload() and " *" or ""
       return string.format(BIT.L("Profile: %s"), shown) .. suffix
     end
-    local profileBtn = UI.Button(window, "", 165, function()
-      selectTab("Profiles")
+    local profileBtn = UI.DropdownButton(window, 158, function(self)
+      if not (BIT.Looks and BIT.Looks.PickList) then
+        selectTab("Profiles")
+        return
+      end
+      local Profiles = BIT.Profiles
+      local charKey = Profiles.CharacterKey()
+      local list, seenChar = {}, false
+      for _, name in ipairs(Profiles.List()) do
+        if name == charKey then seenChar = true end
+        list[#list + 1] = { id = name, label = profileDisplay(name), literal = true }
+      end
+      if charKey and not seenChar then
+        table.insert(list, 2, {
+          id = charKey,
+          label = string.format(BIT.L("%s (new character profile)"), charKey),
+          literal = true,
+        })
+      end
+      list[#list + 1] = { id = "__manage__", label = BIT.L("Manage profiles..."), literal = true }
+      BIT.Looks.PickList(self, list, Profiles.Selected(), function(chosen)
+        if chosen == "__manage__" then
+          selectTab("Profiles")
+          return
+        end
+        if chosen == Profiles.Selected() then return end
+        if chosen == Profiles.Active() then
+          local ok = Profiles.Use(chosen)
+          if ok and not Profiles.PendingReload() then
+            if BIT.RefreshSettingsChrome then BIT.RefreshSettingsChrome() end
+            return
+          end
+        end
+        local isNew = not Profiles.Exists(chosen)
+        local prompt = isNew
+          and string.format(BIT.L("Create a separate profile for %s (copying current settings) and reload the interface?"), chosen)
+          or string.format(BIT.L("Switch this character to profile \"%s\" and reload the interface?"), profileDisplay(chosen))
+        UI.Confirm(BIT.L("Profiles"), prompt, BIT.L("Switch & reload"), function()
+          local ok, info = Profiles.Use(chosen, { create = true, copyFromCurrent = true })
+          if not ok then
+            BIT.Say(string.format(BIT.L("Could not switch profile (%s)."), tostring(info)))
+            return
+          end
+          if BIT.RefreshSettingsChrome then BIT.RefreshSettingsChrome() end
+          UI.RequestReload(string.format(BIT.L("Selected profile \"%s\". Use /reload to apply."), profileDisplay(chosen)))
+        end)
+      end)
     end)
-    profileBtn:SetHeight(20)
-    profileBtn:SetPoint("TOPLEFT", window, "TOPLEFT", 10, -4)
-    profileBtn:SetText(profileButtonText())
+    profileBtn:SetHeight(TITLE_BTN_H)
+    profileBtn:SetPoint("TOPLEFT", window, "TOPLEFT", 10, TITLE_BTN_Y)
+    profileBtn:SetLabel(profileButtonText())
     profileBtn:HookScript("OnEnter", function(self)
       if not GameTooltip then return end
       GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
@@ -1208,12 +1268,12 @@ local function createWindow()
       elseif BIT.Profiles.PendingReload() then
         GameTooltip:AddLine(BIT.L("Changes take effect after a reload of the interface."), 1, 0.82, 0.2, true)
       end
-      GameTooltip:AddLine(BIT.L("Click to manage character profiles and enabled modules."), 0.85, 0.85, 0.85, true)
+      GameTooltip:AddLine(BIT.L("Click to switch profile or manage character profiles."), 0.85, 0.85, 0.85, true)
       GameTooltip:Show()
     end)
     profileBtn:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     window.profileButton = profileBtn
-    window.refreshProfileButton = function() profileBtn:SetText(profileButtonText()) end
+    window.refreshProfileButton = function() profileBtn:SetLabel(profileButtonText()) end
     titleBarControls[#titleBarControls + 1] = profileBtn
   end
 
@@ -1222,17 +1282,17 @@ local function createWindow()
     local function artButtonText()
       return string.format(BIT.L("Style: %s"), BIT.Art.Label())
     end
-    local artBtn = UI.DropdownButton(window, 152, function(self)
+    local artBtn = UI.DropdownButton(window, 168, function(self)
       BIT.Looks.PickList(self, BIT.Art.List(), BIT.Art.Get(), function(id)
         BIT.Art.Set(id)
         self:SetLabel(artButtonText())
       end)
     end)
-    artBtn:SetHeight(20)
+    artBtn:SetHeight(TITLE_BTN_H)
     if window.profileButton then
       artBtn:SetPoint("LEFT", window.profileButton, "RIGHT", 6, 0)
     else
-      artBtn:SetPoint("TOPLEFT", window, "TOPLEFT", 10, -4)
+      artBtn:SetPoint("TOPLEFT", window, "TOPLEFT", 10, TITLE_BTN_Y)
     end
     artBtn:SetLabel(artButtonText())
     artBtn:HookScript("OnEnter", function(self)
@@ -1253,7 +1313,7 @@ local function createWindow()
 
   -- The language of the settings, tooltips and chat lines. Its own label is not translated on purpose: whoever lands in a
   -- language they cannot read must still find it. The change applies after a reload, offered next to it.
-  local language = UI.DropdownButton(window, 156, function(self)
+  local language = UI.DropdownButton(window, 154, function(self)
     local Looks = BIT.Looks
     if not (Looks and Looks.PickList) then return end
     Looks.PickList(self, BIT.LanguageList(), BIT.LanguageChoice(), function(id)
@@ -1262,8 +1322,8 @@ local function createWindow()
       window.languageReload:Show()
     end)
   end)
-  language:SetHeight(20)
-  language:SetPoint("TOPRIGHT", close, "TOPLEFT", -4, -3)
+  language:SetHeight(TITLE_BTN_H)
+  language:SetPoint("TOPRIGHT", window, "TOPRIGHT", -28, TITLE_BTN_Y)
   language:SetLabel("Language: " .. BIT.LanguageLabel())
   language:HookScript("OnEnter", function(self)
     if not GameTooltip then return end
@@ -1275,11 +1335,13 @@ local function createWindow()
   end)
   language:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
   window.languageButton = language
-  local reload = UI.Button(window, "Reload UI", 100, function()
-    if type(ReloadUI) == "function" then ReloadUI() end
+  local reload = UI.FitButton(window, BIT.L("Reload UI"), 88, function()
+    UI.RequestReload()
   end)
-  reload:SetHeight(20)
-  reload:SetPoint("TOPRIGHT", language, "TOPLEFT", -4, 0)
+  reload:SetNormalFontObject("GameFontNormalSmall")
+  reload:SetHighlightFontObject("GameFontHighlightSmall")
+  reload:SetHeight(TITLE_BTN_H)
+  reload:SetPoint("RIGHT", language, "LEFT", -6, 0)
   reload:Hide()
   window.languageReload = reload
   titleBarControls[#titleBarControls + 1] = language
