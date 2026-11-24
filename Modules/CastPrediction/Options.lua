@@ -493,9 +493,17 @@ local function buildTabs(parent, area)
     end
     -- "Reset this tab": the same button, in the same place, as every other module; it resets the sub-tab that is open.
     local reset = BIT.Looks.ResetButton(area, function()
+        local mapIcon = BIT.Art and type(BIT.Art.MapKillIcon) == "function" and BIT.Art.MapKillIcon or nil
+        local style = mapIcon and BIT.Art.Get() or nil
         for _, key in ipairs(tabKeysByName[currentTab] or {}) do
             -- the per-talent and per-aura choices are tables of overrides: back to none (a fresh table, never the default's)
-            if key == "talentForce" or key == "auraForce" then db()[key] = {} else db()[key] = ns._defaults()[key] end
+            if key == "talentForce" or key == "auraForce" then
+                db()[key] = {}
+            else
+                local val = ns._defaults()[key]
+                if mapIcon and key == "killIcon" then val = mapIcon(val, style) end
+                db()[key] = val
+            end
         end
         changed()
     end)

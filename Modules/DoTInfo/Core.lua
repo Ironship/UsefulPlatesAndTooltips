@@ -3343,6 +3343,11 @@ local function applyDefaults()
         if db[key] == nil then db[key] = value end
     end
     if isFresh then
+        if BIT.Art and type(BIT.Art.MapKillIcon) == "function" then
+            local style = BIT.Art.Get()
+            db.skullIcon = BIT.Art.MapKillIcon(db.skullIcon, style)
+            db.plateIcon = BIT.Art.MapKillIcon(db.plateIcon, style)
+        end
         db.defaultsRev = 2
         return
     end

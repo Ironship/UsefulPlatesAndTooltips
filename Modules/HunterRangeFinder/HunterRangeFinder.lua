@@ -1047,7 +1047,7 @@ end
 local function seatPreviewRail()
     if not sample or not previewBar then return end
     local offset = finiteNum(tonumber(settings and settings.plateOffset), DEFAULTS.plateOffset)
-    if offset < -80 then offset = -80 elseif offset > 30 then offset = 30 end
+    if offset < -140 then offset = -140 elseif offset > 80 then offset = 80 end
     sample:ClearAllPoints()
     sample:SetPoint("TOP", previewBar, "BOTTOM", 0, -offset)
     -- Center the ensemble (the plate with the rail seated off its bar) in the scene: the paint

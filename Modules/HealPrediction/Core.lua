@@ -248,9 +248,9 @@ local function layoutOverlay(o, healthBar, hasDirectHeal, hasOthers)
         end
     end
     -- Top edge of the visible bar is the anchor (no BOTTOMLEFT anchor, so SetHeight applies).
-    local function sizeBar(layer, barAnchor, anchorPoint)
+    local function sizeBar(layer, barAnchor, anchorPoint, yOffset)
         layer.bar:ClearAllPoints()
-        layer.bar:SetPoint("TOPLEFT", barAnchor or layer.clip, anchorPoint or "TOPLEFT", 0, -topInset)
+        layer.bar:SetPoint("TOPLEFT", barAnchor or layer.clip, anchorPoint or "TOPLEFT", 0, yOffset ~= nil and yOffset or -topInset)
         layer.bar:SetWidth(width)
         layer.bar:SetHeight(segmentHeight)
     end
@@ -271,7 +271,8 @@ local function layoutOverlay(o, healthBar, hasDirectHeal, hasOthers)
         -- After the furthest direct-heal edge: other healers' total when visible, else own direct heal, else health.
         local after = (hasOthersFill and othersFill) or (hasOwnFill and ownFill) or (hasFill and fill or nil)
         anchorClip(o.hot.clip, after)
-        sizeBar(o.hot)
+        -- When anchored to othersFill/ownFill, clip TOPLEFT already sits at -topInset; only healthFill starts at y = 0.
+        sizeBar(o.hot, nil, nil, (hasOthersFill or hasOwnFill) and 0 or -topInset)
     end
     o.layoutSignature, o.healthFill, o.ownFill, o.othersFill = signature, fill, ownFill, othersFill
 end

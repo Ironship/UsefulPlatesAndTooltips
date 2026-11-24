@@ -424,7 +424,15 @@ local function addTab(name)
 end
 
 local function resetTab(tab)
-    for _, key in ipairs(tab.keys) do db()[key] = ns.DEFAULTS[key] end
+    local mapIcon = BIT.Art and type(BIT.Art.MapKillIcon) == "function" and BIT.Art.MapKillIcon or nil
+    local style = mapIcon and BIT.Art.Get() or nil
+    for _, key in ipairs(tab.keys) do
+        local val = ns.DEFAULTS[key]
+        if mapIcon and (key == "skullIcon" or key == "plateIcon") then
+            val = mapIcon(val, style)
+        end
+        db()[key] = val
+    end
     changed()
 end
 
@@ -439,7 +447,14 @@ local function copyMarkerStyleToPlates()
 end
 
 local function applyPreset(preset)
-    for key, value in pairs(preset.values) do db()[key] = value end
+    local mapIcon = BIT.Art and type(BIT.Art.MapKillIcon) == "function" and BIT.Art.MapKillIcon or nil
+    local style = mapIcon and BIT.Art.Get() or nil
+    for key, value in pairs(preset.values) do
+        if mapIcon and (key == "skullIcon" or key == "plateIcon") then
+            value = mapIcon(value, style)
+        end
+        db()[key] = value
+    end
     copyMarkerStyleToPlates()
     changed()
     ns.print(string.format(BIT.L("%s preset applied to the target frame and nameplates."), BIT.L(preset.label)))

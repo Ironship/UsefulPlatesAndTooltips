@@ -1185,13 +1185,13 @@ local function applyDotKillSuppression(window, bar, icon, health, dotLethal)
     local gate = window._dotGate
     if not gate then
         gate = CreateFrame("StatusBar", nil, window)
-        gate:SetPoint("RIGHT", window, "RIGHT")
+        gate:SetPoint("TOPRIGHT", window, "TOPRIGHT")
+        gate:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT")
+        gate:SetWidth(DOT_GATE_LENGTH)
         gate:SetStatusBarTexture(WHITE)
         gate:SetStatusBarColor(0, 0, 0, 0)
         window._dotGate = gate
     end
-    local h = (type(window.GetHeight) == "function" and number(window:GetHeight())) or 24
-    gate:SetSize(DOT_GATE_LENGTH, h)
     gate:SetMinMaxValues(0, health)
     gate:SetValue(dotLethal)
     local mask = window._dotMask
@@ -1199,7 +1199,7 @@ local function applyDotKillSuppression(window, bar, icon, health, dotLethal)
         mask = window:CreateMaskTexture()
         mask:SetTexture(WHITE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         mask:SetPoint("TOPLEFT", gate:GetStatusBarTexture(), "TOPRIGHT")
-        mask:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT")
+        mask:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", 1, 0)
         window._dotMask = mask
     end
     if not icon._dotMasked then
