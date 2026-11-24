@@ -1689,24 +1689,13 @@ local function collectFrameOverlays()
     collectPool(_G.CompactPartyFrame, out)
     collectPool(_G.CompactRaidFrameContainer, out)
 
-    local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
-    local eui = type(modules) == "table" and modules.EllesmereUIRaidFrames
-    if type(eui) ~= "table" then return out end
-    local internals = type(eui) == "table" and eui._internals
-    local function collectEUI(members)
-        if type(members) ~= "table" then return end
-        for unit, frame in pairs(members) do
-            local data = type(eui.GetFFD) == "function" and read(eui.GetFFD, frame)
-            if not isSecret(unit) and type(unit) == "string"
-                and (unit:match("^party%d+$") or unit:match("^raid%d+$"))
-                and type(data) == "table" and type(data.health) == "table"
-                and read(frame.IsVisible, frame) == true then
-                out[#out + 1] = { unit = unit, bar = data.health, host = frame }
+    if BIT.Plate and BIT.Plate.CollectGroupFrames then
+        for _, entry in ipairs(BIT.Plate.CollectGroupFrames()) do
+            if entry.unit:match("^party%d+$") or entry.unit:match("^raid%d+$") then
+                out[#out + 1] = entry
             end
         end
     end
-    collectEUI(type(internals) == "table" and internals.unitToButton)
-    collectEUI(type(eui) == "table" and eui._partyUnitToButton)
     return out
 end
 

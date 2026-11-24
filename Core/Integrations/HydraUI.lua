@@ -18,7 +18,7 @@ end
 
 local PART = { player = "Player", focus = "Focus", target = "Target" }
 
-Plate.RegisterUnitFrameSource(function(_, part)
+Plate.RegisterUnitFrameSource("HydraUI", function(_, part)
   if PART[string.lower(part)] ~= part or not loaded() then return end
   local hydra = _G["HydraUI " .. part]
   if type(hydra) ~= "table" or read(hydra.IsForbidden, hydra) == true or read(hydra.IsVisible, hydra) ~= true then return end
@@ -27,7 +27,7 @@ Plate.RegisterUnitFrameSource(function(_, part)
   return hydra, bar, nil
 end)
 
-Plate.RegisterPlateBarSource(function(plate)
+Plate.RegisterPlateBarSource("HydraUI", function(plate)
   local hydra = read(function() return plate._unitFrame end)
   if type(hydra) ~= "table" or not loaded() then return end
   local bar = read(function() return hydra.Health end)

@@ -56,12 +56,9 @@ local function usableBar(bar)
     and read(bar.GetObjectType, bar) == "StatusBar"
 end
 
--- The player's mana bar, from whichever unit frame is on screen.
+-- The player's mana bar, from whichever unit frame is on screen (ElvUI, DaylightUI, EllesmereUI, Blizzard).
 local function playerManaBar()
-  local elv = type(ElvUI) == "table" and _G.ElvUF_Player
-  if type(elv) == "table" and usableBar(elv.Power) then return elv.Power end
-  local eui = _G.EllesmereUIUnitFrames_Player
-  if type(eui) == "table" and usableBar(eui.Power) then return eui.Power end
+  if BIT.Plate and BIT.Plate.PowerBar then return BIT.Plate.PowerBar("player") end
   local frame = _G.PlayerFrame
   local content = type(frame) == "table" and frame.PlayerFrameContent
   local main = type(content) == "table" and content.PlayerFrameContentMain

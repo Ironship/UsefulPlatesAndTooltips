@@ -1195,6 +1195,7 @@ local BAR_PREFIXES = {
 
 local buttons = {} -- list of Blizzard action buttons
 local euiButtons = {} -- EUI's action slot lives in a secure attribute; never read its .action field.
+local sourceSlots = {} -- [button] = slotResolver from BIT.Plate.CollectActionButtons (DaylightUI, Frames API, ...)
 local gamepadButtons, gamepadHosts = {}, {}
 local labels = {}  -- [button] = our FontString for the main number
 -- [button] = what its labels were last drawn from (text, colours, layout, count, button size, the size and place settings):
@@ -1253,6 +1254,14 @@ local function collectButtons()
       local b = _G["EABButton" .. i]
       if type(b) == "table" then euiButtons[b] = true; add(b) end
     end
+  end
+  if type(BIT.Plate) == "table" and type(BIT.Plate.CollectActionButtons) == "function" then
+    BIT.Plate.CollectActionButtons(function(b, getSlot)
+      if type(b) == "table" then
+        sourceSlots[b] = type(getSlot) == "function" and getSlot or nil
+        add(b)
+      end
+    end)
   end
   for _, lib in ipairs(labLibraries()) do
     labSeen = true
@@ -1536,6 +1545,15 @@ local function recollectButtons()
   end
 end
 ns.RecollectButtons = recollectButtons
+
+if type(BIT.Plate) == "table" and type(BIT.Plate.OnActionButtonSourcesChanged) == "function" then
+  BIT.Plate.OnActionButtonSourcesChanged(function()
+    if db and not ns.off then
+      recollectButtons()
+      if ns.Refresh then ns.Refresh() end
+    end
+  end)
+end
 
 -- Buttons of other addons that want the same numbers (the public SpellDamageInfo API, API.md). `button.action` is the action
 -- slot the button shows, read like a Blizzard button's; the button is a frame that can make a FontString. The list is kept in
@@ -2102,6 +2120,9 @@ local function updateButton(button, pet)
     elseif euiButtons[button] then
       local ok, value = pcall(button.GetAttribute, button, "action")
       if ok and not isSecret(value) and type(value) == "number" and value > 0 then slot = value end
+    elseif sourceSlots[button] then
+      local ok, value = pcall(sourceSlots[button], button)
+      if ok and not isSecret(value) and type(value) == "number" and value > 0 then slot = value end
     elseif labButtons[button] then slot, labSpell, labItem, labCount = labContent(button)
     else slot = slotOf(button) end
   end
@@ -2193,6 +2214,9 @@ function ns.DescribeButtons(out)
       if ok and not isSecret(value) then slot = value end
     elseif euiButtons[b] then
       local ok, value = pcall(b.GetAttribute, b, "action")
+      if ok and not isSecret(value) then slot = value end
+    elseif sourceSlots[b] then
+      local ok, value = pcall(sourceSlots[b], b)
       if ok and not isSecret(value) then slot = value end
     elseif labButtons[b] then slot, labSpell, labItem = labContent(b)
     else slot = slotOf(b) end

@@ -19,23 +19,103 @@ Plate.DOT_ROW_HEIGHT = 14
 Plate.SHARD_ROW_HEIGHT = 14
 Plate.SHIELD_EDGE = 4
 
+local function isSecret(v)
+  if type(issecretvalue) ~= "function" then return false end
+  local ok, r = pcall(issecretvalue, v)
+  return ok and r == true
+end
+
 local function read(fn, ...)
   if type(fn) ~= "function" then return end
   local ok, value = pcall(fn, ...)
-  if ok and not (type(issecretvalue) == "function" and issecretvalue(value)) then return value end
+  if ok and not isSecret(value) then return value end
 end
 
 -- The frame family of each unit, for EUI's global ("EllesmereUIUnitFrames_Focus") and Blizzard's
 -- ("FocusFrameHealthBar"); any other unit is the target's. Blizzard's focus frame is built from the target
 -- frame's template, so its bar and portrait sit at the target frame's paths.
-local FRAME_PART = { player = "Player", focus = "Focus" }
+local FRAME_PART = { player = "Player", focus = "Focus", targettarget = "TargetTarget" }
 
--- Hooks for other addons' frames (Core/Integrations/*.lua): each source returns what it finds, or nothing.
---   Plate.RegisterUnitFrameSource(function(unit, part) return host, bar, portrait end)
---   Plate.RegisterPlateBarSource(function(plate) return bar, path end)
+-- Hooks for other addons' frames (Core/Integrations/*.lua and public Frames API): each source returns
+-- what it finds, or nothing. Every registration accepts either (fn) or (owner, fn) so external addons
+-- can replace or unregister their own sources.
+--   Plate.RegisterUnitFrameSource([owner,] function(unit, part) return host, bar, portrait end)
+--   Plate.RegisterPlateBarSource([owner,] function(plate) return bar, path end)
+--   Plate.RegisterGroupFramesSource([owner,] function(out) ... end) -- appends { unit, bar, host, kind }
+--   Plate.RegisterPowerBarSource([owner,] function(unit) return bar end)
+--   Plate.RegisterActionButtonSource([owner,] function(add) add(button, slotFn) end)
 Plate.unitFrameSources, Plate.plateBarSources = {}, {}
-function Plate.RegisterUnitFrameSource(fn) Plate.unitFrameSources[#Plate.unitFrameSources + 1] = fn end
-function Plate.RegisterPlateBarSource(fn) Plate.plateBarSources[#Plate.plateBarSources + 1] = fn end
+Plate.groupFrameSources, Plate.powerBarSources, Plate.actionButtonSources = {}, {}, {}
+
+local ALL_SOURCE_LISTS = {
+  Plate.unitFrameSources,
+  Plate.plateBarSources,
+  Plate.groupFrameSources,
+  Plate.powerBarSources,
+  Plate.actionButtonSources,
+}
+
+local function registerSource(list, ownerOrFn, fn)
+  local owner, callback
+  if type(ownerOrFn) == "function" and fn == nil then
+    owner, callback = ownerOrFn, ownerOrFn
+  else
+    assert(not isSecret(ownerOrFn) and ownerOrFn ~= nil, "Plate source registration requires an owner")
+    assert(type(fn) == "function", "Plate source registration requires a function")
+    owner, callback = ownerOrFn, fn
+  end
+  for _, entry in ipairs(list) do
+    if entry.owner == owner then
+      entry.fn = callback
+      return
+    end
+  end
+  list[#list + 1] = { owner = owner, fn = callback }
+end
+
+local function unregisterSource(list, owner)
+  if isSecret(owner) or owner == nil then return end
+  for i = #list, 1, -1 do
+    if list[i].owner == owner then
+      list[i].dead = true
+      table.remove(list, i)
+    end
+  end
+end
+
+local clearPlateCaches
+local actionButtonWatchers = {}
+
+function Plate.OnActionButtonSourcesChanged(fn)
+  if type(fn) == "function" then actionButtonWatchers[#actionButtonWatchers + 1] = fn end
+end
+
+local function notifyActionButtonWatchers()
+  for _, fn in ipairs(actionButtonWatchers) do pcall(fn) end
+end
+
+function Plate.RegisterUnitFrameSource(ownerOrFn, fn) registerSource(Plate.unitFrameSources, ownerOrFn, fn) end
+function Plate.RegisterPlateBarSource(ownerOrFn, fn)
+  registerSource(Plate.plateBarSources, ownerOrFn, fn)
+  if clearPlateCaches then clearPlateCaches() end
+end
+function Plate.RegisterGroupFramesSource(ownerOrFn, fn) registerSource(Plate.groupFrameSources, ownerOrFn, fn) end
+function Plate.RegisterPowerBarSource(ownerOrFn, fn) registerSource(Plate.powerBarSources, ownerOrFn, fn) end
+function Plate.RegisterActionButtonSource(ownerOrFn, fn)
+  registerSource(Plate.actionButtonSources, ownerOrFn, fn)
+  notifyActionButtonWatchers()
+end
+
+function Plate.UnregisterSources(owner)
+  if isSecret(owner) or owner == nil then return end
+  local hadButtons = false
+  for _, entry in ipairs(Plate.actionButtonSources) do
+    if entry.owner == owner then hadButtons = true; break end
+  end
+  for _, list in ipairs(ALL_SOURCE_LISTS) do unregisterSource(list, owner) end
+  if clearPlateCaches then clearPlateCaches() end
+  if hadButtons then notifyActionButtonWatchers() end
+end
 
 -- EUI keeps Blizzard's frames alive but hidden, so follow the profile's active source.
 local function unitFrameBase(unit)
@@ -59,7 +139,9 @@ local function unitFrameBase(unit)
   -- Enhance QoL's unit frames hard-hide Blizzard's (reparented under a hidden frame, flagged _eqolUFHidden) and draw
   -- their own: EQOLUF<Part>Frame with the bar EQOLUF<Part>Health. Marks go on that bar; while its frame is not
   -- shown (no target) there is nothing to mark, and Blizzard's hidden bar must not get them.
-  local blizzard = (unit == "player" and PlayerFrame) or (unit == "focus" and FocusFrame) or (unit ~= "player" and unit ~= "focus" and TargetFrame)
+  local blizzard = unit ~= "targettarget"
+    and ((unit == "player" and PlayerFrame) or (unit == "focus" and FocusFrame) or (unit ~= "player" and unit ~= "focus" and TargetFrame))
+    or nil
   if type(blizzard) == "table" and read(function() return blizzard._eqolUFHidden end) == true then
     local frame, bar = _G["EQOLUF" .. part .. "Frame"], _G["EQOLUF" .. part .. "Health"]
     if type(frame) ~= "table" or type(bar) ~= "table" or read(frame.IsForbidden, frame) == true
@@ -69,7 +151,7 @@ local function unitFrameBase(unit)
   -- X-Perl (and its forks, which keep the frame names) hides Blizzard's frames and draws XPerl_<Part>, with the bar
   -- at .statsFrame.healthBar and the portrait in .portraitFrame. It can be loaded with one frame type switched
   -- off, so its frame only counts while it is on screen or Blizzard's carries X-Perl's own "disabled" flag.
-  local perl = _G["XPerl_" .. part]
+  local perl = unit ~= "targettarget" and _G["XPerl_" .. part] or nil
   if type(perl) == "table" and read(perl.IsForbidden, perl) ~= true and (read(perl.IsVisible, perl) == true
       or (type(blizzard) == "table" and read(function() return blizzard.XPerlDisabled end) == true)) then
     local stats = read(function() return perl.statsFrame end)
@@ -82,10 +164,22 @@ local function unitFrameBase(unit)
       return perl, bar, portrait
     end
   end
-  -- Frame addons registered in Core/Integrations (ElvUI, ...): host, bar, portrait of the unit's own frame.
-  for _, source in ipairs(Plate.unitFrameSources) do
-    local host, bar, portrait = source(unit, part)
-    if host or bar then return host, bar, portrait end
+  -- Frame addons registered in Core/Integrations (ElvUI, HydraUI, DaylightUI, ...) or via the public Frames API.
+  for _, entry in ipairs(Plate.unitFrameSources) do
+    local ok, host, bar, portrait = pcall(entry.fn, unit, part)
+    if ok then
+      if isSecret(host) or type(host) ~= "table" or read(host.IsForbidden, host) == true then host = nil end
+      if isSecret(bar) or type(bar) ~= "table" or read(bar.IsForbidden, bar) == true then bar = nil end
+      if isSecret(portrait) or type(portrait) ~= "table" or read(portrait.IsForbidden, portrait) == true then portrait = nil end
+      if host or bar then return host, bar, portrait end
+    end
+  end
+  if unit == "targettarget" then
+    local tot = _G.TargetFrameToT or (type(TargetFrame) == "table" and TargetFrame.totFrame)
+    local bar = type(tot) == "table" and (tot.HealthBar or tot.healthbar or tot.healthBar)
+    if type(bar) ~= "table" then bar = _G.TargetFrameToTHealthBar end
+    if type(bar) == "table" and read(bar.IsVisible, bar) == false and read(UnitExists, "targettarget") == true then return end
+    return tot, bar, nil
   end
   local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
   local eui = type(modules) == "table" and modules.EllesmereUIUnitFrames
@@ -194,11 +288,117 @@ end
 function Plate.UnitFrame(unit)
   local host, bar, portrait = unitFrameBase(unit)
   local Frames = BIT.Frames
-  if Frames and (host or bar) and unit ~= "player" and unit ~= "focus" then
+  if Frames and (host or bar) and unit ~= "player" and unit ~= "focus" and unit ~= "targettarget" then
     local icon = Frames.Resolve(Frames.Get("icon"))
     if icon then portrait = icon end
   end
   return host, bar, portrait
+end
+
+local function usablePowerBar(bar)
+  return type(bar) == "table" and read(bar.IsForbidden, bar) ~= true and read(bar.IsVisible, bar) == true
+    and read(bar.GetObjectType, bar) == "StatusBar"
+end
+
+-- The power/mana StatusBar for a unit ("player" by default), from registered integrations,
+-- EllesmereUI, then Blizzard's PlayerFrame mana bar.
+function Plate.PowerBar(unit)
+  unit = unit or "player"
+  for _, entry in ipairs(Plate.powerBarSources) do
+    local ok, bar = pcall(entry.fn, unit)
+    if ok and usablePowerBar(bar) then return bar end
+  end
+  if unit == "player" then
+    local eui = _G.EllesmereUIUnitFrames_Player
+    if type(eui) == "table" and usablePowerBar(eui.Power) then return eui.Power end
+    local frame = _G.PlayerFrame
+    local content = type(frame) == "table" and frame.PlayerFrameContent
+    local main = type(content) == "table" and content.PlayerFrameContentMain
+    local area = type(main) == "table" and main.ManaBarArea
+    local bar = type(area) == "table" and area.ManaBar
+    if usablePowerBar(bar) then return bar end
+    if usablePowerBar(_G.PlayerFrameManaBar) then return _G.PlayerFrameManaBar end
+  end
+  return nil
+end
+
+local function validGroupUnit(unit)
+  if isSecret(unit) or type(unit) ~= "string" then return false end
+  return unit == "player" or unit:match("^party%d+$") ~= nil
+    or unit:match("^raid%d+$") ~= nil or unit:match("^arena%d+$") ~= nil
+end
+
+local function appendGroupEntry(out, entry)
+  if type(entry) ~= "table" then return end
+  local unit, bar = entry.unit, entry.bar
+  if not validGroupUnit(unit) or type(bar) ~= "table" or read(bar.IsForbidden, bar) == true then return end
+  local host = type(entry.host) == "table" and read(entry.host.IsForbidden, entry.host) ~= true and entry.host or bar
+  local kind = (entry.kind == "party" or entry.kind == "raid") and entry.kind or nil
+  out[#out + 1] = { unit = unit, bar = bar, host = host, kind = kind }
+end
+
+local function collectEllesmereGroupFrames(out)
+  local modules = type(EllesmereUI) == "table" and EllesmereUI._ModuleNS
+  local eui = type(modules) == "table" and modules.EllesmereUIRaidFrames
+  if type(eui) ~= "table" then return end
+  local internals = type(eui._internals) == "table" and eui._internals
+  local function addMembers(members)
+    if type(members) ~= "table" then return end
+    for unit, frame in pairs(members) do
+      if not isSecret(unit) and type(unit) == "string" and (unit == "player"
+          or unit:match("^party%d+$") or unit:match("^raid%d+$")) then
+        local data = read(eui.GetFFD, frame)
+        local current = type(frame) == "table" and read(frame.GetAttribute, frame, "unit")
+        if current == unit and type(data) == "table" and type(data.health) == "table"
+            and read(frame.IsVisible, frame) == true then
+          appendGroupEntry(out, { unit = unit, bar = data.health, host = frame })
+        end
+      end
+    end
+  end
+  addMembers(internals and internals.unitToButton)
+  addMembers(eui._partyUnitToButton)
+end
+
+-- Addon group (party/raid) frames shared by HealPrediction, ShieldsInfo and CastPrediction:
+-- EllesmereUI plus every source registered via Plate.RegisterGroupFramesSource (DaylightUI,
+-- public Frames API, ...). Appends normalized { unit, bar, host, kind } entries to `out`.
+function Plate.CollectGroupFrames(out)
+  out = out or {}
+  collectEllesmereGroupFrames(out)
+  for _, entry in ipairs(Plate.groupFrameSources) do
+    local collected = {}
+    local ok, returned = pcall(entry.fn, collected)
+    if ok then
+      if type(returned) == "table" and returned ~= collected then
+        for _, item in ipairs(returned) do appendGroupEntry(out, item) end
+      end
+      for _, item in ipairs(collected) do appendGroupEntry(out, item) end
+    end
+  end
+  return out
+end
+
+-- Action buttons provided by registered integrations (DaylightUI, public Frames API, ...).
+-- Calls add(button, slotResolver) for each valid non-forbidden button.
+function Plate.CollectActionButtons(add)
+  if type(add) ~= "function" then return end
+  for _, entry in ipairs(Plate.actionButtonSources) do
+    local current = entry
+    pcall(current.fn, function(button, getSlot)
+      if type(button) == "table" and read(button.IsForbidden, button) ~= true
+          and type(button.GetObjectType) == "function" then
+        local resolver
+        if type(getSlot) == "function" then
+          resolver = function(b)
+            if current.dead then return nil end
+            return getSlot(b)
+          end
+        end
+        add(button, resolver)
+      end
+    end)
+  end
 end
 
 local function visibleHealthBar(bar)
@@ -334,9 +534,11 @@ local function resolveHealthBar(plate)
       if bar and visibleHealthBar(bar) then return bar, "custom " .. path end
     end
   end
-  for _, source in ipairs(Plate.plateBarSources) do
-    local bar, path = source(plate)
-    if bar then return bar, path end
+  for _, entry in ipairs(Plate.plateBarSources) do
+    local ok, bar, path = pcall(entry.fn, plate)
+    if ok and visibleHealthBar(bar) then
+      return bar, (not isSecret(path) and type(path) == "string") and path or "custom source"
+    end
   end
   if type(EllesmereNameplates_NS) == "table" then
     local children = { pcall(plate.GetChildren, plate) }
@@ -398,6 +600,12 @@ end
 local lookupCache = setmetatable({}, { __mode = "k" })
 local rightEdgeCache = setmetatable({}, { __mode = "k" })
 local LOOKUP_TTL = 0.25
+
+clearPlateCaches = function()
+  for k in pairs(lookupCache) do lookupCache[k] = nil end
+  for k in pairs(searchCache) do searchCache[k] = nil end
+  for k in pairs(rightEdgeCache) do rightEdgeCache[k] = nil end
+end
 
 function Plate.HealthBar(plate)
   if type(plate) ~= "table" then return nil, "no nameplate" end
@@ -497,6 +705,9 @@ function Plate.RightEdgeOffset(plate, healthBar)
   local hr = read(healthBar.GetRight, healthBar)
   local badge = plate.uptLevelBadge
   local uf = not badge and read(function() return plate.UnitFrame end) or nil
+  if type(uf) == "table" and (read(uf.IsForbidden, uf) == true or read(uf.IsVisible, uf) == false) then
+    uf = nil
+  end
   if not badge and type(uf) == "table" then
     badge = read(function()
       return uf.LevelFrame or uf.levelFrame or uf.LevelIndicator or uf.Level or uf.ClassificationFrame
@@ -504,7 +715,7 @@ function Plate.RightEdgeOffset(plate, healthBar)
     end)
   end
   local result
-  if type(badge) == "table" and read(badge.IsShown, badge) == true then
+  if type(badge) == "table" and read(badge.IsShown, badge) == true and read(badge.IsVisible, badge) ~= false then
     local br = read(badge.GetRight, badge)
     if type(br) == "number" and type(hr) == "number" then
       local extra = math.floor(br - hr + 0.5)
@@ -518,7 +729,8 @@ function Plate.RightEdgeOffset(plate, healthBar)
     local hb = read(healthBar.GetBottom, healthBar)
     local maxExtra = 0
     local function consider(obj)
-      if type(obj) ~= "table" or obj == healthBar or read(obj.IsShown, obj) ~= true then return end
+      if type(obj) ~= "table" or obj == healthBar or read(obj.IsShown, obj) ~= true
+          or read(obj.IsVisible, obj) == false then return end
       local l, r, t, b = read(obj.GetLeft, obj), read(obj.GetRight, obj), read(obj.GetTop, obj), read(obj.GetBottom, obj)
       if type(l) ~= "number" or type(r) ~= "number" or type(t) ~= "number" or type(b) ~= "number" then return end
       if r > hr + 6 and l >= hr - 6 and (r - hr) < 60 and (r - l) <= 48 and (t - b) <= 36 then

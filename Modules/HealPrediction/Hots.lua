@@ -268,6 +268,7 @@ function Hots.OnSucceeded(castGUID, spellID)
     hot.expiresAt = GetTime() + hot.duration
     list[family] = hot
     if entry.name then active[entry.name] = list end
+    if ns.afterRefresh then pcall(ns.afterRefresh) end
 end
 
 -- The unit's running effects, from its readable own buffs, else the last known ones; nil when there are none.
