@@ -309,4 +309,36 @@ BIT.RegisterLocale("ruRU", {
     "Забыть применения этого заклинания",
   ["Its recorded casts are deleted; the next fights start them again."] =
     "Записанные применения удаляются; следующие бои начнут запись заново.",
+
+  -- DoT группы и значок добивания / завершающего приёма
+  ["PARTY"] = "ГРУППА",
+  ["Share DoTs with party"] = "Делиться DoT с группой",
+  ["Shares your DoT estimates in open-world parties and raids with group members who also enable this option (compatible with DoesItDie), so the marker and kill icon include everyone's DoTs."] =
+    "Передаёт ваши оценки DoT в открытом мире участникам группы и рейда с включённой опцией (совместимо с DoesItDie), чтобы маркер и значок убийства учитывали DoT всей группы.",
+  ["Party DoT color"] = "Цвет DoT группы",
+  ["Segment color used for party members' shared DoTs."] =
+    "Цвет сегмента для общих DoT участников группы.",
+  ["EXECUTE / FINISHER"] = "ДОБИВАНИЕ / ЗАВЕРШАЮЩИЙ ПРИЁМ",
+  ["Show execute / finisher icon"] = "Показывать значок добивания",
+  ["Shows Execute, Hammer of Wrath, Shadow Word: Death, Shadowburn, Ferocious Bite or Eviscerate above the target portrait when its estimated hit would kill the target. Learns real hit ratios from the damage meter after combat."] =
+    "Показывает «Казнь», «Молот гнева», «Слово Тьмы: Смерть», «Ожог Тьмы», «Свирепый укус» или «Потрошение» над портретом цели, когда расчётный удар добьёт её. После боя уточняет коэффициент по счётчику урона.",
+  ["Also on enemy nameplates"] = "Также на табличках противников",
+  ["Shows the execute icon beside enemy nameplates too. Finishers (Ferocious Bite, Eviscerate) show only on the target's plate."] =
+    "Показывает значок добивания рядом с табличками противников. Завершающие приёмы («Свирепый укус», «Потрошение») отображаются только на табличке цели.",
+  ["Execute icon size"] = "Размер значка добивания",
+  ["Nameplate execute icon size"] = "Размер значка на табличках",
+  ["Execute horizontal offset"] = "Смещение добивания по горизонтали",
+  ["Execute vertical offset"] = "Смещение добивания по вертикали",
+  ["Pixels right (+) or left (-) of the portrait."] = "Пиксели вправо (+) или влево (−) от портрета.",
+  ["Pixels up (+) or down (-) above the portrait."] = "Пиксели вверх (+) или вниз (−) над портретом.",
+  ["Execute icon is not available on this client."] = "Значок добивания недоступен на этом клиенте.",
+  ["/dotinfo exec - show what execute/finisher is watched and test its icon for 5 seconds"] =
+    "/dotinfo exec — показать отслеживаемую способность добивания и проверить значок на 5 секунд",
+  ["No execute ability found (Execute, Hammer of Wrath, Shadow Word: Death, Shadowburn, Ferocious Bite or Eviscerate)."] =
+    "Способность добивания не найдена («Казнь», «Молот гнева», «Слово Тьмы: Смерть», «Ожог Тьмы», «Свирепый укус» или «Потрошение»).",
+  ["No estimate."] = "Нет оценки.",
+  ["The execute icon is switched off (Kill icon tab)."] = "Значок добивания выключен (вкладка «Значок убийства»).",
+  ["%s: no combo points, so no icon."] = "%s: нет очков серии, значок скрыт.",
+  ["%s: its tooltip has no damage number this addon can read."] =
+    "%s: в подсказке нет числа урона, которое аддон может прочитать.",
 })

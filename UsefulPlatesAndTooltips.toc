@@ -96,6 +96,8 @@ Modules\DoTInfo\RogueAuras.lua
 Modules\DoTInfo\Options.lua
 Modules\DoTInfo\Nameplates.lua
 Modules\DoTInfo\Focus.lua
+Modules\DoTInfo\Party.lua
+Modules\DoTInfo\Execute.lua
 Modules\DoTInfo\ParseCheck.lua
 Modules\DoTInfo\TickViewer.lua
 Modules\DoTInfo\API.lua

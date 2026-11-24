@@ -61,6 +61,7 @@ ns.locale.register({
     ["Rip"] = { "Разорвать" },
     ["Rupture"] = { "Рваная рана" },
     ["Serpent Sting"] = { "Укус змеи" },
+    ["Scorpid Poison"] = { "Яд скорпида" },
     ["Shadow Word: Pain"] = { "Слово Тьмы: Боль" },
     ["Siphon Life"] = { "Вытягивание жизни" },
     ["Starshards"] = { "Звездные осколки" },

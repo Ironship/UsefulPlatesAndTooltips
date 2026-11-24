@@ -664,6 +664,7 @@ if BIT.RegisterTab then
             syncDisplayHost()
 
             parent:SetScript("OnShow", function()
+                refreshControls()
                 updatePreview()
                 syncDisplayHost()
             end)
@@ -704,4 +705,13 @@ end
 
 ns.openOptions = function()
     if BIT.OpenSettings then BIT.OpenSettings("CastPrediction") end
+end
+
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    BIT.Art.Subscribe(function()
+        if window then
+            refreshControls()
+            updatePreview()
+        end
+    end)
 end

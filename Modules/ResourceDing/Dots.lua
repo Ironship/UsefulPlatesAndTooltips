@@ -276,6 +276,9 @@ function Addon.StartDots()
   if BIT.Style and type(BIT.Style.Subscribe) == "function" then
     BIT.Style.Subscribe("ResourceDing", function() Addon.RefreshDots() end)
   end
+  if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    BIT.Art.Subscribe(function() Addon.RefreshDots() end)
+  end
   Addon.RefreshDots()
 end
 

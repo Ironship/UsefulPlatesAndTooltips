@@ -45,6 +45,9 @@ local SPECS = {
 }
 
 local armed          -- an armed trap: { spellID, name, total, school, duration, interval, placedAt, expiresAt }
+local trapPreview    -- early target UNIT_AURA preview for armed trap: { key, dot } (DoesItDie PR #38)
+local TRAP_AURA_MIN_AGE = 0.1
+local TRAP_MATCH_WINDOW = 0.45
 local recent = {}    -- [mob key] = when you last cast at it
 local lastCast       -- { key, at }
 local pending        -- an unattributed crit, kept for a moment: { key, unit, amount, school, at }
@@ -145,13 +148,13 @@ function P.ArmTrap(spellID, name, desc, total, school, duration, statedInterval)
     local interval = statedInterval or 3
     P.sizes.trap = { total = total, duration = duration, interval = interval }
     if P.nativeTraps then
-        armed, chains = nil, {}
+        armed, trapPreview, chains = nil, nil, {}
         return true -- the aura segment shows it from the real application
     end
     local lifetime = type(desc) == "string" and not isSecret(desc) and tonumber(desc:match("[Tt]rap will exist for (%d+) min"))
     armed = { spellID = spellID, name = name, total = total, school = school, duration = duration,
         interval = interval, placedAt = now, expiresAt = now + (lifetime or 1) * 60 }
-    chains = {}
+    trapPreview, chains = nil, {}
     local learned = db().ticks[spellID]
     trace(string.format("TRAP %s (id %d) armed: %.0f dmg over %ss, school %d, per-tick %s", name, spellID, total,
         duration, school, learned and ("learned " .. learned) or "from description"))
@@ -180,12 +183,73 @@ local function springTrap(key, unit, amount, school, isCrit, now)
             if amount < low or amount > high then return false end
         end
     end
-    armed = nil
+    armed, trapPreview = nil, nil
     internals.dotsByTarget[key] = internals.dotsByTarget[key] or {}
     internals.dotsByTarget[key][trap.name] = dot
+    if ns.Learn then ns.Learn.Cast(dot, 0, trap.name) end
     local tickIndex = recordTick(dot, amount, isCrit, 1, now)
     trace(string.format("TRAP %s sprung on %s: first tick %d%s %.1fs after placing (tick %d/%d)", trap.name, unit,
         amount, isCrit and " CRIT" or "", now - trap.placedAt, tickIndex, dot.totalTicks))
+    return true
+end
+
+-- UNIT_AURA (target): an armed trap has likely fired, one interval before its first damage tick (DoesItDie PR #38).
+-- Kept in trapPreview (out of dotsByTarget) until the first tick confirms it; if none lands, dropped and trap stays armed.
+function P.StartTrapPreview()
+    if not I() or not enabled() or P.nativeTraps then return false end
+    local trap = armed
+    if not trap or trapPreview then return false end
+    local now = GetTime()
+    if now - trap.placedAt < TRAP_AURA_MIN_AGE then return false end
+    if now > trap.expiresAt then armed = nil return false end
+    local key = I().unitKey("target")
+    if not key then return false end
+    local dot = I().newDot(trap.spellID, trap.spellID, trap.name, trap.total, trap.school, trap.duration,
+        trap.interval, now)
+    dot.name = trap.name
+    trapPreview = { key = key, dot = dot }
+    trace(string.format("TRAP %s fired (target aura) %.1fs after placing: showing %.0f over %ss from now",
+        trap.name, now - trap.placedAt, trap.total, trap.duration))
+    return true
+end
+
+-- Returns the provisional trap preview dot for `key`, or nil (expiring it if its first tick never arrived).
+function P.TrapPreviewFor(key)
+    local p = trapPreview
+    if not p then return nil end
+    local now = GetTime()
+    if now > p.dot.appliedAt + p.dot.interval + TRAP_MATCH_WINDOW then
+        trace(string.format("TRAP %s aura preview expired without a tick; trap stays armed", p.dot.name or "?"))
+        trapPreview = nil
+        return nil
+    end
+    return p.key == key and p.dot or nil
+end
+
+-- Single-tick hidden-amount trap spring (DoesItDie PR #38): in Forever combat UNIT_COMBAT amounts are secret, so an
+-- armed trap's first hit of its school after one interval starts the DoT and enters MeterLearning's tally.
+local function springTrapHidden(key, unit, school, now)
+    local trap = armed
+    if not trap or school ~= trap.school then return false end
+    local age = now - trap.placedAt
+    if now > trap.expiresAt + trap.interval + TRAP_MATCH_WINDOW then
+        trace(string.format("TRAP %s expired after %.0fs with no first tick", trap.name, age))
+        armed, trapPreview, chains = nil, nil, {}
+        return false
+    end
+    if now < trap.placedAt + trap.interval - TRAP_MATCH_WINDOW then return false end
+    local internals = I()
+    local dot = internals.newDot(trap.spellID, trap.spellID, trap.name, trap.total, trap.school, trap.duration,
+        trap.interval, now - trap.interval)
+    armed, trapPreview, chains = nil, nil, {}
+    internals.dotsByTarget[key] = internals.dotsByTarget[key] or {}
+    internals.dotsByTarget[key][trap.name] = dot
+    if ns.Learn then ns.Learn.Cast(dot, 0, trap.name) end
+    dot.ticksSeen = 1
+    dot.lastTickAmount, dot.lastTickShape, dot.lastTickCrit = 0, 1, false
+    local tickIndex = internals.anchorTick(dot, 1, now)
+    trace(string.format("TRAP %s sprung on %s (amount hidden): %.1fs after placing, tick %d/%d", trap.name, unit,
+        age, tickIndex, dot.totalTicks))
     return true
 end
 
@@ -267,19 +331,29 @@ end
 function P.OnHiddenHit(key, unit, school, now)
     if not I() or not enabled() then return false end
     if delayed[key] and springDelayed(key, unit, nil, school, false, now) then return true end
-    local trap = armed
-    if not trap or school ~= trap.school then return false end
-    if now > trap.expiresAt + trap.interval + 0.45 then armed, chains = nil, {} return false end
-    -- Too soon after placing it: the trap's first tick comes one interval after it, at the earliest.
-    if not chains[key] and now < trap.placedAt + trap.interval - 0.45 then return false end
-    local done, first = chainStep(chains, key, now, trap.interval)
-    if not done then return false end
-    armed, chains = nil, {}
-    local dot = startFromChain(key, trap.spellID, trap.name, trap.total, trap.school, trap.duration, trap.interval,
-        first, now)
-    trace(string.format("TRAP %s sprung on %s (amounts hidden): hits %.1fs apart, ticks 1-2 of %d", trap.name, unit,
-        now - first, dot.totalTicks))
-    return true
+    -- Confirm an early UNIT_AURA trap preview on its scheduled first tick (DoesItDie PR #38).
+    local preview = trapPreview
+    if preview and preview.key == key and preview.dot.school == school then
+        local dot = preview.dot
+        local reached = math.abs(now - (dot.appliedAt + dot.interval))
+        trapPreview = nil
+        if reached <= TRAP_MATCH_WINDOW then
+            local placedAt = armed and armed.placedAt
+            armed, chains = nil, {}
+            local internals = I()
+            internals.dotsByTarget[key] = internals.dotsByTarget[key] or {}
+            internals.dotsByTarget[key][dot.name] = dot
+            if ns.Learn then ns.Learn.Cast(dot, 0, dot.name) end
+            dot.ticksSeen = 1
+            dot.lastTickAmount, dot.lastTickShape, dot.lastTickCrit = 0, 1, false
+            local tickIndex = internals.anchorTick(dot, 1, now)
+            trace(string.format("TRAP %s: first tick %d/%d on %s, %.1fs after placing (aura preview confirmed)",
+                dot.name, tickIndex, dot.totalTicks, unit, placedAt and (now - placedAt) or 0))
+            return true
+        end
+    end
+    if armed and springTrapHidden(key, unit, school, now) then return true end
+    return false
 end
 
 ---------------------------------------------------------------------------------------------
@@ -449,7 +523,7 @@ function P.NoteCast(key, spellID, name, desc)
     if not I() or not enabled() then return end
     local now = GetTime()
     if armed and (ns.FIRE_TRAPS[name] or (type(desc) == "string" and not isSecret(desc) and desc:find("Fire trap"))) then
-        armed = nil
+        armed, trapPreview = nil, nil
         trace("TRAP disarmed by " .. tostring(name) .. " (only one Fire trap can be active)")
     end
     -- A cast with no readable recipient counts only when it deals damage: a self-buff must not open the window.
@@ -504,18 +578,21 @@ function P.OnUnmatchedHit(key, unit, amount, school, isCrit, now)
 end
 
 function P.Reset()
-    armed, lastCast, pending = nil, nil, nil
+    armed, trapPreview, lastCast, pending = nil, nil, nil, nil
     recent, chains, delayed, delayedChains = {}, {}, {}, {}
 end
 
 function P.Housekeep(now)
     if not enabled() then
-        if armed or lastCast or pending or next(recent) or next(chains) or next(delayed) or next(delayedChains) then
+        if armed or trapPreview or lastCast or pending or next(recent) or next(chains) or next(delayed) or next(delayedChains) then
             P.Reset()
         end
         return
     end
-    if armed and now > armed.expiresAt + armed.interval + 0.45 then armed, chains = nil, {} end
+    if trapPreview and now > trapPreview.dot.appliedAt + trapPreview.dot.interval + TRAP_MATCH_WINDOW then
+        trapPreview = nil
+    end
+    if armed and now > armed.expiresAt + armed.interval + 0.45 then armed, trapPreview, chains = nil, nil, {} end
     for key, d in pairs(delayed) do
         if now > d.expiresAt then delayed[key], delayedChains[key] = nil, nil end
     end

@@ -309,4 +309,36 @@ BIT.RegisterLocale("deDE", {
     "Die Zauber dieses Zaubers vergessen",
   ["Its recorded casts are deleted; the next fights start them again."] =
     "Seine aufgezeichneten Zauber werden gelöscht; die nächsten Kämpfe beginnen sie neu.",
+
+  -- party DoTs and execute / finisher kill icon
+  ["PARTY"] = "GRUPPE",
+  ["Share DoTs with party"] = "DoTs mit Gruppe teilen",
+  ["Shares your DoT estimates in open-world parties and raids with group members who also enable this option (compatible with DoesItDie), so the marker and kill icon include everyone's DoTs."] =
+    "Teilt Eure DoT-Schätzungen in offenen Gruppen und Schlachtzügen mit Mitgliedern, die diese Option ebenfalls aktivieren (kompatibel mit DoesItDie), sodass Markierung und Kill-Symbol alle DoTs erfassen.",
+  ["Party DoT color"] = "Gruppen-DoT-Farbe",
+  ["Segment color used for party members' shared DoTs."] =
+    "Segmentfarbe für geteilte DoTs von Gruppenmitgliedern.",
+  ["EXECUTE / FINISHER"] = "HINRICHTEN / ABSCHLUSS",
+  ["Show execute / finisher icon"] = "Hinrichten-/Abschluss-Symbol zeigen",
+  ["Shows Execute, Hammer of Wrath, Shadow Word: Death, Shadowburn, Ferocious Bite or Eviscerate above the target portrait when its estimated hit would kill the target. Learns real hit ratios from the damage meter after combat."] =
+    "Zeigt Hinrichten, Hammer des Zorns, Schattenwort: Tod, Schattenbrand, Wilder Biss oder Ausweiden über dem Zielporträt, wenn der geschätzte Treffer das Ziel töten würde. Lernt echte Verhältnisse nach dem Kampf aus dem Schadensmesser.",
+  ["Also on enemy nameplates"] = "Auch auf feindlichen Namensplaketten",
+  ["Shows the execute icon beside enemy nameplates too. Finishers (Ferocious Bite, Eviscerate) show only on the target's plate."] =
+    "Zeigt das Hinrichten-Symbol auch neben feindlichen Namensplaketten. Abschlussbewegungen (Wilder Biss, Ausweiden) erscheinen nur an der Zielplakette.",
+  ["Execute icon size"] = "Größe des Hinrichten-Symbols",
+  ["Nameplate execute icon size"] = "Namensplaketten-Symbolgröße",
+  ["Execute horizontal offset"] = "Hinrichten horizontaler Versatz",
+  ["Execute vertical offset"] = "Hinrichten vertikaler Versatz",
+  ["Pixels right (+) or left (-) of the portrait."] = "Pixel rechts (+) oder links (-) vom Porträt.",
+  ["Pixels up (+) or down (-) above the portrait."] = "Pixel nach oben (+) oder unten (-) über dem Porträt.",
+  ["Execute icon is not available on this client."] = "Das Hinrichten-Symbol ist auf diesem Client nicht verfügbar.",
+  ["/dotinfo exec - show what execute/finisher is watched and test its icon for 5 seconds"] =
+    "/dotinfo exec - zeigt den überwachten Hinrichten-/Abschlusszauber und testet sein Symbol 5 Sekunden lang",
+  ["No execute ability found (Execute, Hammer of Wrath, Shadow Word: Death, Shadowburn, Ferocious Bite or Eviscerate)."] =
+    "Keine Hinrichten-Fähigkeit gefunden (Hinrichten, Hammer des Zorns, Schattenwort: Tod, Schattenbrand, Wilder Biss oder Ausweiden).",
+  ["No estimate."] = "Keine Schätzung.",
+  ["The execute icon is switched off (Kill icon tab)."] = "Das Hinrichten-Symbol ist ausgeschaltet (Reiter Kill-Symbol).",
+  ["%s: no combo points, so no icon."] = "%s: keine Combopunkte, daher kein Symbol.",
+  ["%s: its tooltip has no damage number this addon can read."] =
+    "%s: der Tooltip enthält keine Schadenszahl, die dieses Addon lesen kann.",
 })

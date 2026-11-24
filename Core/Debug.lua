@@ -25,6 +25,7 @@ local SECTIONS = {
     { "/dotinfo ticks", "Open the tick viewer." },
     { "/dotinfo plates", "Print what can be read from the nameplates on screen." },
     { "/dotinfo skull", "Show the kill icon on the target portrait for 5 seconds." },
+    { "/dotinfo exec", "Show what execute/finisher is watched and test its icon for 5 seconds." },
   } },
   { title = "CAST PREDICTION", rows = {
     { "/upt castprobe", "Print what the prediction can read right now." },

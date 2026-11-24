@@ -520,6 +520,10 @@ function ns.setPlatePreview(host, state)
     end
 end
 
+-- Exposed for Execute.lua's enemy nameplate execute icons.
+ns.plateHealthBar = findHealthBar
+ns.platePreview = function() return previewState and previewPlate or nil end
+
 local function updatePreviewPlate(db)
     if type(previewPlate.healthBar.SetReverseFill) == "function" then
         previewPlate.healthBar:SetReverseFill(db.plateFillDirection == "rtl")

@@ -85,6 +85,7 @@ local NAMES = {
     ["Immolation Trap"] = { "Piège immolation" },       -- S
     ["Explosive Trap"] = { "Piège explosif" },          -- S
     ["Wyvern Sting"] = { "Piqûre de wyverne" },         -- S
+    ["Scorpid Poison"] = { "Poison de scorpide" },      -- S
 }
 
 local function isFinisher(desc)

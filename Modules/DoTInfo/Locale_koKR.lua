@@ -43,6 +43,7 @@ local NAMES = {
     ["Rupture"] = { "파열" },
     ["Siphon Life"] = { "생명력 착취" },
     ["Serpent Sting"] = { "독사 쐐기" },
+    ["Scorpid Poison"] = { "전갈 독" },
     ["Pyroblast"] = { "불덩이 작렬" },
     ["Rain of Fire"] = { "불의 비" },
     ["Hellfire"] = { "지옥의 불길" },

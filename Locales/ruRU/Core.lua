@@ -631,4 +631,26 @@ BIT.RegisterLocale("ruRU", {
   ["INDICATORS"] = "ИНДИКАТОРЫ",
   ["FEATURES"] = "ФУНКЦИИ",
   ["EXPERIMENTS (ON BY DEFAULT IN THIS BETA)"] = "ЭКСПЕРИМЕНТЫ (В ЭТОЙ БЕТЕ ВКЛЮЧЕНЫ ПО УМОЛЧАНИЮ)",
+
+  -- переключатель стиля значков и группы значков убийства
+  ["Art style"] = "Стиль значков",
+  ["Style: %s"] = "Стиль: %s",
+  ["Art style: %s."] = "Стиль значков: %s.",
+  ["Art style: %s. /upt art 2d | pixel | classic"] = "Стиль значков: %s. /upt art 2d | pixel | classic",
+  ["Stylized 2D"] = "Стилизованный 2D",
+  ["Pixel Art"] = "Пиксель-арт",
+  ["Switches Soul Shards, combo orbs, range marks, upgrade arrows and markers between Stylized 2D, Pixel Art and Classic. Takes effect at once."] =
+    "Переключает осколки души, сферы серии, метки дальности, стрелки улучшений и маркеры между стилизованным 2D, пиксель-артом и классикой. Действует сразу.",
+  ["Faceted skull"] = "Гранёный череп",
+  ["Lethal crosshair"] = "Смертельный прицел",
+  ["Execution blades"] = "Клинки казни",
+  ["Crystal checkmark"] = "Кристальная галочка",
+  ["Crystal cross"] = "Кристальный крест",
+  ["Pixel skull"] = "Пиксельный череп",
+  ["Pixel crosshair"] = "Пиксельный прицел",
+  ["Pixel blades"] = "Пиксельные клинки",
+  ["Pixel checkmark"] = "Пиксельная галочка",
+  ["Pixel cross"] = "Пиксельный крест",
+  ["Show what execute/finisher is watched and test its icon for 5 seconds."] =
+    "Показать отслеживаемую способность добивания и проверить её значок в течение 5 секунд.",
 })

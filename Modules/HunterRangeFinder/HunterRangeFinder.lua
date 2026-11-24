@@ -46,8 +46,14 @@ local DEFAULTS = {
 --     ChatFrameConstants.lua ICON_LIST[8]/ICON_TAG_LIST skull, Gethe 8165d4).
 --   Melee mark: Interface\Icons\INV_Sword_04 (public Blizzard bag/inventory
 --     sword icon, used as a static melee glyph; never a RaidTarget assignment).
-local DEAD_ZONE_SKULL = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8"
+local DEAD_ZONE_SKULL = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\DoTInfo\\Textures\\KillSkull2D"
 local MELEE_ICON = "Interface\\Icons\\INV_Sword_04"
+local function deadZoneTexture()
+    if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
+        return BIT.Art.Texture("deadZoneSkull") or DEAD_ZONE_SKULL
+    end
+    return DEAD_ZONE_SKULL
+end
 -- One-time narrow shape migration version (own module key only).
 local R1_SHAPE_MIGRATION_VERSION = 1
 
@@ -496,6 +502,7 @@ local function renderScene(frame, style, bandName, scatter)
     local iconSize = math.max(16, 24 * (style.scale or 1))
     if frame.deadIcon then
         if showDead then
+            frame.deadIcon:SetTexture(deadZoneTexture())
             frame.deadIcon:Show()
             frame.deadIcon:SetSize(iconSize, iconSize)
             frame.deadIcon:ClearAllPoints()
@@ -889,6 +896,15 @@ local function start()
             elseif hud and preview then
                 pcall(renderScene, hud,
                     BIT.Style.Resolve(M.moduleName, hunterLegacy), "PREVIEW", false)
+            end
+        end)
+    end
+    if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+        BIT.Art.Subscribe(function()
+            if hud and band and band ~= "OOR" and reanchorHunterHud() then
+                pcall(renderScene, hud, BIT.Style.Resolve(M.moduleName, hunterLegacy), band, scatterRed)
+            elseif hud and preview then
+                pcall(renderScene, hud, BIT.Style.Resolve(M.moduleName, hunterLegacy), "PREVIEW", false)
             end
         end)
     end
@@ -1465,6 +1481,10 @@ local function build(parent)
     end
     selectTab(tabs[1])
     refreshAll()
+    parent:HookScript("OnShow", refreshAll)
+    if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+        BIT.Art.Subscribe(refreshAll)
+    end
 end
 
 ----------------------------------------------------------------------------------------------

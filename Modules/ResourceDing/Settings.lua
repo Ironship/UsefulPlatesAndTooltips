@@ -747,4 +747,7 @@ BIT.RegisterTab("ResourceDing", {
   width = 840, height = 560,
   build = function(parent) Addon.CreateSettingsPanel(parent) end,
 })
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+  BIT.Art.Subscribe(function() updateLivePreview() end)
+end
 BIT.tabWords.ding = "ResourceDing"

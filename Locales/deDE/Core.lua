@@ -630,4 +630,26 @@ BIT.RegisterLocale("deDE", {
   ["INDICATORS"] = "ANZEIGEN",
   ["FEATURES"] = "FUNKTIONEN",
   ["EXPERIMENTS (ON BY DEFAULT IN THIS BETA)"] = "EXPERIMENTE (IN DIESER BETA STANDARDMÄSSIG AN)",
+
+  -- art style switcher and grouped kill icon labels
+  ["Art style"] = "Symbolstil",
+  ["Style: %s"] = "Stil: %s",
+  ["Art style: %s."] = "Symbolstil: %s.",
+  ["Art style: %s. /upt art 2d | pixel | classic"] = "Symbolstil: %s. /upt art 2d | pixel | classic",
+  ["Stylized 2D"] = "Stilisiertes 2D",
+  ["Pixel Art"] = "Pixel-Art",
+  ["Switches Soul Shards, combo orbs, range marks, upgrade arrows and markers between Stylized 2D, Pixel Art and Classic. Takes effect at once."] =
+    "Wechselt Seelensplitter, Combokugeln, Reichweitenmarken, Aufwertungspfeile und Markierungen zwischen Stilisiertem 2D, Pixel-Art und Klassisch. Wirkt sofort.",
+  ["Faceted skull"] = "Facettierter Schädel",
+  ["Lethal crosshair"] = "Tödliches Fadenkreuz",
+  ["Execution blades"] = "Hinrichtungsklingen",
+  ["Crystal checkmark"] = "Kristall-Häkchen",
+  ["Crystal cross"] = "Kristall-Kreuz",
+  ["Pixel skull"] = "Pixel-Schädel",
+  ["Pixel crosshair"] = "Pixel-Fadenkreuz",
+  ["Pixel blades"] = "Pixel-Klingen",
+  ["Pixel checkmark"] = "Pixel-Häkchen",
+  ["Pixel cross"] = "Pixel-Kreuz",
+  ["Show what execute/finisher is watched and test its icon for 5 seconds."] =
+    "Zeigt den überwachten Hinrichten-/Abschlusszauber und testet sein Symbol 5 Sekunden lang.",
 })

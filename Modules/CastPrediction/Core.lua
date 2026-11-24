@@ -1304,7 +1304,7 @@ local function topLayerOf(frame)
     -- Other addons can hang hundreds or thousands of frames under a unit frame over a session;
     -- stop after 300 so a walk never stalls a frame (Does It Die PR #40).
     local maxFrames = 300
-    local topStrata, topLevel, visited = "BACKGROUND", 0, 0
+    local topStrata, topLevel, visited, sawSecret = "BACKGROUND", 0, 0, false
     local function visit(f, depth)
         visited = visited + 1
         if visited > maxFrames then return end
@@ -1324,6 +1324,8 @@ local function topLayerOf(frame)
             elseif rank == topRank and level > topLevel then
                 topLevel = level
             end
+        else
+            sawSecret = true
         end
         if depth < 6 then
             local children = { pcall(f.GetChildren, f) }
@@ -1336,7 +1338,7 @@ local function topLayerOf(frame)
         end
     end
     visit(frame, 0)
-    return topStrata, topLevel
+    return topStrata, topLevel, sawSecret
 end
 
 local function updateLayering(now)
@@ -1352,26 +1354,32 @@ local function updateLayering(now)
         local parent = markerClip.GetParent and markerClip:GetParent()
         if parent ~= healthBar then pcall(markerClip.SetParent, markerClip, healthBar) end
     end
-    local strata, level
+    local strata, level, sawSecret
     if previewHost then
         -- One strata above the options window; dropdowns and tooltips sit higher still.
         strata, level = "FULLSCREEN", 1
     else
         local ok
-        ok, strata, level = pcall(topLayerOf, targetHost or healthBar or TargetFrame)
+        ok, strata, level, sawSecret = pcall(topLayerOf, targetHost or healthBar or TargetFrame)
         if not ok then return end
         if not strata then
             layerCheckedAt = now - 0.75 -- nothing to scan yet (the custom frame is hidden): look again soon
             return
         end
+        if sawSecret then
+            -- Secret strata/levels in Forever cannot be compared (DoesItDie PR #56): add a safe margin above them.
+            if (STRATA_RANK[strata] or 0) < STRATA_RANK.HIGH then strata = "HIGH" end
+            level = math.min(level + 1000, 9980)
+        end
     end
     for i, frame in ipairs({ markerClip, marker, fillLayer, outlineLayer, labelLayer, killWindow, killBar }) do
         frame:SetFrameStrata(strata)
-        frame:SetFrameLevel(level + i)
+        frame:SetFrameLevel(math.min(level + i, 9999))
     end
     if strata ~= lastStrata or level ~= lastLevel then
         lastStrata, lastLevel = strata, level
-        trace(string.format("LAYER target frame top is %s/%d", tostring(strata), tonumber(level) or 0))
+        trace(string.format("LAYER target frame top is %s/%d%s", tostring(strata), tonumber(level) or 0,
+            sawSecret and " (secret layer margin)" or ""))
     end
 end
 
@@ -2555,3 +2563,12 @@ ns._settings = function() return settings end
 ns._colorList = function() return COLOR_LIST end
 ns._defaults = function() return DEFAULTS end
 ns._refresh = safeRefresh
+
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    BIT.Art.Subscribe(function(style)
+        if settings and type(BIT.Art.MapKillIcon) == "function" and settings.killIcon then
+            settings.killIcon = BIT.Art.MapKillIcon(settings.killIcon, style)
+        end
+        if settings then safeRefresh() end
+    end)
+end

@@ -65,7 +65,7 @@ local SLOW_LAYER_MS = 10
 -- level 1000) under every Blizzard unit frame whose own art is LOW, and the marker followed it into the strata of the
 -- world map, above the map's art.
 local function topLayer(root)
-    local bestStrata, bestLevel, visited = "BACKGROUND", 0, 0
+    local bestStrata, bestLevel, visited, sawSecret = "BACKGROUND", 0, 0, false
     local function visit(frame, depth)
         visited = visited + 1
         if visited > MAX_LAYER_FRAMES then return end
@@ -75,7 +75,7 @@ local function topLayer(root)
             local okShown, shown = pcall(frame.IsShown, frame)
             if okShown and not isSecret(shown) and shown == false then return end
         end
-        -- Some of Blizzard's frames report a secret strata/level; those are skipped (their children aren't).
+        -- Some of Blizzard's frames report a secret strata/level; note it so updateLayering adds a margin above them.
         local okS, strata = pcall(frame.GetFrameStrata, frame)
         local okL, level = pcall(frame.GetFrameLevel, frame)
         if okS and okL and not isSecret(strata) and not isSecret(level) and type(level) == "number" then
@@ -85,6 +85,8 @@ local function topLayer(root)
             elseif rank == bestRank and level > bestLevel then
                 bestLevel = level
             end
+        else
+            sawSecret = true
         end
         if depth < 6 then
             local okC, children = pcall(function() return { frame:GetChildren() } end)
@@ -97,7 +99,7 @@ local function topLayer(root)
         end
     end
     visit(root, 0)
-    return bestStrata, bestLevel, visited
+    return bestStrata, bestLevel, visited, sawSecret
 end
 
 -- The frame that holds `bar`: its topmost ancestor below UIParent.
@@ -118,7 +120,7 @@ local function updateLayering(w, bar, now)
         local root = BIT.Frames and BIT.Frames.Root(bar, "focus") or frameRoot(bar)
         local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
         local started = clock and clock()
-        local ok, strata, level, visited = pcall(topLayer, root)
+        local ok, strata, level, visited, sawSecret = pcall(topLayer, root)
         local ms = started and (clock() - started)
         local capped = ok and type(visited) == "number" and visited > MAX_LAYER_FRAMES
         if ok and not slowLayerLogged and (capped or (ms and ms > SLOW_LAYER_MS)) and ns.trace then
@@ -126,10 +128,16 @@ local function updateLayering(w, bar, now)
             ns.trace(string.format("SLOW focus layer check (logged once): %s frames, %.1f ms",
                 capped and ("over " .. MAX_LAYER_FRAMES .. " (stopped there)") or tostring(visited), ms or -1))
         end
+        if ok and sawSecret then
+            -- Secret strata/levels in Forever cannot be compared (DoesItDie PR #56): add a safe margin above them.
+            if (STRATA_RANK[strata] or 0) < STRATA_RANK.HIGH then strata = "HIGH" end
+            level = math.min(level + 1000, MAX_LEVEL - 4)
+        end
         if ok and (strata ~= topStrata or level ~= topLevel) then
             topStrata, topLevel = strata, level
             if ns.trace then
-                ns.trace(string.format("LAYER focus frame top is %s/%d; focus marker placed above it", strata, level))
+                ns.trace(string.format("LAYER focus frame top is %s/%d%s; focus marker placed above it", strata, level,
+                    sawSecret and " (secret layer margin)" or ""))
             end
         end
     end

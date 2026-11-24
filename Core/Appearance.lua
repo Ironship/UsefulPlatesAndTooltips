@@ -492,6 +492,22 @@ function Style.Resolve(moduleName, legacy)
     return container
   end
 
+  local CORE_TEX_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Core\\Textures\\"
+  local MARKER_DIAMOND = CORE_TEX_DIR .. "MarkerDiamond"
+  local MARKER_DIAMOND_BEZEL = CORE_TEX_DIR .. "MarkerDiamondBezel"
+  local MARKER_SEGMENT = CORE_TEX_DIR .. "MarkerSegment"
+
+  local function artStyle()
+    return BIT and BIT.Art and type(BIT.Art.Get) == "function" and BIT.Art.Get() or "2d"
+  end
+
+  local function artTexture(slot, fallback)
+    if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
+      return BIT.Art.Texture(slot)
+    end
+    return fallback
+  end
+
   -- The border stroke needs the client's Backdrop API: only frames with the
   -- BackdropTemplate mixin (or a client that always provides it) carry SetBackdrop.
   -- Absent API must not crash the markers, and a zero border must clear the stroke
@@ -509,13 +525,20 @@ function Style.Resolve(moduleName, legacy)
     elseif hasBackdrop then
       holder:SetBackdrop(nil)
     end
-    holder.fill:SetColorTexture(c[1], c[2], c[3], alpha)
+    local segTex = artTexture("segment", MARKER_SEGMENT)
+    if segTex and segTex ~= WHITE then
+      holder.fill:SetTexture(segTex)
+      holder.fill:SetVertexColor(c[1], c[2], c[3], alpha)
+    else
+      holder.fill:SetColorTexture(c[1], c[2], c[3], alpha)
+    end
   end
 
   local function toSquare(holder)
     if holder.orb then holder.orb:Hide() end
+    if holder.bezel then holder.bezel:Hide() end
     holder.fill:Show()
-    holder.fill:SetTexture(WHITE)
+    holder.fill:SetTexture(artTexture("segment", MARKER_SEGMENT) or WHITE)
     holder.fill:SetVertexColor(1, 1, 1, 1)
     holder.fill:ClearAllPoints()
     holder.fill:SetAllPoints(holder)
@@ -523,10 +546,10 @@ function Style.Resolve(moduleName, legacy)
 
   -- Render markers into a container from a resolved style. activeCount and totalCount are plain
   -- readable values from the module's own guards; clamped to 0..totalCount here. The marker
-  -- family: segments (length x thickness on a gap), dots (round CIRCLE discs with an outset
-  -- circular border, gap between painted extents), diamond (rotated squares, falling back to
-  -- squares when the client has no SetRotation) and bar (one strip filled by the active
-  -- share). The scale multiplies the geometry. No unit, target or game API is read here.
+  -- family: segments (beveled plates on a gap), dots (round orbs with a metallic ring, gap
+  -- between painted extents), diamond (faceted diamond jewels with lit steel bezels) and bar
+  -- (one strip filled by the active share). The scale multiplies the geometry.
+  -- No unit, target or game API is read here.
   function Style.RenderMarkers(container, style, activeCount, totalCount, role)
     local c = roleColor(style, role)
     local markers = container.markers
@@ -547,6 +570,7 @@ function Style.Resolve(moduleName, legacy)
       container:SetSize(totalCount > 0 and totalCount * step - gap or 0, outer)
       for i, holder in ipairs(markers) do
         holder:SetShown(i <= totalCount)
+        if holder.bezel then holder.bezel:Hide() end
         if i <= totalCount then
           holder:SetSize(outer, outer)
           holder:ClearAllPoints()
@@ -574,6 +598,57 @@ function Style.Resolve(moduleName, legacy)
       return
     end
 
+    if style.shape == "diamond" then
+      local step = thick + gap
+      local width = totalCount > 0 and totalCount * step - gap or 0
+      container:SetSize(width, thick)
+      local classic = artStyle() == "classic"
+      local gemTex = artTexture("diamond", MARKER_DIAMOND)
+      local bezelTex = artTexture("diamondBezel", MARKER_DIAMOND_BEZEL)
+      for i, holder in ipairs(markers) do
+        if holder.orb then holder.orb:Hide() end
+        if i <= totalCount then
+          local active = i <= activeCount
+          local alpha = active and activeAlpha or dimAlpha
+          holder:SetShown(true)
+          holder:SetSize(thick, thick)
+          holder:ClearAllPoints()
+          holder:SetPoint("TOPLEFT", container, "TOPLEFT", (i - 1) * step, 0)
+          holder.fill:Show()
+          holder.fill:ClearAllPoints()
+          holder.fill:SetAllPoints(holder)
+          if classic or not gemTex or gemTex == WHITE then
+            if holder.bezel then holder.bezel:Hide() end
+            paint(holder, style, c, alpha)
+            pcall(function() holder.fill:SetRotation(math.pi / 4) end)
+          else
+            if holder.SetBackdrop then holder:SetBackdrop(nil) end
+            pcall(function() holder.fill:SetRotation(0) end)
+            holder.fill:SetTexture(gemTex)
+            holder.fill:SetVertexColor(c[1], c[2], c[3], alpha)
+            local bezel = holder.bezel
+            if not bezel then
+              bezel = holder:CreateTexture(nil, "OVERLAY", nil, 1)
+              bezel:SetAllPoints(holder)
+              holder.bezel = bezel
+            end
+            if bezelTex then
+              bezel:SetTexture(bezelTex)
+              bezel:SetVertexColor(1, 1, 1, active and style.opacity or (style.opacity * 0.55))
+              bezel:Show()
+            else
+              bezel:Hide()
+            end
+          end
+        else
+          holder:SetShown(false)
+          if holder.bezel then holder.bezel:Hide() end
+          pcall(function() holder.fill:SetRotation(0) end)
+        end
+      end
+      return
+    end
+
     if style.shape == "bar" then
       local fill, rest = markers[1], markers[2]
       local width = len
@@ -596,9 +671,6 @@ function Style.Resolve(moduleName, legacy)
         end
       end
       for i = 3, #markers do markers[i]:SetShown(false) toSquare(markers[i]) end
-      -- leaving the diamond must not keep the stale 45-degree turn on the bar's own
-      -- fill/remainder either (direct diamond -> bar, no intermediate shape); guarded
-      -- so rotation-less clients keep their plain fallback
       pcall(function()
         for i = 1, #markers do
           markers[i].fill:SetRotation(0)
@@ -607,8 +679,8 @@ function Style.Resolve(moduleName, legacy)
       return
     end
 
-    local step = style.shape == "segments" and len + gap or thick + gap
-    local mw, mh = style.shape == "segments" and len or thick, thick
+    local step = len + gap
+    local mw, mh = len, thick
     local width = totalCount > 0 and totalCount * step - gap or 0
     container:SetSize(width, mh)
     for i = 1, #markers do
@@ -624,24 +696,11 @@ function Style.Resolve(moduleName, legacy)
         toSquare(m)
       end
     end
-    if style.shape == "diamond" then
-      local ok = pcall(function()
-        for i = 1, math.min(totalCount, #markers) do
-          markers[i].fill:SetRotation(math.pi / 4)
-        end
-      end)
-      if not ok then
-        -- a client without texture rotation: the squares stay squares
+    pcall(function()
+      for i = 1, #markers do
+        markers[i].fill:SetRotation(0)
       end
-    else
-      -- leaving the diamond must not keep the stale 45-degree turn; guarded so
-      -- clients without texture rotation keep their plain-squares fallback
-      pcall(function()
-        for i = 1, #markers do
-          markers[i].fill:SetRotation(0)
-        end
-      end)
-    end
+    end)
   end
 
 -- Remove one role-colour write from a scope, so an edit can return to "no override" (the
@@ -1129,7 +1188,17 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
       end
     end
   end)
-  panel.Release = unsubscribe
+  local unsubscribeArt
+  if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    unsubscribeArt = BIT.Art.Subscribe(function()
+      refreshPanel()
+      if refresh then pcall(refresh) end
+    end)
+  end
+  panel.Release = function()
+    if type(unsubscribe) == "function" then unsubscribe() end
+    if type(unsubscribeArt) == "function" then unsubscribeArt() end
+  end
 
   refreshPanel()
   -- The sample hangs below the last control; keep it inside the panel, and grow

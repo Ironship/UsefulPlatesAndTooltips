@@ -1199,6 +1199,39 @@ local function createWindow()
     window.refreshProfileButton = function() profileBtn:SetText(profileButtonText()) end
   end
 
+  -- Global art style selector (Stylized 2D / Pixel Art / Classic): updates HUD and open previews live.
+  if BIT.Art and BIT.Looks and BIT.Looks.PickList then
+    local function artButtonText()
+      return string.format(BIT.L("Style: %s"), BIT.Art.Label())
+    end
+    local artBtn = UI.DropdownButton(window, 152, function(self)
+      BIT.Looks.PickList(self, BIT.Art.List(), BIT.Art.Get(), function(id)
+        BIT.Art.Set(id)
+        self:SetLabel(artButtonText())
+      end)
+    end)
+    artBtn:SetHeight(20)
+    if window.profileButton then
+      artBtn:SetPoint("LEFT", window.profileButton, "RIGHT", 6, 0)
+    else
+      artBtn:SetPoint("TOPLEFT", window, "TOPLEFT", 10, -4)
+    end
+    artBtn:SetLabel(artButtonText())
+    artBtn:HookScript("OnEnter", function(self)
+      if not GameTooltip then return end
+      GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+      GameTooltip:SetText(BIT.L("Art style"), 1, 0.82, 0)
+      GameTooltip:AddLine(BIT.L("Switches Soul Shards, combo orbs, range marks, upgrade arrows and markers between Stylized 2D, Pixel Art and Classic. Takes effect at once."), 0.9, 0.9, 0.9, true)
+      GameTooltip:Show()
+    end)
+    artBtn:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+    window.artButton = artBtn
+    window.refreshArtButton = function() artBtn:SetLabel(artButtonText()) end
+    BIT.Art.Subscribe(function()
+      if window and window.refreshArtButton then window.refreshArtButton() end
+    end)
+  end
+
   -- The language of the settings, tooltips and chat lines. Its own label is not translated on purpose: whoever lands in a
   -- language they cannot read must still find it. The change applies after a reload, offered next to it.
   local language = UI.DropdownButton(window, 156, function(self)
@@ -1304,6 +1337,7 @@ local function createWindow()
       refreshSwitch(pages[current])
     end
     if type(window.refreshProfileButton) == "function" then window.refreshProfileButton() end
+    if type(window.refreshArtButton) == "function" then window.refreshArtButton() end
   end)
 end
 
@@ -1347,6 +1381,18 @@ function BIT.RegisterCommand(word, fn) BIT.commands[word] = fn end
 BINDING_HEADER_USEFULPLATESANDTOOLTIPS = "DoesItDiePlus"
 BINDING_NAME_USEFULPLATESANDTOOLTIPS_SETTINGS = "Open settings"
 function UsefulPlatesAndTooltips_ToggleSettings() BIT.OpenSettings() end
+
+BIT.RegisterCommand("art", function(rest)
+  if not BIT.Art then return end
+  local choice = type(rest) == "string" and rest:match("^%s*(%S+)") or nil
+  choice = choice and choice:lower() or nil
+  if choice == "2d" or choice == "3d" or choice == "pixel" or choice == "classic" then
+    BIT.Art.Set(choice)
+    BIT.Say(string.format(BIT.L("Art style: %s."), BIT.Art.Label()))
+    return
+  end
+  BIT.Say(string.format(BIT.L("Art style: %s. /upt art 2d | pixel | classic"), BIT.Art.Label()))
+end)
 
 -- Short names for the tabs: /upt sdi, /upt did, /upt stats, /upt ding, /upt range
 BIT.tabWords = {}

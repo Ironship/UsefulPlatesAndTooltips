@@ -7,6 +7,29 @@ local CIRCLE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\"
 local ORB, RING, ORB_DARK, GLOW = DIR .. "ComboOrb", DIR .. "ComboRing", DIR .. "ComboOrbDark", DIR .. "ComboGlow"
 
+local function orbAsset(slot, fallback)
+  if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
+    local p = BIT.Art.Texture(slot)
+    if p then return p end
+  end
+  return fallback
+end
+
+function Orbs.ApplyArt(dot)
+  if type(dot) ~= "table" then return end
+  local style = BIT and BIT.Art and type(BIT.Art.Get) == "function" and BIT.Art.Get() or "2d"
+  if dot._artStyle == style then return end
+  dot._artStyle = style
+  local orb = orbAsset("comboOrb", ORB)
+  if dot.glow then dot.glow:SetTexture(orbAsset("comboGlow", GLOW)) end
+  if dot.back then dot.back:SetTexture(orbAsset("comboOrbDark", ORB_DARK)) end
+  if type(dot.SetStatusBarTexture) == "function" then dot:SetStatusBarTexture(orb) end
+  if type(dot.overlay) == "table" then
+    if type(dot.overlay.SetStatusBarTexture) == "function" then dot.overlay:SetStatusBarTexture(orb) end
+    if dot.overlay.ring then dot.overlay.ring:SetTexture(orbAsset("comboRing", RING)) end
+  end
+end
+
 function Orbs.Layout(dot, border)
   border = border or 1
   if type(dot) ~= "table" then return end
@@ -39,6 +62,7 @@ function Orbs.Layout(dot, border)
 end
 
 function Orbs.Paint(dot, color, opacity, fullColor)
+  Orbs.ApplyArt(dot)
   opacity = opacity or 1
   dot.back:SetVertexColor(1, 1, 1, 0.9 * opacity)
   dot.border:SetVertexColor(0, 0, 0, 0.9 * opacity)
@@ -101,6 +125,7 @@ function Orbs.Create(parent)
     end
   end
   dot.glow:Hide()
+  Orbs.ApplyArt(dot)
   Orbs.Layout(dot)
   return dot
 end

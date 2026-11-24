@@ -18,10 +18,18 @@
 local _, BIT = ...
 local M = BIT.Module("Range")
 
+local TEX_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\Range\\Textures\\"
 local ICON = {
-  ["in"] = "Interface\\RaidFrame\\ReadyCheck-Ready",
-  out = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+  ["in"] = TEX_DIR .. "RangeIn",
+  out = TEX_DIR .. "RangeOut",
 }
+local function rangeIcon(state)
+  if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
+    local p = BIT.Art.Texture(state == "in" and "rangeIn" or "rangeOut")
+    if p then return p end
+  end
+  return ICON[state]
+end
 local UPDATE_INTERVAL = 0.1
 
 local DEFAULTS = {
@@ -276,7 +284,7 @@ local function update()
   end
   if not place(plate) then icon:Hide() return end
   icon:SetSize(settings.size, settings.size)
-  icon.texture:SetTexture(ICON[state])
+  icon.texture:SetTexture(rangeIcon(state))
   icon:Show()
   M.shown = state
 end
@@ -593,7 +601,7 @@ local function buildRangePreview(parent)
     sample.health:SetMinMaxValues(0, 100)
     sample.health:SetValue(i == 1 and 72 or 46)
     sample.icon = scene:CreateTexture(nil, "OVERLAY")
-    sample.icon:SetTexture(i == 1 and ICON["in"] or ICON.out)
+    sample.icon:SetTexture(rangeIcon(i == 1 and "in" or "out"))
     sample.icon:SetSize(26, 26)
     if i == 1 then
       sample.icon:SetPoint("BOTTOM", sample.frame, "TOP", 0, 4)
@@ -636,6 +644,7 @@ local function renderRangePreview(scene, style)
       sample.icon:SetPoint("LEFT", sample.frame, "RIGHT", 2, 0)
     end
     sample.icon:SetSize(size, size)
+    sample.icon:SetTexture(rangeIcon(i == 1 and "in" or "out"))
     sample.icon:SetAlpha(style.opacity)
     local labelY = -(cursor + clusterHeight + 8)
     sample.label:ClearAllPoints()
@@ -705,7 +714,7 @@ local function updatePreview()
     mark:SetPoint("BOTTOM", window.previewBar, "TOP", 0, settings.offset)
   end
   mark:SetSize(settings.size, settings.size)
-  mark.texture:SetTexture(ICON[state])
+  mark.texture:SetTexture(rangeIcon(state))
   mark:SetShown(on and (not preview.noPlate or beside) and true or false)
   local stateText = state == "in" and BIT.L("In range - the green checkmark") or BIT.L("Out of range - the red X")
   if preview.noPlate and not beside then
@@ -882,7 +891,7 @@ local function buildLivePreview(pane)
   mark:SetFrameLevel(plate.frame:GetFrameLevel() + 10)
   mark.texture = mark:CreateTexture(nil, "OVERLAY")
   mark.texture:SetAllPoints()
-  mark.texture:SetTexture(ICON["in"])
+  mark.texture:SetTexture(rangeIcon("in"))
   window.previewBar, window.previewIcon = bar, mark
   window.previewScene, window.previewPlate, window.previewTarget = scene, plate, target
 
@@ -1028,6 +1037,13 @@ local function buildContent(top, anchor)
   end)
   selectTab(tabs[1])
   changed()
+end
+
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+  BIT.Art.Subscribe(function()
+    update()
+    updatePreview()
+  end)
 end
 
 BIT.RegisterTab("Range", {

@@ -211,7 +211,9 @@ local function setVerdict(kind, text, detail)
     badge:SetBackdropColor(style.bg[1], style.bg[2], style.bg[3], 0.95)
     badge:SetBackdropBorderColor(style.edge[1], style.edge[2], style.edge[3], 0.9)
     badge.accent:SetColorTexture(style.edge[1], style.edge[2], style.edge[3], 1)
-    badge.icon:SetTexture(kind == "lethal" and chosenKillIcon() or style.icon)
+    badge.icon:SetTexture((kind == "lethal" and chosenKillIcon())
+        or (kind == "dead" and BIT.Art and BIT.Art.Texture and BIT.Art.Texture("rangeIn"))
+        or style.icon)
     window.status:SetText(text)
     window.status:SetTextColor(style.text[1], style.text[2], style.text[3])
     window.statusDetail:SetText(detail or "")
@@ -486,6 +488,22 @@ local function buildTabs()
         { enabledIf = killOn, tooltip = "Pixels right (+) or left (-) of the chosen position." })
     icon:slider("skullOffsetY", "Icon vertical offset", -60, 60, 1,
         { enabledIf = killOn, tooltip = "Pixels up (+) or down (-) from the chosen position." })
+    if not ns.Retail then
+        local execOn = function(s) return s.execShow end
+        local execPlatesOn = function(s) return s.execShow and s.execPlates end
+        icon:header("EXECUTE / FINISHER")
+        icon:checkbox("execShow", "Show execute / finisher icon", { tooltip = "Shows Execute, Hammer of Wrath, Shadow Word: Death, "
+            .. "Shadowburn, Ferocious Bite or Eviscerate above the target portrait when its estimated hit would kill the target. "
+            .. "Learns real hit ratios from the damage meter after combat." })
+        icon:checkbox("execPlates", "Also on enemy nameplates", { enabledIf = execOn,
+            tooltip = "Shows the execute icon beside enemy nameplates too. Finishers (Ferocious Bite, Eviscerate) show only on the target's plate." })
+        icon:slider("execSize", "Execute icon size", 16, 64, 1, { enabledIf = execOn })
+        icon:slider("execPlateSize", "Nameplate execute icon size", 12, 48, 1, { enabledIf = execPlatesOn })
+        icon:slider("execOffsetX", "Execute horizontal offset", -120, 120, 1,
+            { enabledIf = execOn, tooltip = "Pixels right (+) or left (-) of the portrait." })
+        icon:slider("execOffsetY", "Execute vertical offset", -120, 120, 1,
+            { enabledIf = execOn, tooltip = "Pixels up (+) or down (-) above the portrait." })
+    end
     icon:gap()
     icon:note("Cast prediction has its own kill icon (Cast > Marker). If you use both, set both, or switch one off.")
 
@@ -520,6 +538,15 @@ local function buildTabs()
     marker:slider("outlineThickness", "Outline thickness", 1, 8, 1, { enabledIf = hasOutline })
     marker:choice("outlineColor", "Outline color", lists.colors, { enabledIf = hasOutline })
     marker:slider("outlineOpacity", "Outline opacity", 0, 100, 5, { suffix = "%", enabledIf = hasOutline })
+    if not ns.Retail then
+        marker:header("PARTY")
+        marker:checkbox("partyDots", "Share DoTs with party", { tooltip = "Shares your DoT estimates in open-world "
+            .. "parties and raids with group members who also enable this option (compatible with DoesItDie), so the "
+            .. "marker and kill icon include everyone's DoTs." })
+        marker:choice("partyDotColor", "Party DoT color", lists.colors,
+            { enabledIf = function(s) return s.partyDots end,
+              tooltip = "Segment color used for party members' shared DoTs." })
+    end
 
     local effects = addTab("Effects")
     effects:checkbox("smoothMotion", "Smooth motion",
@@ -964,4 +991,13 @@ if BIT.RegisterTab then
             geometry = false, border = false, font = true, scale = false, opacity = true },
     })
     BIT.tabWords.dot, BIT.tabWords.did = "DoTInfo", "DoTInfo"
+end
+
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    BIT.Art.Subscribe(function()
+        if window then
+            updatePreview()
+            refreshControls()
+        end
+    end)
 end

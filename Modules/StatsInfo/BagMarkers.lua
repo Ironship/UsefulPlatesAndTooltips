@@ -558,8 +558,17 @@ if BIT.RegisterCommand then BIT.RegisterCommand("bagprobe", function(rest) M.Bag
 -- Nameplates.lua:228), so a TOPRIGHT-anchored piece paints the native rectangle
 -- (x-width, y-height, x, y). The fallback's green UP arrow's 2x2 tip is the piece with the
 -- LARGEST y (tip above the shaft); the red DOWN arrow's tip has the SMALLEST y.
-local UP_TEXTURE = "Interface\\Buttons\\UI-MicroStream-Green" -- mirrored vertically: tip up
-local DOWN_TEXTURE = "Interface\\Buttons\\UI-MicroStream-Red" -- as shipped: tip down
+local STATS_TEX_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\StatsInfo\\Textures\\"
+local UP_TEXTURE = STATS_TEX_DIR .. "ArrowUp"
+local DOWN_TEXTURE = STATS_TEX_DIR .. "ArrowDown"
+local function arrowTextures()
+  if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
+    return BIT.Art.Texture("arrowUp") or UP_TEXTURE,
+      BIT.Art.Texture("arrowDown") or DOWN_TEXTURE,
+      BIT.Art.ArrowFlipUp and BIT.Art.ArrowFlipUp() or false
+  end
+  return UP_TEXTURE, DOWN_TEXTURE, false
+end
 local WHITE = "Interface\\Buttons\\WHITE8X8" -- the fallback pieces' primitive
 local UP_R, UP_G, UP_B = 0.302, 1, 0.302
 local DOWN_R, DOWN_G, DOWN_B = 1, 0.349, 0.349
@@ -714,13 +723,10 @@ local function paintContents(container, verdict, nativeUp)
   elseif arrowMode == "blizzard" then
     for _, t in ipairs(container.arrowPieces or {}) do t:Hide() end
     local t = container.arrow
-    t:SetTexture(up and UP_TEXTURE or DOWN_TEXTURE)
-    -- UI-MicroStream-Green ships pointing down (a download chevron): mirrored vertically the
-    -- tip is at the top. UI-MicroStream-Red keeps the file's own coordinates (tip at the
-    -- bottom). Both are set on every paint -- one pooled texture flips for one verdict and
-    -- must unflip for the next. The files carry the Blizzard green/red themselves: the
-    -- vertex colour stays white here, never the tooltip's tint.
-    if up then t:SetTexCoord(0, 1, 1, 0) else t:SetTexCoord(0, 1, 0, 1) end
+    local upTex, downTex, flipUp = arrowTextures()
+    t:SetTexture(up and upTex or downTex)
+    -- Only Classic's UI-MicroStream-Green ships pointing down; Stylized 2D and Pixel Art arrows already point up.
+    if up and flipUp then t:SetTexCoord(0, 1, 1, 0) else t:SetTexCoord(0, 1, 0, 1) end
     t:SetVertexColor(1, 1, 1, 1)
     t:ClearAllPoints()
     t:SetPoint(point, body, point, shift, 0)
@@ -1516,3 +1522,11 @@ loader:SetScript("OnEvent", function(self, event, arg1)
   scheduleRefresh()
   requestBaganatorRefresh() -- the corner widgets follow the same events (never from onUpdate)
 end)
+
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+  BIT.Art.Subscribe(function()
+    if not active then return end
+    if type(M.RefreshBags) == "function" then M.RefreshBags(true) end
+    requestBaganatorRefresh()
+  end)
+end
