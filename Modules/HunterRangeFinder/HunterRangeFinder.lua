@@ -378,7 +378,7 @@ local function hunterHealthBarOf(plate)
 end
 
 -- Last anchor seat: SetParent/SetPoint only move on change, never every poll.
-local reanchorKey, reanchorOffset = nil, nil
+local reanchorKey, reanchorOffset, reanchorExtra = nil, nil, nil
 
 local function reanchorHunterHud()
     if not hud or not settings then return end
@@ -387,7 +387,7 @@ local function reanchorHunterHud()
             if hud:GetParent() ~= UIParent then hud:SetParent(UIParent) end
             hud:ClearAllPoints()
             hud:SetPoint("CENTER", UIParent, "CENTER", finiteNum(settings.x, DEFAULTS.x), finiteNum(settings.y, DEFAULTS.y))
-            reanchorKey = "screen"
+            reanchorKey, reanchorOffset, reanchorExtra = "screen", nil, nil
         end
         return true
     end
@@ -395,7 +395,7 @@ local function reanchorHunterHud()
         if reanchorKey ~= "unseated" then
             if hud:GetParent() ~= UIParent then hud:SetParent(UIParent) end
             hud:ClearAllPoints()
-            reanchorKey, reanchorOffset = "unseated", nil
+            reanchorKey, reanchorOffset, reanchorExtra = "unseated", nil, nil
         end
         return false
     end
@@ -408,11 +408,12 @@ local function reanchorHunterHud()
     if offset < -140 then offset = -140 elseif offset > 80 then offset = 80 end
     local bar = hunterHealthBarOf(plate)
     if not bar then return noPlate() end
-    if reanchorKey ~= bar or reanchorOffset ~= offset then
+    local extraTop = hud.labelAboveHeight or 0
+    if reanchorKey ~= bar or reanchorOffset ~= offset or reanchorExtra ~= extraTop then
         if hud:GetParent() ~= plate then hud:SetParent(plate) end
         hud:ClearAllPoints()
-        hud:SetPoint("TOP", bar, "BOTTOM", 0, -offset)
-        reanchorKey, reanchorOffset = bar, offset
+        hud:SetPoint("TOP", bar, "BOTTOM", 0, -offset + extraTop)
+        reanchorKey, reanchorOffset, reanchorExtra = bar, offset, extraTop
     end
     return true
 end
@@ -606,6 +607,7 @@ local function renderScene(frame, style, bandName, scatter)
     if showText then labelW, labelH = frame.zone:GetStringWidth(), frame.zone:GetStringHeight() end
     frame.zone:ClearAllPoints()
     if close then
+        frame.labelAboveHeight = 0
         if showDead or showMelee then
             frame.zone:SetPoint("LEFT", (showDead and frame.deadIcon or frame.meleeIcon), "RIGHT", 6, 0)
             if showText then
@@ -619,14 +621,18 @@ local function renderScene(frame, style, bandName, scatter)
         end
     else
         local markers = style.shape == "bar" and frame.bar or frame.rail
+        local markersW, markersH = markers:GetWidth(), markers:GetHeight()
         markers:ClearAllPoints()
-        markers:SetPoint("LEFT", frame, "LEFT", 0, 0)
+        markers:SetPoint("BOTTOM", frame, "BOTTOM", 0, 0)
         if showText then
-            frame.zone:SetPoint("LEFT", markers, "RIGHT", 6, 0)
-            frame:SetSize(markers:GetWidth() + 6 + labelW, math.max(markers:GetHeight(), labelH))
+            local gapY = 3
+            frame.labelAboveHeight = labelH + gapY
+            frame.zone:SetPoint("BOTTOM", markers, "TOP", 0, gapY)
+            frame:SetSize(math.max(markersW, labelW), markersH + gapY + labelH)
         else
-            frame.zone:SetPoint("LEFT", markers, "RIGHT", 0, 0)
-            frame:SetSize(markers:GetWidth(), markers:GetHeight())
+            frame.labelAboveHeight = 0
+            frame.zone:SetPoint("BOTTOM", markers, "TOP", 0, 0)
+            frame:SetSize(markersW, markersH)
         end
     end
 end
@@ -783,7 +789,9 @@ local function updateDisplay(_, dt)
     if band == lastRenderedBand and scatter == lastRenderedScatter
         and scatterRange == lastRenderedScatterRange then return end
     lastRenderedBand, lastRenderedScatter, lastRenderedScatterRange = band, scatter, scatterRange
+    local prevExtra = hud.labelAboveHeight or 0
     renderScene(hud, BIT.Style.Resolve(M.moduleName, hunterLegacy), band, scatter)
+    if (hud.labelAboveHeight or 0) ~= prevExtra then reanchorHunterHud() end
 end
 
 -- The anchor: the ordinary saved offset from the screen centre. Frame scale and
@@ -803,7 +811,7 @@ local function resetPosition()
     if not settings then return end
     settings.x, settings.y = DEFAULTS.x, DEFAULTS.y
     -- Forget the current anchor so an attached rail is re-seated by the attach setting, not left on the screen spot.
-    reanchorKey, reanchorOffset = nil, nil
+    reanchorKey, reanchorOffset, reanchorExtra = nil, nil, nil
     if hud then
         position()
         if not reanchorHunterHud() then hideUnseatedHud() end
@@ -904,9 +912,10 @@ local function start()
     if BIT.Style and BIT.Style.Subscribe then
         pcall(BIT.Style.Subscribe, M.moduleName, function()
             if hud and band and band ~= "OOR" and reanchorHunterHud() then
+                local prevExtra = hud.labelAboveHeight or 0
                 local ok = pcall(renderScene, hud,
                     BIT.Style.Resolve(M.moduleName, hunterLegacy), band, scatterRed)
-                if not ok then end
+                if ok and (hud.labelAboveHeight or 0) ~= prevExtra then reanchorHunterHud() end
             elseif hud and preview then
                 pcall(renderScene, hud,
                     BIT.Style.Resolve(M.moduleName, hunterLegacy), "PREVIEW", false)
@@ -916,7 +925,9 @@ local function start()
     if BIT.Art and type(BIT.Art.Subscribe) == "function" then
         BIT.Art.Subscribe(function()
             if hud and band and band ~= "OOR" and reanchorHunterHud() then
-                pcall(renderScene, hud, BIT.Style.Resolve(M.moduleName, hunterLegacy), band, scatterRed)
+                local prevExtra = hud.labelAboveHeight or 0
+                local ok = pcall(renderScene, hud, BIT.Style.Resolve(M.moduleName, hunterLegacy), band, scatterRed)
+                if ok and (hud.labelAboveHeight or 0) ~= prevExtra then reanchorHunterHud() end
             elseif hud and preview then
                 pcall(renderScene, hud, BIT.Style.Resolve(M.moduleName, hunterLegacy), "PREVIEW", false)
             end
@@ -1048,8 +1059,9 @@ local function seatPreviewRail()
     if not sample or not previewBar then return end
     local offset = finiteNum(tonumber(settings and settings.plateOffset), DEFAULTS.plateOffset)
     if offset < -140 then offset = -140 elseif offset > 80 then offset = 80 end
+    local extraTop = sample.labelAboveHeight or 0
     sample:ClearAllPoints()
-    sample:SetPoint("TOP", previewBar, "BOTTOM", 0, -offset)
+    sample:SetPoint("TOP", previewBar, "BOTTOM", 0, -offset + extraTop)
     -- Center the ensemble (the plate with the rail seated off its bar) in the scene: the paint
     -- starts at the sample's top (30 below the plate top, the bar bottom) plus the offset;
     -- 36 is the plate's height. Heights come from the render just done, never a previous.
@@ -1059,8 +1071,8 @@ local function seatPreviewRail()
         local contentH = sample:GetHeight()
         local sceneH = select(2, pcall(scene.GetHeight, scene))
         sceneH = type(sceneH) == "number" and sceneH or 228
-        local above = math.max(0, -(30 + offset))
-        local below = math.max(0, 30 + offset + contentH - 36)
+        local above = math.max(0, -(30 + offset - extraTop))
+        local below = math.max(0, 30 + offset - extraTop + contentH - 36)
         plate.frame:ClearAllPoints()
         plate.frame:SetPoint("TOP", scene, "TOP", 0, -(sceneH / 2 - 18 + (above - below) / 2))
     end
@@ -1083,7 +1095,9 @@ local function refreshAll()
         local b = preview and "PREVIEW" or band
         if b and b ~= "OOR" then
             if reanchorHunterHud() then
+                local prevExtra = hud.labelAboveHeight or 0
                 renderScene(hud, style, b, scatterRed)
+                if (hud.labelAboveHeight or 0) ~= prevExtra then reanchorHunterHud() end
             else
                 hideUnseatedHud()
             end
@@ -1329,7 +1343,7 @@ local function buildTabs(parent, isHunter)
     refreshPlateClash()
     display:header("INDICATORS")
     parent.rangeText = display:checkbox("showRangeText", "Show range text",
-        { tooltip = "The label under the rail (25-30 yd, MELEE, DEAD ZONE). Unchecked keeps only the coloured "
+        { tooltip = "The label above the rail (25-30 yd, MELEE, DEAD ZONE). Unchecked keeps only the coloured "
             .. "rail and the MELEE / Dead Zone icons." })
     parent.deadIcon = display:checkbox("showDeadzoneIcon", "Show Dead Zone skull (native)",
         { tooltip = "Native Blizzard raid skull for the 5-8 yd dead zone. Unchecked hides it." })

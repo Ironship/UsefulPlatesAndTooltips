@@ -396,6 +396,7 @@ end
 -- of a second per plate, so the lookup above runs a few times a second for a plate however many ask. A plate that is
 -- handed to another unit forgets it at once.
 local lookupCache = setmetatable({}, { __mode = "k" })
+local rightEdgeCache = setmetatable({}, { __mode = "k" })
 local LOOKUP_TTL = 0.25
 
 function Plate.HealthBar(plate)
@@ -421,6 +422,7 @@ do
     if ok and type(plate) == "table" then
       lookupCache[plate] = nil
       searchCache[plate] = nil
+      rightEdgeCache[plate] = nil
     end
   end)
 end
@@ -487,23 +489,73 @@ end
 -- wide/custom plates (Plater, ElvUI, Threat Plates) that have no external right-side badge.
 function Plate.RightEdgeOffset(plate, healthBar)
   if type(plate) ~= "table" or type(healthBar) ~= "table" then return 4 end
-  local badge = plate.uptLevelBadge
-  if not badge then
-    local uf = read(function() return plate.UnitFrame end)
-    if type(uf) == "table" then
-      badge = read(function() return uf.LevelFrame or uf.levelFrame or uf.LevelIndicator end)
-    end
+  local now = GetTime()
+  local cached = rightEdgeCache[plate]
+  if cached and cached.bar == healthBar and (now - cached.at) < INSET_TTL then
+    return cached.value
   end
+  local hr = read(healthBar.GetRight, healthBar)
+  local badge = plate.uptLevelBadge
+  local uf = not badge and read(function() return plate.UnitFrame end) or nil
+  if not badge and type(uf) == "table" then
+    badge = read(function()
+      return uf.LevelFrame or uf.levelFrame or uf.LevelIndicator or uf.Level or uf.ClassificationFrame
+        or (type(uf.HealthBarsContainer) == "table" and uf.HealthBarsContainer.LevelFrame)
+    end)
+  end
+  local result
   if type(badge) == "table" and read(badge.IsShown, badge) == true then
     local br = read(badge.GetRight, badge)
-    local hr = read(healthBar.GetRight, healthBar)
     if type(br) == "number" and type(hr) == "number" then
       local extra = math.floor(br - hr + 0.5)
-      if extra > 0 and extra < 60 then return extra + 4 end
+      if extra > 0 and extra < 60 then result = extra + 4 end
     end
-    return 36
+    result = result or (cached and cached.bar == healthBar and cached.value) or 36
+  elseif type(hr) ~= "number" then
+    return (cached and cached.bar == healthBar and cached.value) or 4
+  else
+    local ht = read(healthBar.GetTop, healthBar)
+    local hb = read(healthBar.GetBottom, healthBar)
+    local maxExtra = 0
+    local function consider(obj)
+      if type(obj) ~= "table" or obj == healthBar or read(obj.IsShown, obj) ~= true then return end
+      local l, r, t, b = read(obj.GetLeft, obj), read(obj.GetRight, obj), read(obj.GetTop, obj), read(obj.GetBottom, obj)
+      if type(l) ~= "number" or type(r) ~= "number" or type(t) ~= "number" or type(b) ~= "number" then return end
+      if r > hr + 6 and l >= hr - 6 and (r - hr) < 60 and (r - l) <= 48 and (t - b) <= 36 then
+        if type(ht) ~= "number" or type(hb) ~= "number" or (t > hb - 4 and b < ht + 4) then
+          local e = math.floor(r - hr + 0.5)
+          if e > maxExtra then maxExtra = e end
+        end
+      end
+    end
+    local function scanContainer(c)
+      if type(c) ~= "table" then return end
+      for _, getter in ipairs({ c.GetChildren, c.GetRegions }) do
+        if type(getter) == "function" then
+          local res = { pcall(getter, c) }
+          if res[1] then
+            for i = 2, #res do consider(res[i]) end
+          end
+        end
+      end
+    end
+    if type(uf) == "table" then
+      scanContainer(uf)
+      local hbc = read(function() return uf.HealthBarsContainer end)
+      if type(hbc) == "table" then scanContainer(hbc) end
+      local barParent = read(healthBar.GetParent, healthBar)
+      if type(barParent) == "table" and barParent ~= plate and barParent ~= uf and barParent ~= hbc then
+        scanContainer(barParent)
+      end
+    end
+    result = maxExtra > 0 and (maxExtra + 4) or 4
   end
-  return 4
+  if cached then
+    cached.bar, cached.value, cached.at = healthBar, result, now
+  else
+    rightEdgeCache[plate] = { bar = healthBar, value = result, at = now }
+  end
+  return result
 end
 
 -- DoTInfo's lethal DoT damage on this unit when DoTInfo is actively showing a kill icon for that
