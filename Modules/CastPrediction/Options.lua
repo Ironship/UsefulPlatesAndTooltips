@@ -330,9 +330,9 @@ local function buildMarkerTab(parent)
         { id = "above", label = "Above the bar" },
         { id = "below", label = "Below the bar" },
     }, nil), y)
-    y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -60, 60, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
-    y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -60, 60, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
-    y = noteRow(parent, y, "DoTs has its own kill icon (DoTs > Kill icon). If you use both, set both, or switch one off.")
+    y = place(sliderRow(parent, "Icon horizontal offset", "killIconOffsetX", -120, 120, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "killIconOffsetY", -120, 120, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
+    y = noteRow(parent, y, "When DoTs already finish the target and DoTs' kill icon is active, CastPrediction's kill icon automatically hides so the two never overlap.")
     y = section(parent, y, "FINISHER PREVIEW")
     y = place(choiceRow(parent, "Preview fill style", "finisherTexture", textureList(),
         "The fill of the finisher preview (Prediction tab), so it never reads as a real cast."), y)
@@ -382,8 +382,8 @@ local function buildNameplateTab(parent)
         { id = "above", label = "Above the bar" },
         { id = "below", label = "Below the bar" },
     }, nil), y)
-    y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -40, 40, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
-    y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -40, 40, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
+    y = place(sliderRow(parent, "Icon horizontal offset", "plateIconOffsetX", -180, 180, 1, nil, "Pixels right (+) or left (-) of the chosen position."), y, 40)
+    y = place(sliderRow(parent, "Icon vertical offset", "plateIconOffsetY", -120, 120, 1, nil, "Pixels up (+) or down (-) from the chosen position."), y, 40)
     return y
 end
 
@@ -493,9 +493,17 @@ local function buildTabs(parent, area)
     end
     -- "Reset this tab": the same button, in the same place, as every other module; it resets the sub-tab that is open.
     local reset = BIT.Looks.ResetButton(area, function()
+        local mapIcon = BIT.Art and type(BIT.Art.MapKillIcon) == "function" and BIT.Art.MapKillIcon or nil
+        local style = mapIcon and BIT.Art.Get() or nil
         for _, key in ipairs(tabKeysByName[currentTab] or {}) do
             -- the per-talent and per-aura choices are tables of overrides: back to none (a fresh table, never the default's)
-            if key == "talentForce" or key == "auraForce" then db()[key] = {} else db()[key] = ns._defaults()[key] end
+            if key == "talentForce" or key == "auraForce" then
+                db()[key] = {}
+            else
+                local val = ns._defaults()[key]
+                if mapIcon and key == "killIcon" then val = mapIcon(val, style) end
+                db()[key] = val
+            end
         end
         changed()
     end)
@@ -627,6 +635,38 @@ end
 -- The tab
 ---------------------------------------------------------------------------------------------
 
+local PRESETS = {
+    { id = "juicy", label = "Juicy", values = {
+        fillColor = "school", fillOpacity = 70, castTexture = "bevel", channelTexture = "dash_v",
+        outlineStyle = "solid", outlineColor = "white", outlineOpacity = 100, pulseOutline = true,
+        nameplateMode = "markerIcon", plateFillColor = "school", plateFillOpacity = 75,
+        plateOutlineStyle = "solid", plateOutlineColor = "white", plateOutlineOpacity = 100,
+    } },
+    { id = "minimal", label = "Minimal", values = {
+        fillColor = "school", fillOpacity = 40, castTexture = "flat", channelTexture = "dash_v",
+        outlineStyle = "none", pulseOutline = false,
+        plateFillColor = "school", plateFillOpacity = 45, plateOutlineStyle = "none",
+    } },
+    { id = "classic", label = "Classic", values = {
+        fillColor = "school", fillOpacity = 55, castTexture = "smooth", channelTexture = "dash_v",
+        outlineStyle = "solid", outlineColor = "gold", outlineOpacity = 100, pulseOutline = false,
+        plateFillColor = "school", plateFillOpacity = 60,
+        plateOutlineStyle = "solid", plateOutlineColor = "gold", plateOutlineOpacity = 100,
+    } },
+    { id = "glass", label = "Glass", values = {
+        fillColor = "school", fillOpacity = 80, castTexture = "gloss", channelTexture = "dash_v",
+        outlineStyle = "solid", outlineColor = "ice", outlineOpacity = 90, pulseOutline = false,
+        plateFillColor = "school", plateFillOpacity = 80,
+        plateOutlineStyle = "solid", plateOutlineColor = "ice", plateOutlineOpacity = 90,
+    } },
+    { id = "neon", label = "Neon", values = {
+        fillColor = "school", fillOpacity = 85, castTexture = "scanlines", channelTexture = "dash_v",
+        outlineStyle = "solid", outlineColor = "cyan", outlineOpacity = 100, pulseOutline = true,
+        plateFillColor = "school", plateFillOpacity = 85,
+        plateOutlineStyle = "solid", plateOutlineColor = "cyan", plateOutlineOpacity = 100,
+    } },
+}
+
 if BIT.RegisterTab then
     BIT.RegisterTab("CastPrediction", {
         title = "Cast prediction",
@@ -638,8 +678,19 @@ if BIT.RegisterTab then
             if window == parent then return end
             window = parent
             controls = {}
+            local anchor = CreateFrame("Frame", nil, parent)
+            anchor:SetSize(1, 22)
+            anchor:SetPoint("TOPRIGHT", -10, -8)
+            local presetButton = BIT.Looks.PresetButton(parent, PRESETS, function(preset)
+                for key, value in pairs(preset.values) do db()[key] = value end
+                changed()
+            end)
+            presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
+            local presetLabel = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
+            presetLabel:SetText(BIT.L("Both bars"))
             BIT.UI.TabSummary(parent, BIT.L("The marker shows what the description and your spell power give; hits seen in "
-                .. "combat tune it. Crits, procs and resists stay unpredictable."))
+                .. "combat tune it. Crits, procs and resists stay unpredictable."), presetLabel)
 
             local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
             pane:SetPoint("TOPLEFT", 10, -(BIT.UI.TAB_TOP or 44))
@@ -664,6 +715,7 @@ if BIT.RegisterTab then
             syncDisplayHost()
 
             parent:SetScript("OnShow", function()
+                refreshControls()
                 updatePreview()
                 syncDisplayHost()
             end)
@@ -704,4 +756,13 @@ end
 
 ns.openOptions = function()
     if BIT.OpenSettings then BIT.OpenSettings("CastPrediction") end
+end
+
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    BIT.Art.Subscribe(function()
+        if window then
+            refreshControls()
+            updatePreview()
+        end
+    end)
 end

@@ -157,6 +157,7 @@ local function readProfileView(root, name)
       modules = type(root.modules) == "table" and root.modules or {},
       appearance = type(root.appearance) == "table" and root.appearance or nil,
       frames = type(root.frames) == "table" and root.frames or nil,
+      artStyle = type(root.artStyle) == "string" and root.artStyle or nil,
       ported = ported,
     }
   end
@@ -168,6 +169,7 @@ local function writeProfileData(root, name, data)
     root.modules = type(data.modules) == "table" and data.modules or {}
     root.appearance = data.appearance
     root.frames = data.frames
+    root.artStyle = type(data.artStyle) == "string" and data.artStyle or nil
     for modName, globalName in pairs(PORTED_LEGACY) do
       local tbl = type(data.ported) == "table" and data.ported[modName] or nil
       _G[globalName] = type(tbl) == "table" and tbl or {}
@@ -237,6 +239,7 @@ local function cloneProfileSettings(src, keepFrom)
     end
     if type(src.appearance) == "table" then dst.appearance = deepCopy(src.appearance) end
     if type(src.frames) == "table" then dst.frames = deepCopy(src.frames) end
+    if type(src.artStyle) == "string" then dst.artStyle = src.artStyle end
     if type(src.ported) == "table" then
       for modName, modTbl in pairs(src.ported) do
         if type(modTbl) == "table" then

@@ -216,7 +216,7 @@ function P.TargetFrame(parent, opts)
     healthBack:SetColorTexture(0.25, 0.08, 0.08, 1)
   end
   addHealthMask(mock, healthBar, "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health-Mask", -1, 6)
-  healthBar.uptBarInset = { 3, 2 } -- as the game's Camelot frame: the bar is 20 tall, the part the player sees 15 (Plate.BarInset)
+  healthBar.uptBarInset = { 4, 2 } -- Camelot frame interior: 4px top border/rim below Bar top, 2px bottom inset
   local out = { frame = mock, healthBar = healthBar, bar = healthBar, portrait = portrait, name = nameText,
     level = levelText, host = { healthBar = healthBar, portrait = portrait, layerFrame = opts.layerFrame } }
   if opts.text ~= false then
@@ -293,7 +293,7 @@ function P.PlayerFrame(parent, opts)
     healthBack:SetColorTexture(0.05, 0.2, 0.05, 1)
   end
   addHealthMask(mock, healthBar, "UI-HUD-UnitFrame-Player-PortraitOn-Bar-Health-Mask", -2, 6)
-  healthBar.uptBarInset = { 3, 2 } -- the same Camelot geometry as the target frame (Plate.BarInset)
+  healthBar.uptBarInset = { 4, 2 } -- the same Camelot interior geometry as the target frame (Plate.BarInset)
   local out = { frame = mock, healthBar = healthBar, bar = healthBar, portrait = portrait, name = nameText,
     host = { healthBar = healthBar, portrait = portrait, layerFrame = opts.layerFrame } }
   if opts.text ~= false then
@@ -361,6 +361,8 @@ function P.Nameplate(parent, opts)
   if not P.setAtlas(levelBadge, "UI-HUD-Nameplates-LevelIndicator") then
     levelBadge:Hide()
     levelText:Hide()
+  else
+    plate.uptLevelBadge = levelBadge
   end
   local nameText = plate:CreateFontString(nil, "OVERLAY",
     P.fontOr("SystemFont_NamePlate_Outlined", "GameFontHighlightSmallOutline"))

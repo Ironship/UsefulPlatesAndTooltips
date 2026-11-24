@@ -25,6 +25,7 @@ local SECTIONS = {
     { "/dotinfo ticks", "Open the tick viewer." },
     { "/dotinfo plates", "Print what can be read from the nameplates on screen." },
     { "/dotinfo skull", "Show the kill icon on the target portrait for 5 seconds." },
+    { "/dotinfo exec", "Show what execute/finisher is watched and test its icon for 5 seconds." },
   } },
   { title = "CAST PREDICTION", rows = {
     { "/upt castprobe", "Print what the prediction can read right now." },
@@ -169,7 +170,7 @@ local function build(content)
     .. "What the dump commands save is written to disk at logout or with Reload UI."))
   y = y - math.max(30, (note:GetStringHeight() or 24) + 8)
   local reload = UI.Button(content, BIT.L("Reload UI"), BUTTON_WIDTH, function()
-    if type(ReloadUI) == "function" then ReloadUI() end
+    if type(UI.RequestReload) == "function" then UI.RequestReload() end
   end)
   reload:SetPoint("TOPLEFT", 10, y)
   y = y - ROW - 4

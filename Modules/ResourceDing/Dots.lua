@@ -219,9 +219,9 @@ function Addon.RefreshDots()
   if not healthBar then return hide() end
   row:SetParent(plate)
   row:ClearAllPoints()
-  local dotOffset = tonumber(Addon.db.dotOffset) or -60
-  if dotOffset ~= dotOffset then dotOffset = -60 end
-  if dotOffset < -80 then dotOffset = -80 elseif dotOffset > 30 then dotOffset = 30 end
+  local dotOffset = tonumber(Addon.db.dotOffset) or -52
+  if dotOffset ~= dotOffset then dotOffset = -52 end
+  if dotOffset < -140 then dotOffset = -140 elseif dotOffset > 80 then dotOffset = 80 end
   row:SetPoint("TOP", healthBar, "BOTTOM", 0, -dotOffset)
   if row.shownFor ~= n or row.sizeFor ~= Addon.db.dotSize then
     layout(n)
@@ -275,6 +275,9 @@ function Addon.StartDots()
   -- not. The callback is silent: RefreshDots plays no sound and starts nothing.
   if BIT.Style and type(BIT.Style.Subscribe) == "function" then
     BIT.Style.Subscribe("ResourceDing", function() Addon.RefreshDots() end)
+  end
+  if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    BIT.Art.Subscribe(function() Addon.RefreshDots() end)
   end
   Addon.RefreshDots()
 end

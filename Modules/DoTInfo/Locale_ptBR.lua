@@ -40,6 +40,7 @@ local NAMES = {
     ["Rupture"] = { "Ruptura" },
     ["Siphon Life"] = { "Sifão de Vida" },
     ["Serpent Sting"] = { "Picada de Serpente" },
+    ["Scorpid Poison"] = { "Peçonha de Escorpídeo" },
     ["Pyroblast"] = { "Ignimpacto" },
     ["Rain of Fire"] = { "Chuva de Fogo" },
     ["Hellfire"] = { "Fogo do Inferno" },

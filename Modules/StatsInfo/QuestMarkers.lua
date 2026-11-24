@@ -65,7 +65,13 @@ local active = false -- the badges are wanted (module on, setting on AND the liv
 -- ships pointing down. The coin is the game's own coin icon. A client that cannot take the file
 -- on a texture keeps the bag markers' white-primitive fallback (a shaft and three head steps of
 -- WHITE8X8, the old geometry).
-local UP_TEXTURE = "Interface\\Buttons\\UI-MicroStream-Green" -- mirrored vertically: tip up
+local UP_TEXTURE = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\StatsInfo\\Textures\\ArrowUp"
+local function questUpTexture()
+  if BIT and BIT.Art and type(BIT.Art.Texture) == "function" then
+    return BIT.Art.Texture("arrowUp") or UP_TEXTURE, BIT.Art.ArrowFlipUp and BIT.Art.ArrowFlipUp() or false
+  end
+  return UP_TEXTURE, false
+end
 local WHITE = "Interface\\Buttons\\WHITE8X8" -- the fallback pieces' primitive
 local UP_R, UP_G, UP_B = 0.302, 1, 0.302
 local COIN = "Interface\\Icons\\INV_Misc_Coin_01"
@@ -153,9 +159,10 @@ local function drawUpgrade(o, button, best)
   if arrowMode == "blizzard" then
     for _, t in ipairs(o.pieces or {}) do t:Hide() end
     for _, t in ipairs(o.bestPieces or {}) do t:Hide() end
+    local upTex, flipUp = questUpTexture()
     local function draw(t, size, dx, dy)
-      t:SetTexture(UP_TEXTURE)
-      t:SetTexCoord(0, 1, 1, 0)
+      t:SetTexture(upTex)
+      if flipUp then t:SetTexCoord(0, 1, 1, 0) else t:SetTexCoord(0, 1, 0, 1) end
       t:SetVertexColor(1, 1, 1, 1)
       t:SetSize(size, size)
       t:ClearAllPoints()
@@ -550,3 +557,9 @@ loader:SetScript("OnEvent", function(self, event, arg1)
   if not active then return end
   scheduleRefresh()
 end)
+
+if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+  BIT.Art.Subscribe(function()
+    if active then scheduleRefresh() end
+  end)
+end

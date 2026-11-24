@@ -177,7 +177,13 @@ function UI.Navigate(host, key)
     return true
   else
     -- Click preserves the client's CheckButton toggle and OnClick hooks.
-    if node.Click then node:Click("LeftButton") else script(node, "OnClick", "LeftButton") end
+    -- Mark synthetic clicks so UI.RequestReload never calls protected C_UI.Reload() without a hardware click.
+    if BIT.UI then BIT.UI._syntheticClick = true end
+    local ok, err = pcall(function()
+      if node.Click then node:Click("LeftButton") else script(node, "OnClick", "LeftButton") end
+    end)
+    if BIT.UI then BIT.UI._syntheticClick = false end
+    if not ok then error(err, 0) end
     if not visible(node) then UI.Clear() end
   end
   return true

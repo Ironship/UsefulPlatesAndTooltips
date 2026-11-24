@@ -89,6 +89,7 @@ local GERMAN_NAMES = {
     ["Immolation Trap"] = { "Feuerbrandfalle" },
     ["Explosive Trap"] = { "Sprengfalle" },
     ["Wyvern Sting"] = { "Stich des Flügeldrachen" },
+    ["Scorpid Poison"] = { "Skorpidgift" },
 }
 
 local function germanIsFinisher(desc)

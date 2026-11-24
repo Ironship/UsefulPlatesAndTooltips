@@ -52,6 +52,7 @@ local KNOWN_TICK_INTERVALS = {
     ["Rupture"] = 2,
     ["Black Arrow"] = 2, -- the description gives the total over 30 sec only
     ["Wyvern Sting"] = 2, -- client data: its DoT (24336) ticks every 2 s
+    ["Scorpid Poison"] = 2, -- hunter pet DoT, stacks to 5, ticks every 2 s (DoesItDie PR #55)
 }
 
 -- DoTs whose ticks aren't even: each tick is the average tick times its factor (factors average 1, so the
@@ -119,7 +120,10 @@ ns.FIRE_TRAPS = { ["Immolation Trap"] = true, ["Explosive Trap"] = true }
 ns.CONFIRM_PROJECTILE_DOTS = { ["Serpent Sting"] = true }
 -- DoTs that stack on one mob (cap per mob; Forever's hunters also have a Lacerate that doesn't stack, hence class).
 -- Ported from Does It Die PR #42 (MIT): each recast adds a stack on the running tick rhythm instead of resetting it.
-ns.STACKING_DOTS = { ["Lacerate"] = { cap = 5, class = "DRUID" } }
+ns.STACKING_DOTS = {
+    ["Lacerate"] = { cap = 5, class = "DRUID" },
+    ["Scorpid Poison"] = { cap = 5 }, -- hunter pet DoT (DoesItDie PR #55)
+}
 
 local NAME_TABLES = { KNOWN_TICK_INTERVALS, TICK_SHAPES, SCHOOL_BY_NAME, IGNORED_SPELLS, PROJECTILE_DOTS, ns.refreshNames,
     ns.TRAP_DOTS, ns.FIRE_TRAPS, ns.DELAYED_DOTS, ns.AMPLIFY_USES, ns.CONFIRM_PROJECTILE_DOTS, ns.STACKING_DOTS }
@@ -135,7 +139,7 @@ local SCHOOL_MASKS = {
 local DEFAULTS = {
     -- Skull
     showSkull = true,
-    skullIcon = "skull",
+    skullIcon = "skull2d",
     skullSize = 72,
     skullPosition = "portrait",
     skullPulse = true,
@@ -188,24 +192,37 @@ local DEFAULTS = {
     swingKill = true, -- a weapon icon shows when the DoTs plus one average weapon hit (melee swing, wand or ranged shot) kill
     killMargin = 90, -- % of the estimate the kill icon trusts: heals, regen and estimate error eat the rest
     targetOverMouseover = false, -- a same-named mob under the mouse doesn't blank a target cast (_namedEnemyKey)
-    -- Nameplates (Nameplates.lua): their own look, since enemy plates are red. Defaults read well on red.
+    -- Nameplates (Nameplates.lua): unified Juicy look + aligned side row (y=0, clears mob name & level badge).
     nameplateMode = "markerIcon",
     focusMode = "markerIcon",       -- the focus frame's marker (Focus.lua), in the nameplates' look
-    nameplateIconSize = 24,
-    nameplateIconPosition = "above",
+    nameplateIconSize = 22,
+    nameplateIconPosition = "left",
     plateIconOffsetX = 0,
     plateIconOffsetY = 0,
-    plateIcon = "skull",
-    plateDotColors = "rainbow",
+    plateIcon = "skull2d",
+    plateDotColors = "each",
     plateFillDirection = "auto",
-    plateFillTexture = "flat",
-    plateFillColor = "white",
-    plateFillOpacity = 45,
-    plateOutlineStyle = "solid",
-    plateDashLength = 2,
+    plateFillTexture = "stripes",
+    plateFillColor = "red",
+    plateFillOpacity = 80,
+    plateOutlineStyle = "dashed",
+    plateDashLength = 4,
     plateOutlineThickness = 1,
-    plateOutlineColor = "white",
-    plateOutlineOpacity = 100,
+    plateOutlineColor = "gold",
+    plateOutlineOpacity = 90,
+    -- Party DoTs (Party.lua, DoesItDie PR #37 + #51)
+    partyDots = false,
+    partyDotColor = "green",
+    -- Execute / finisher kill icon (Execute.lua, DoesItDie PR #39 + #44 + #53)
+    execShow = true,
+    execPlates = true,
+    execSize = 32,
+    execPlateSize = 22,
+    execPlatePosition = "right",
+    execPlateOffsetX = 0,
+    execPlateOffsetY = 0,
+    execOffsetX = 0,
+    execOffsetY = 8,
 }
 
 -- "Wait for first tick": whether a DoT counts toward the marker before its first tick has landed.
@@ -665,6 +682,18 @@ local function rememberComboPoints()
     local points = readComboPoints()
     if points and points > 0 then lastComboPoints, lastComboAt = points, GetTime() end
     return points
+end
+
+-- Current combo points for Execute.lua's finisher icon (DoesItDie PR #39 + #48): returns points and
+-- "read", "counted" or "unknown". A readable 0 from GetComboPoints/UnitPower is a real 0.
+function ns.currentComboPoints()
+    local points, readings = readComboPoints()
+    local fromApi = type(readings) == "string" and readings:find("display=not needed", 1, true) ~= nil
+    if points and (points > 0 or fromApi) then return points, "read" end
+    if lastComboPoints and GetTime() - lastComboAt <= COMBO_CACHE_SECONDS then return lastComboPoints, "read" end
+    if countedPoints > 0 then return countedPoints, "counted" end
+    if points then return points, "read" end
+    return nil, "unknown"
 end
 
 local function isFinisherDescription(desc)
@@ -1249,6 +1278,36 @@ local function onPlayerCast(spellID, castGUID)
         return nil
     end
     return key, isWaiting(dot)
+end
+
+-- Pet DoT casts (Scorpid Poison, DoesItDie PR #55). Kept as a field on ns (file is at Lua 5.1's 200-local limit).
+function ns._onPetCast(spellID)
+    if ns.Retail or not db or isSecret(spellID) or type(spellID) ~= "number" then return nil end
+    local ok, name, desc = pcall(spellNameAndDescription, spellID)
+    if not ok or not name or isSecret(name) then return nil end
+    local stacking = ns.STACKING_DOTS[name]
+    if not stacking or stacking.class then return nil end
+    local total, school, duration, statedInterval = parseDot(desc, 1)
+    if not total then return nil end
+    local key = unitKey("pettarget") or unitKey("target")
+    if not key then
+        trace(string.format("PET CAST %s (id %d): no target, not tracked", name, spellID))
+        return nil
+    end
+    local now = GetTime()
+    dotsByTarget[key] = dotsByTarget[key] or {}
+    local previous = dotsByTarget[key][name]
+    local dot = newDot(spellID, spellID, name, total, school, duration, statedInterval, now)
+    if previous then ns._stackOnto(dot, previous, stacking.cap) end
+    dot.segmentOrder = previous and previous.segmentOrder
+    dotsByTarget[key][name] = dot
+    if ns.Learn then ns.Learn.Cast(dot, 0, name) end
+    local learned = db.ticks[spellID]
+    dot.unsure = not learned
+    trace(string.format("PET CAST %s (id %d)%s: %d dmg over %ss, school %d, tick every %ss, per-tick %s",
+        name, spellID, dot.stacks and (" stack " .. dot.stacks) or "", total, duration, dot.school, dot.interval,
+        learned and ("learned " .. learned) or "from description"))
+    return key
 end
 
 -- "Estimate during casting": a DoT with a cast time shows from UNIT_SPELLCAST_START, with the estimate its
@@ -2022,8 +2081,8 @@ local function dotBreakdown(key)
     local dots = key and dotsByTarget[key]
     local cast = key and castInProgress and castInProgress.key == key and castInProgress or nil
     local castVisible = cast and not isWaiting(cast.dot)
+    local trapPrev = key and not ns.Retail and ns.ProcDots and ns.ProcDots.TrapPreviewFor and ns.ProcDots.TrapPreviewFor(key) or nil
     local list = {}
-    if not dots and not cast then return list end
     for name, dot in pairs(dots or {}) do
         if dot.confirmationPending and isWaiting(dot) then
             dot = dot.replaced
@@ -2050,6 +2109,14 @@ local function dotBreakdown(key)
             segmentOrder = { rank = 3, appliedAt = cast.dot.appliedAt },
             damage = remainingDamage(cast.dot), familyID = cast.dot.familyID, provisional = true, refreshDue = refreshDueFor(cast.name, cast.dot) })
     end
+    if trapPrev and not isWaiting(trapPrev) and not (dots and dots[trapPrev.name]) then
+        table.insert(list, { name = trapPrev.name or tostring(trapPrev.spellID), spellID = trapPrev.spellID,
+            school = trapPrev.school, appliedAt = trapPrev.appliedAt, expiresAt = trapPrev.expiresAt,
+            segmentOrder = { rank = 3, appliedAt = trapPrev.appliedAt },
+            damage = remainingDamage(trapPrev), provisional = true })
+    end
+    -- Party members' DoTs on the same mob (Party.lua, DoesItDie PR #37 + #51), when enabled.
+    if ns.party and key then ns.party.addRemote(key, list) end
     table.sort(list, function(a, b)
         local first, second = a.segmentOrder, b.segmentOrder
         if first.rank ~= second.rank then return first.rank < second.rank end
@@ -2057,6 +2124,23 @@ local function dotBreakdown(key)
         return a.name < b.name
     end)
     return list
+end
+
+-- Own active DoTs per mob key, for Party.lua to share with party members (never includes remote DoTs).
+function ns.ownDots()
+    local out = {}
+    for key, dots in pairs(dotsByTarget) do
+        local list = {}
+        for name, dot in pairs(dots) do
+            if not isWaiting(dot) then
+                list[#list + 1] = { name = name, spellID = dot.spellID, school = dot.school,
+                    damage = remainingDamage(dot), nextTickAt = dot.nextTickAt, expiresAt = dot.expiresAt,
+                    interval = dot.interval }
+            end
+        end
+        if #list > 0 then out[key] = list end
+    end
+    return out
 end
 
 -- Returns what the target's DoTs still have to deal, how many DoTs count toward it, and the per-DoT
@@ -2151,6 +2235,10 @@ local paletteColorByName, nextPaletteIndex = {}, 1
 
 -- Defaults to the target marker's setting; nameplates and the native poison pass their own.
 local function dotColor(entry, mode)
+    if entry and entry.remote then
+        local c = db and db.partyDotColor or "green"
+        return COLOR_BY_ID[c] or (BIT.Looks and BIT.Looks.Rgb(c)) or COLOR_BY_ID.green
+    end
     if (mode or db.dotColors) ~= "rainbow" then
         return SCHOOL_COLORS[entry.school] or COLOR_BY_ID.white
     end
@@ -2851,7 +2939,7 @@ local function targetFrameTopLayer()
     -- Other addons can hang hundreds or thousands of frames under the target frame over a session;
     -- stop after 300 so a walk never stalls a frame (Does It Die PR #40).
     local maxFrames = 300
-    local topStrata, topLevel, visited = "BACKGROUND", 0, 0
+    local topStrata, topLevel, visited, sawSecret = "BACKGROUND", 0, 0, false
     local function visit(frame, depth)
         visited = visited + 1
         if visited > maxFrames then return end
@@ -2863,8 +2951,7 @@ local function targetFrameTopLayer()
         end
         local ok, forbidden = pcall(function() return frame.IsForbidden and frame:IsForbidden() end)
         if not ok or isSecret(forbidden) or forbidden then return end
-        -- Some of Blizzard's frames report a secret strata/level in Forever; those can't be compared, so skip
-        -- them (their children are still visited).
+        -- Some of Blizzard's frames report a secret strata/level in Forever; note it so updateLayering adds a margin.
         local readOK, strata, level = pcall(function() return frame:GetFrameStrata(), frame:GetFrameLevel() end)
         if readOK and not isSecret(strata) and not isSecret(level) and type(strata) == "string" and type(level) == "number" then
             local rank, topRank = STRATA_RANK[strata] or 0, STRATA_RANK[topStrata] or 0
@@ -2873,6 +2960,8 @@ local function targetFrameTopLayer()
             elseif rank == topRank and level > topLevel then
                 topLevel = level
             end
+        else
+            sawSecret = true
         end
         if depth < 6 then
             local children = { pcall(frame.GetChildren, frame) }
@@ -2885,7 +2974,7 @@ local function targetFrameTopLayer()
         end
     end
     visit(root, 0)
-    return topStrata, topLevel, visited
+    return topStrata, topLevel, visited, sawSecret
 end
 
 -- Keeps our marker and skull above everything on the target frame. Checked while displaying (throttled)
@@ -2943,7 +3032,7 @@ local function updateLayering(now)
     layerCheckedAt = now
     ns.applyMarkerParent()
     ns.anchorMarker()
-    local ok, strata, level, visited
+    local ok, strata, level, visited, sawSecret
     if previewHost then
         -- One strata above the options window: it's a top-level frame, which WoW raises above everything else
         -- in its own strata (our frames included) when it's shown or clicked. Dropdowns and tooltips sit higher.
@@ -2952,7 +3041,7 @@ local function updateLayering(now)
         local t0 = BIT.Perf and BIT.Perf.Begin()
         local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
         local started = clock and clock()
-        ok, strata, level, visited = pcall(targetFrameTopLayer)
+        ok, strata, level, visited, sawSecret = pcall(targetFrameTopLayer)
         local ms = started and (clock() - started)
         if BIT.Perf then BIT.Perf.End("DoTInfo layer scan", t0) end
         local capped = ok and type(visited) == "number" and visited > 300
@@ -2961,6 +3050,11 @@ local function updateLayering(now)
             trace(string.format("SLOW layer check (logged once): %s frames under %s, %.1f ms",
                 capped and "over 300 (stopped there)" or tostring(visited),
                 regionName(targetHost or healthBar), ms or -1))
+        end
+        if ok and sawSecret then
+            -- Secret strata/levels in Forever cannot be compared (DoesItDie PR #56): add a safe margin above them.
+            if (STRATA_RANK[strata] or 0) < STRATA_RANK.HIGH then strata = "HIGH" end
+            level = math.min(level + 1000, 9980)
         end
     end
     if not ok then
@@ -2979,11 +3073,12 @@ local function updateLayering(now)
     -- it found: ours go above them, as they did when each saw the other's frames.
     for i, frame in ipairs({ remainingBar, fillLayer, clipLayer, outlineLayer, sparkLayer, skullWindow, skullBar }) do
         frame:SetFrameStrata(strata)
-        frame:SetFrameLevel(level + 8 + i)
+        frame:SetFrameLevel(math.min(level + 8 + i, 9999))
     end
     if strata ~= lastStrata or level ~= lastLevel then
         lastStrata, lastLevel = strata, level
-        trace(string.format("LAYER target frame top is %s/%d; marker and skull placed above it", strata, level))
+        trace(string.format("LAYER target frame top is %s/%d%s; marker and skull placed above it", strata, level,
+            sawSecret and " (secret layer margin)" or ""))
     end
 end
 
@@ -3235,6 +3330,8 @@ end
 ---------------------------------------------------------------------------
 
 local function applyDefaults()
+    -- Brand-new profiles take DEFAULTS straight away without legacy migrations overwriting them.
+    local isFresh = db.defaultsRev == nil and db.showMarkers == nil and db.nameplateMode == nil and db.plateDotColors == nil
     -- Settings from earlier versions.
     if db.dotColors == "school" then db.dotColors = "each" end
     if db.plateDotColors == "school" then db.plateDotColors = "each" end
@@ -3244,6 +3341,15 @@ local function applyDefaults()
     db.preview, db.previewPercent, db.previewOffInCombat = nil, nil, nil
     for key, value in pairs(DEFAULTS) do
         if db[key] == nil then db[key] = value end
+    end
+    if isFresh then
+        if BIT.Art and type(BIT.Art.MapKillIcon) == "function" then
+            local style = BIT.Art.Get()
+            db.skullIcon = BIT.Art.MapKillIcon(db.skullIcon, style)
+            db.plateIcon = BIT.Art.MapKillIcon(db.plateIcon, style)
+        end
+        db.defaultsRev = 2
+        return
     end
     -- Defaults changed in 0.9.128: "Count one weapon hit" is on and the nameplate DoT colors are Rainbow. A saved value
     -- that is still what the old defaults gave (or, for the colors, the other mode the presets wrote) follows them once.
@@ -3481,8 +3587,30 @@ function ns.HasMarker(unit)
     for _, entry in ipairs(list) do total = total + (tonumber(entry.damage) or 0) end
     return total > 0
 end
+
+-- Remaining lethal DoT damage on `unit` when DoTInfo's kill icon is active for that surface
+-- (target frame when forPlate is falsy, nameplate when forPlate is true). CastPrediction uses
+-- this to hide its own competing kill icon when your DoTs already finish the mob (secret-safe).
+function ns.LethalKillDamage(unit, forPlate)
+    if not db or type(unit) ~= "string" or db.showMarkers == false then return 0 end
+    if forPlate then
+        if db.nameplateMode ~= "markerIcon" then return 0 end
+    else
+        if db.showSkull == false then return 0 end
+    end
+    if type(UnitIsDeadOrGhost) == "function" then
+        local ok, dead = pcall(UnitIsDeadOrGhost, unit)
+        if ok and not isSecret(dead) and dead == true then return 0 end
+    end
+    local entries = dotBreakdown(unitKey(unit))
+    if type(entries) ~= "table" or #entries == 0 then return 0 end
+    if ns.shielded and ns.shielded(unit, entries) then return 0 end
+    local dmg = ns.lethalDamage and ns.lethalDamage(entries, false) or 0
+    return (type(dmg) == "number" and dmg > 0) and dmg or 0
+end
 ns.print = print
 ns.trace = trace
+function ns.killIconAnchor() return skullAnchor, targetHost or healthBar, previewHost ~= nil end
 
 -- A running DoT that has not ticked yet keeps the size it was applied with (expectedTick). When the store is
 -- reset, forgotten or healed, that snapshot is as wrong as the store was: drop it so the DoT follows the store
@@ -3498,6 +3626,7 @@ end
 function ns.resetLearnedTicks()
     wipe(db.ticks)
     if db.tickWeights then wipe(db.tickWeights) end
+    if ns.forgetExecuteLearning then ns.forgetExecuteLearning() end
     ns.dropSnapshots()
     print(BIT.L("Learned tick sizes cleared."))
 end
@@ -3586,11 +3715,29 @@ frame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player")
 frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player")
 frame:RegisterUnitEvent("UNIT_POWER_FREQUENT", "player")   -- keeps a recent combo point reading as backup
+if not ns.Retail then frame:RegisterUnitEvent("UNIT_AURA", "target") end -- Immolation Trap early preview (PR #38)
 frame:RegisterEvent("UNIT_COMBAT")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 -- Plate tokens stand in for secret GUIDs (Forever's instances, see ns._plateTokenFor), and Retail keys by plate.
 frame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 frame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+-- Hunter pet stacking DoTs (Scorpid Poison, DoesItDie PR #55). Inside a block to stay under Lua 5.1's 200-local limit.
+if not ns.Retail then
+    do
+        local petFrame = CreateFrame("Frame")
+        petFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "pet")
+        petFrame:SetScript("OnEvent", function(self, _, _, _, spellID)
+            if ns.off then self:UnregisterAllEvents() return end
+            if not db then return end
+            local appliedTo = ns._onPetCast(spellID)
+            if appliedTo then
+                safeRefresh()
+                if appliedTo == unitKey("target") then playFlash() end
+            end
+        end)
+        if BIT.Perf then BIT.Perf.Watch(petFrame, "OnEvent", "DoTInfo.pet") end
+    end
+end
 -- Never register COMBAT_LOG_EVENT_UNFILTERED: Forever forbids it and shows a "blocked" popup.
 
 frame:SetScript("OnEvent", function(self, event, ...)
@@ -3717,6 +3864,11 @@ frame:SetScript("OnEvent", function(self, event, ...)
         -- A DoT waiting for its first tick isn't drawn yet; it flashes when that tick lands instead.
         if appliedTo and not waiting and appliedTo == unitKey("target") then playFlash() end
 
+    elseif event == "UNIT_AURA" then
+        if not ns.Retail and ns.ProcDots and ns.ProcDots.StartTrapPreview and ns.ProcDots.StartTrapPreview() then
+            safeRefresh()
+        end
+
     elseif event == "UNIT_COMBAT" then
         local revealed = onUnitCombat(...)
         if revealed and revealed == unitKey("target") then
@@ -3775,6 +3927,9 @@ SlashCmdList.BITDOTINFO = function(msg)
         skullTestUntil = GetTime() + 5
         print(BIT.L("Kill icon test for 5 seconds: one icon ON the portrait (the real one) and one ABOVE it (plain test)."))
         C_Timer.After(0.5, traceSkullGeometry)
+    elseif cmd == "exec" then
+        if ns.executeCommand then ns.executeCommand()
+        else print(BIT.L("Execute icon is not available on this client.")) end
     elseif cmd == "debug" then
         db.debug = not db.debug
         print(BIT.L(db.debug and "Debug ON." or "Debug OFF."))
@@ -3790,11 +3945,25 @@ SlashCmdList.BITDOTINFO = function(msg)
         print(BIT.L("/dotinfo - open the options window"))
         print(BIT.L("/dotinfo line - toggle health bar markers on/off"))
         print(BIT.L("/dotinfo skull - show the kill icon for 5 seconds to check its position"))
+        if not ns.Retail then print(BIT.L("/dotinfo exec - show what execute/finisher is watched and test its icon for 5 seconds")) end
         print(BIT.L("/dotinfo plates - check what the addon can reach on visible nameplates (logged)"))
         print(BIT.L("/dotinfo marker - report where the damage marker is (also logged); marker screen | marker bar choose what it hangs on"))
         print(BIT.L("/dotinfo debug - toggle echoing the trace log (casts, ticks, estimates) to chat"))
         if not ns.Retail then print(BIT.L("/dotinfo ticks - show the learned tick sizes")) end
         print(BIT.L("/dotinfo check - read every spell in your spellbook and list the DoT descriptions it cannot read"))
         print(BIT.L("/dotinfo reset - forget learned tick sizes"))
+    end
+end
+
+do
+    if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+        BIT.Art.Subscribe(function(style)
+            if db and type(BIT.Art.MapKillIcon) == "function" then
+                if db.skullIcon then db.skullIcon = BIT.Art.MapKillIcon(db.skullIcon, style) end
+                if db.plateIcon then db.plateIcon = BIT.Art.MapKillIcon(db.plateIcon, style) end
+            end
+            appliedSignature = nil
+            if db then safeRefresh() end
+        end)
     end
 end

@@ -11,6 +11,7 @@ local _, BIT = ...
 local Addon = BIT.Module and BIT.Module("ResourceDing") or BIT
 
 local SOUL_SHARD = 6265
+local WHITE = "Interface\\Buttons\\WHITE8X8"
 local TEX_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\"
 local SHARD_GEM = TEX_DIR .. "ShardGem"
 local SHARD_BEZEL = TEX_DIR .. "ShardBezel"
@@ -31,20 +32,57 @@ local function shardOpacity(style)
   return 1
 end
 
--- Shared 3D faceted Soul Shard crystal widget (live nameplate HUD + Settings live preview):
--- soft violet halo behind the newest shard, 3D faceted amethyst crystal, sculpted lit metallic bezel.
+local function shardArtStyle()
+  return BIT and BIT.Art and type(BIT.Art.Get) == "function" and BIT.Art.Get() or "2d"
+end
+
+local function applyShardArt(shard)
+  local style = shardArtStyle()
+  if shard._artStyle == style then return end
+  shard._artStyle = style
+  local art = BIT and BIT.Art
+  local gemTex = art and art.Texture("shardGem") or SHARD_GEM
+  local bezelTex = art and art.Texture("shardBezel") or (style ~= "classic" and SHARD_BEZEL or nil)
+  local glowTex = art and art.Texture("shardGlow") or (style ~= "classic" and SHARD_GLOW or nil)
+  if shard.gem then
+    shard.gem:SetTexture(gemTex or WHITE)
+    if style == "classic" then
+      pcall(shard.gem.SetRotation, shard.gem, math.pi / 4)
+    else
+      pcall(shard.gem.SetRotation, shard.gem, 0)
+    end
+  end
+  if shard.bezel then
+    if bezelTex then
+      shard.bezel:SetTexture(bezelTex)
+      shard.bezel:Show()
+    else
+      shard.bezel:Hide()
+    end
+  end
+  if shard.glow then
+    if glowTex then
+      shard.glow:SetTexture(glowTex)
+      shard._hasGlow = true
+    else
+      shard.glow:Hide()
+      shard._hasGlow = false
+    end
+  end
+end
+
+-- Shared Soul Shard crystal widget (live nameplate HUD + Settings live preview):
+-- follows BIT.Art (Stylized 2D faceted amethyst crystal, crisp 16-bit Pixel Art crystal, or Classic diamond).
 function Addon.CreateShard(parent)
   local shard = CreateFrame("Frame", nil, parent)
   shard.glow = shard:CreateTexture(nil, "BACKGROUND", nil, -1)
-  shard.glow:SetTexture(SHARD_GLOW)
   shard.glow:SetPoint("CENTER", shard, "CENTER")
   shard.glow:Hide()
   shard.gem = shard:CreateTexture(nil, "ARTWORK", nil, 0)
-  shard.gem:SetTexture(SHARD_GEM)
   shard.gem:SetAllPoints(shard)
   shard.bezel = shard:CreateTexture(nil, "OVERLAY", nil, 1)
-  shard.bezel:SetTexture(SHARD_BEZEL)
   shard.bezel:SetAllPoints(shard)
+  applyShardArt(shard)
   return shard
 end
 
@@ -60,12 +98,20 @@ end
 
 function Addon.PaintShard(shard, style, isNewest)
   if type(shard) ~= "table" then return end
+  applyShardArt(shard)
   local alpha = shardOpacity(style)
-  if shard.gem then shard.gem:SetVertexColor(1, 1, 1, alpha) end
-  if shard.bezel then shard.bezel:SetVertexColor(1, 1, 1, alpha) end
+  local classic = shardArtStyle() == "classic"
+  if shard.gem then
+    if classic then
+      shard.gem:SetVertexColor(0.68, 0.30, 0.96, alpha)
+    else
+      shard.gem:SetVertexColor(1, 1, 1, alpha)
+    end
+  end
+  if shard.bezel and shard.bezel:IsShown() then shard.bezel:SetVertexColor(1, 1, 1, alpha) end
   if shard.glow then
     shard.glow:SetVertexColor(1, 1, 1, alpha)
-    shard.glow:SetShown(isNewest == true)
+    shard.glow:SetShown(shard._hasGlow and isNewest == true)
   end
 end
 
@@ -172,9 +218,9 @@ function Addon.RefreshShards()
   row:SetSize(span, size)
   row:SetParent(plate)
   row:ClearAllPoints()
-  local shardOffset = tonumber(Addon.db.shardOffset) or -60
-  if shardOffset ~= shardOffset then shardOffset = -60 end
-  if shardOffset < -80 then shardOffset = -80 elseif shardOffset > 30 then shardOffset = 30 end
+  local shardOffset = tonumber(Addon.db.shardOffset) or -52
+  if shardOffset ~= shardOffset then shardOffset = -52 end
+  if shardOffset < -140 then shardOffset = -140 elseif shardOffset > 80 then shardOffset = 80 end
   local healthBar = healthBarOf(plate)
   if not healthBar then row:Hide(); return end
   row:SetPoint("TOP", healthBar, "BOTTOM", 0, -shardOffset)
@@ -236,6 +282,9 @@ local function start()
   end)
   if BIT and BIT.Style and type(BIT.Style.Subscribe) == "function" then
     BIT.Style.Subscribe("ResourceDing", Addon.RefreshShards)
+  end
+  if BIT and BIT.Art and type(BIT.Art.Subscribe) == "function" then
+    BIT.Art.Subscribe(Addon.RefreshShards)
   end
   quietUntil = GetTime() + QUIET_AFTER_WORLD
   Addon.CheckShards()

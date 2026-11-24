@@ -56,6 +56,7 @@ local NAMES = {
     ["Immolation Trap"] = { "Trampa de inmolación" },
     ["Explosive Trap"] = { "Trampa explosiva" },
     ["Wyvern Sting"] = { "Picadura de dracoleón" },
+    ["Scorpid Poison"] = { "Veneno de escórpido" },
 }
 
 -- Thousands separator and decimal comma: "1.314" -> "1314", "1,5 s" -> "1.5 s".

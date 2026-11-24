@@ -13,8 +13,12 @@ local function tell(text)
   if BIT.Say then BIT.Say(text) end
 end
 
-local function reloadNow()
-  if type(ReloadUI) == "function" then ReloadUI() end
+local function reloadNow(fallbackMessage)
+  if BIT.UI and type(BIT.UI.RequestReload) == "function" then
+    return BIT.UI.RequestReload(fallbackMessage)
+  end
+  if fallbackMessage then tell(fallbackMessage) end
+  return false
 end
 
 local function labelForProfile(name)
@@ -134,7 +138,8 @@ local function build(content)
           tell(string.format(BIT.L("Could not switch profile (%s)."), tostring(info)))
           return
         end
-        reloadNow()
+        refreshAll()
+        reloadNow(string.format(BIT.L("Selected profile \"%s\". Use /reload to apply."), labelForProfile(chosen)))
       end)
     end)
   end)
@@ -157,7 +162,8 @@ local function build(content)
         string.format(BIT.L("Switch %s back to the shared Default profile and reload the interface?"), charKey),
         BIT.L("Switch & reload"), function()
           Profiles.Use(Profiles.DEFAULT)
-          reloadNow()
+          refreshAll()
+          reloadNow(BIT.L("Selected the shared Default profile. Use /reload to apply."))
         end)
     else
       if Profiles.Active() == charKey then
@@ -170,12 +176,34 @@ local function build(content)
         or string.format(BIT.L("Create a separate profile for %s (copying current settings) and reload the interface?"), charKey)
       confirmPopup("UPT_USE_CHAR_PROFILE", prompt, BIT.L("Switch & reload"), function()
         Profiles.Use(charKey, { create = true, copyFromCurrent = true })
-        reloadNow()
+        refreshAll()
+        reloadNow(string.format(BIT.L("Selected profile \"%s\". Use /reload to apply."), charKey))
       end)
     end
   end)
   quickBtn:SetPoint("LEFT", quickRow, "LEFT", activeRow.layout.label - 6, 0)
   cy = UI.PlaceRow(quickRow, cy, 32)
+
+  -- Global art style selector (Stylized 2D / Pixel Art / Classic): reachable via Gamepad and synced live with header & /upt art.
+  local artBtn
+  if BIT.Art and Looks and Looks.PickList then
+    local artRow = Rows.Row(card, "Art style", {
+      tooltip = "Switches Soul Shards, combo orbs, range marks, upgrade arrows and markers between Stylized 2D, Pixel Art and Classic. Takes effect at once.",
+    })
+    artBtn = UI.DropdownButton(artRow, activeRow.layout.control + 20, function(self)
+      Looks.PickList(self, BIT.Art.List(), BIT.Art.Get(), function(id)
+        BIT.Art.Set(id)
+        self:SetLabel(BIT.Art.Label())
+      end)
+    end)
+    artBtn:SetPoint("LEFT", artRow, "LEFT", artRow.layout.label, 0)
+    artBtn:SetLabel(BIT.Art.Label())
+    artRow:SetPoint("TOPLEFT", 0, -cy)
+    cy = cy + ROW + 6
+    BIT.Art.Subscribe(function()
+      if artBtn then artBtn:SetLabel(BIT.Art.Label()) end
+    end)
+  end
 
   -------------------------------------------------------------------------------------------
   -- Section 2: Modules in this profile (quick toggle checklist)
@@ -272,7 +300,8 @@ local function build(content)
         return
       end
       newBox:SetText("")
-      reloadNow()
+      refreshAll()
+      reloadNow(string.format(BIT.L("Selected profile \"%s\". Use /reload to apply."), raw))
     end)
   end
 
@@ -313,7 +342,9 @@ local function build(content)
           tell(string.format(BIT.L("Could not copy profile (%s)."), tostring(err)))
           return
         end
-        reloadNow()
+        refreshAll()
+        reloadNow(string.format(BIT.L("Copied settings from \"%s\" into \"%s\". Use /reload to apply."),
+          labelForProfile(copySource), labelForProfile(Profiles.Selected())))
       end)
   end), 72)
   copyDoBtn:SetPoint("LEFT", copyPickBtn, "RIGHT", 6, 0)
@@ -369,7 +400,11 @@ local function build(content)
         labelForProfile(target)),
       BIT.L("Reset profile"), function()
         Profiles.Reset(target)
-        reloadNow()
+        if target == Profiles.Active() and BIT.Art and type(BIT.Art.Set) == "function" then
+          BIT.Art.Set("2d")
+        end
+        refreshAll()
+        reloadNow(string.format(BIT.L("Profile \"%s\" reset to defaults. Type /reload to apply."), labelForProfile(target)))
       end)
   end, 160)
   resetBtn:SetText(BIT.L("Reset profile"))
@@ -395,6 +430,7 @@ local function build(content)
     statusReload:SetShown(pendingProfile or pendingMods)
 
     activeBtn:SetLabel(labelForProfile(selected))
+    if artBtn and BIT.Art then artBtn:SetLabel(BIT.Art.Label()) end
     if charKey then
       quickBtn:Show()
       if selected == charKey then

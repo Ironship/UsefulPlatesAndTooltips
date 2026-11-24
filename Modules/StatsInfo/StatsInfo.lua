@@ -1869,16 +1869,23 @@ end
 -- escape mirrors it vertically (the top and bottom texels swapped) and its tip points up;
 -- UI-MicroStream-Red is used as shipped, tip down. The texels are normalized (0..1), so the
 -- whole file draws whatever its size is.
-local ARROW_UP = "|TInterface\\Buttons\\UI-MicroStream-Green:12:12:0:0:1:1:0:1:1:0|t"
-local ARROW_DOWN = "|TInterface\\Buttons\\UI-MicroStream-Red:12:12:0:0:1:1:0:1:0:1|t"
+local function inlineArrow(up)
+  local art = BIT and BIT.Art
+  local tex = art and art.Texture and art.Texture(up and "arrowUp" or "arrowDown")
+    or ("Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\StatsInfo\\Textures\\" .. (up and "ArrowUp" or "ArrowDown"))
+  if up and art and art.ArrowFlipUp and art.ArrowFlipUp() then
+    return "|T" .. tex .. ":12:12:0:0:1:1:0:1:1:0|t"
+  end
+  return "|T" .. tex .. ":13:13|t"
+end
 
 -- The at-a-glance line for a tooltip carrying someone else's item: which way it goes against
 -- our own gear, and the best spec's number behind it ("Better than your gear (best spec:
 -- 25% better dmg spec)").
 local function gearLine(part, spec, comparison)
   local v = part.percent or 0
-  local arrow, word = ARROW_UP, BIT.L("Better than your gear")
-  if v < 0 then arrow, word = ARROW_DOWN, BIT.L("Worse than your gear") end
+  local arrow, word = inlineArrow(v >= 0), BIT.L("Better than your gear")
+  if v < 0 then word = BIT.L("Worse than your gear") end
   local who = spec and BIT.L(spec.name) or BIT.L("best spec")
   if comparison and part.noBaseline then
     if #comparison.against == 0 then
@@ -2851,15 +2858,18 @@ local function buildMockTooltip(scene)
     itemIcon:SetTexture(texture)
     scene.questRewardIcons[i] = item
     if i < 3 then
+      local upTex = BIT and BIT.Art and BIT.Art.Texture("arrowUp")
+        or "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\StatsInfo\\Textures\\ArrowUp"
+      local flipUp = BIT and BIT.Art and BIT.Art.ArrowFlipUp and BIT.Art.ArrowFlipUp() or false
       local arrow = item:CreateTexture(nil, "OVERLAY")
-      arrow:SetTexture("Interface\\Buttons\\UI-MicroStream-Green")
-      arrow:SetTexCoord(0, 1, 1, 0)
+      arrow:SetTexture(upTex)
+      if flipUp then arrow:SetTexCoord(0, 1, 1, 0) else arrow:SetTexCoord(0, 1, 0, 1) end
       arrow:SetVertexColor(1, 1, 1, 1)
       scene.questRewardArrows[i] = arrow
       if i == 2 then
         local bestArrow = item:CreateTexture(nil, "OVERLAY")
-        bestArrow:SetTexture("Interface\\Buttons\\UI-MicroStream-Green")
-        bestArrow:SetTexCoord(0, 1, 1, 0)
+        bestArrow:SetTexture(upTex)
+        if flipUp then bestArrow:SetTexCoord(0, 1, 1, 0) else bestArrow:SetTexCoord(0, 1, 0, 1) end
         bestArrow:SetVertexColor(1, 1, 1, 1)
         scene.questBestArrows[i] = bestArrow
       end
@@ -3009,12 +3019,17 @@ local function renderMockTooltip(scene, style)
   scene.questRewardLabel:SetPoint("TOPLEFT", rewardRow, "TOPLEFT", 0, 0)
   scene.questRewardLabel:SetFont(font, captionFont, outline)
   scene.questRewardLabel:SetTextColor(0.7, 0.7, 0.7, opacity)
+  local upTex = BIT and BIT.Art and BIT.Art.Texture("arrowUp")
+    or "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\StatsInfo\\Textures\\ArrowUp"
+  local flipUp = BIT and BIT.Art and BIT.Art.ArrowFlipUp and BIT.Art.ArrowFlipUp() or false
   for i, item in ipairs(scene.questRewardIcons) do
     item:ClearAllPoints()
     item:SetPoint("TOPLEFT", rewardRow, "TOPLEFT", (i - 1) * (rewardSize + 8), -captionFont - 4)
     item:SetSize(rewardSize, rewardSize)
     local arrow = scene.questRewardArrows[i]
     if arrow then
+      arrow:SetTexture(upTex)
+      if flipUp then arrow:SetTexCoord(0, 1, 1, 0) else arrow:SetTexCoord(0, 1, 0, 1) end
       arrow:SetSize(markerSize, markerSize)
       arrow:ClearAllPoints()
       arrow:SetPoint("TOPRIGHT", item, "TOPRIGHT", -1, -1)
@@ -3022,6 +3037,8 @@ local function renderMockTooltip(scene, style)
     end
     local bestArrow = scene.questBestArrows[i]
     if bestArrow then
+      bestArrow:SetTexture(upTex)
+      if flipUp then bestArrow:SetTexCoord(0, 1, 1, 0) else bestArrow:SetTexCoord(0, 1, 0, 1) end
       bestArrow:SetSize(math.floor(markerSize * 0.75), math.floor(markerSize * 0.75))
       bestArrow:ClearAllPoints()
       bestArrow:SetPoint("TOPRIGHT", item, "TOPRIGHT", -8, -8)
@@ -3484,6 +3501,11 @@ BIT.RegisterTab("StatsInfo", {
     showCount()
     refreshControls()
     renderPreview()
+    if BIT.Art and type(BIT.Art.Subscribe) == "function" then
+      BIT.Art.Subscribe(function()
+        if parent:IsShown() then renderPreview() end
+      end)
+    end
   end,
 })
 BIT.tabWords.stats = "StatsInfo"

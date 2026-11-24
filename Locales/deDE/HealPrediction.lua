@@ -8,6 +8,21 @@ BIT.RegisterLocale("deDE", {
   ["Incoming heal"] = "Heilung",
   ["HealPrediction sample"] = "Heilungsprognose-Beispiel",
   ["+25 incoming, from the health edge"] = "+25 eingehend, ab der Gesundheitskante",
+  ["Hidden (%s is off)"] = "Ausgeblendet (%s ist aus)",
+  ["All"] = "Alle",
+  ["Own"] = "Eigene",
+  ["Others"] = "Andere",
+  ["HoT"] = "HoT",
+  ["No incoming heal"] = "Keine eingehende Heilung",
+  ["Wounded (40% HP)"] = "Verwundet (40 % LP)",
+  ["Casting direct heal (+20%)"] = "Wirkt direkte Heilung (+20 %)",
+  ["Other healer joins (+10%)"] = "Anderer Heiler kommt hinzu (+10 %)",
+  ["Heal landed - HoT tick %d/4"] = "Heilung getroffen - HoT-Tick %d/4",
+  ["Full health"] = "Volle Gesundheit",
+  ["A direct heal is cast, another healer joins, both land, and a heal over time ticks the target to full."] =
+    "Eine direkte Heilung wird gewirkt, ein anderer Heiler schließt sich an, beide treffen und eine Heilung über Zeit heilt das Ziel voll.",
+  ["The %s option controls this sample; the other Show on options control live frames. The segment starts at the health edge (the green bar's end) and is cropped at the bar's right end when the heal would overheal."] =
+    "Die Option %s steuert dieses Beispiel; die anderen Anzeigen-Optionen steuern die echten Fenster. Das Segment beginnt an der Gesundheitskante (dem Ende der grünen Leiste) und wird am rechten Ende der Leiste abgeschnitten, wenn die Heilung überheilen würde.",
   ["The Target frame option controls this sample; the other frame options control live frames. The segment starts at the health edge (the green bar's end) and is cropped at the bar's right end when the heal would overheal."] =
     "Die Option Zielfenster steuert dieses Beispiel; die anderen Fensteroptionen steuern die echten Fenster. Das Segment beginnt an der Gesundheitskante (dem Ende der grünen Leiste) und wird am rechten Ende der Leiste abgeschnitten, wenn die Heilung überheilen würde.",
   ["The client already knows how much healing is coming (UnitGetIncomingHeals). This module redraws direct heals and adds estimates for your own heals over time."] =

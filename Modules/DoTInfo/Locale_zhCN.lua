@@ -56,6 +56,7 @@ local NAMES = {
     ["Rupture"] = { "割裂" },
     ["Siphon Life"] = { "生命虹吸" },
     ["Serpent Sting"] = { "毒蛇钉刺", "毒蛇釘刺" },
+    ["Scorpid Poison"] = { "蝎毒", "蠍毒" },
     ["Pyroblast"] = { "炎爆术", "炎爆術" },
     ["Rain of Fire"] = { "火焰之雨" },
     ["Hellfire"] = { "地狱烈焰", "地獄烈焰" },

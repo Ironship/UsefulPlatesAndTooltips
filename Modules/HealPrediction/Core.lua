@@ -39,7 +39,7 @@ local DEFAULTS = {
     hotHorizon = 4,     -- seconds of each heal over time drawn ahead, when hotWhole is off
     showFood = true,    -- the health the food you are eating still has to give, as one more heal over time on your frame
     showDrink = true,   -- the mana the drink you are drinking still has to give, on your mana bar
-    heightPercent = 45, -- the segment's share of the bar's height, anchored to the top edge
+    heightPercent = 100, -- full interior height by default (matches DoTInfo / CastPrediction / Blizzard native)
     showText = false,   -- a small number at the segment's right end ("~120")
     debug = false,
 }
@@ -104,6 +104,7 @@ local function colorOf(id, opacityPercent)
     local rgb = COLOR_BY_ID[id] or (BIT.Looks and BIT.Looks.Rgb(id)) or COLOR_BY_ID.green
     return rgb[1], rgb[2], rgb[3], (tonumber(opacityPercent) or 100) / 100
 end
+ns.ColorOf = colorOf
 
 ---------------------------------------------------------------------------------------------
 -- The reading
@@ -208,22 +209,36 @@ local function overlayFor(healthBar)
     return built
 end
 
--- Anchors the clip at the health edge and the segment inside it, so the fill starts where the
--- green ends and is cropped at the bar's right end (overheal spills nowhere).
-local function layoutOverlay(o, healthBar, hasDirectHeal)
+local function validRegion(r)
+    return r ~= nil and (type(r) == "table" or type(r) == "userdata")
+end
+
+-- Anchors each band's clip cleanly after the previous band so own direct heals, other healers' share,
+-- and your heals over time never bleed into one another, and crops overheal at the bar's right end.
+local function layoutOverlay(o, healthBar, hasDirectHeal, hasOthers)
     local width = healthBarWidth(healthBar)
     local height = healthBarHeight(healthBar)
-    local fraction = (tonumber(db().heightPercent) or 45) / 100
-    local segmentHeight = math.max(2, math.floor(height * fraction + 0.5))
-    local signature = width .. ":" .. height .. ":" .. segmentHeight .. ":" .. tostring(hasDirectHeal)
+    local topInset, bottomInset = 0, 0
+    if BIT.Plate and type(BIT.Plate.BarInset) == "function" then
+        topInset, bottomInset = BIT.Plate.BarInset(healthBar)
+    end
+    local visibleHeight = math.max(2, height - topInset - bottomInset)
+    local fraction = (tonumber(db().heightPercent) or 100) / 100
+    local fullHeight = fraction >= 1
+    local segmentHeight = math.max(2, math.floor(visibleHeight * fraction + 0.5))
+    local signature = width .. ":" .. height .. ":" .. topInset .. ":" .. bottomInset .. ":" .. segmentHeight
+        .. ":" .. tostring(fullHeight) .. ":" .. tostring(hasDirectHeal and true or false) .. ":" .. tostring(hasOthers and true or false)
     local fill = ask(healthBar.GetStatusBarTexture, healthBar)
     if isSecret(fill) then fill = nil end
     local ownFill = ask(o.bar.GetStatusBarTexture, o.bar)
     if isSecret(ownFill) then ownFill = nil end
-    if o.layoutSignature == signature and o.healthFill == fill and o.ownFill == ownFill then return end
-    local hasFill = fill ~= nil and (type(fill) == "table" or type(fill) == "userdata")
-    -- Secret-safe: the anchor is the health fill's moving right edge; no Lua math on it. Without a fill
-    -- texture the band is drawn across the whole bar (a plain left-to-right band).
+    local othersFill = o.others and ask(o.others.bar.GetStatusBarTexture, o.others.bar) or nil
+    if isSecret(othersFill) then othersFill = nil end
+    if o.layoutSignature == signature and o.healthFill == fill and o.ownFill == ownFill and o.othersFill == othersFill then return end
+    local hasFill = validRegion(fill)
+    local hasOwnFill = hasDirectHeal and validRegion(ownFill)
+    local hasOthersFill = hasOthers and validRegion(othersFill)
+    -- Secret-safe: each anchor is the preceding fill's moving right edge; no Lua math on values.
     local function anchorClip(clip, after)
         clip:ClearAllPoints()
         if after then
@@ -233,27 +248,42 @@ local function layoutOverlay(o, healthBar, hasDirectHeal)
             clip:SetAllPoints(healthBar)
         end
     end
-    local function sizeBar(layer)
+    -- Full height (100%) pins both TOPLEFT and BOTTOMLEFT to the visible interior (pixel-exact);
+    -- partial height (< 100%) pins only TOPLEFT so SetHeight takes effect cleanly.
+    local function sizeBar(layer, barAnchor, anchorPoint, yOffset)
+        local anchor = barAnchor or layer.clip
+        local point = anchorPoint or "TOPLEFT"
         layer.bar:ClearAllPoints()
-        layer.bar:SetPoint("TOPLEFT", layer.clip, "TOPLEFT")
-        layer.bar:SetPoint("BOTTOMLEFT", layer.clip, "BOTTOMLEFT")
+        layer.bar:SetPoint("TOPLEFT", anchor, point, 0, yOffset ~= nil and yOffset or -topInset)
         layer.bar:SetWidth(width)
-        layer.bar:SetHeight(segmentHeight)
+        if fullHeight then
+            layer.bar:SetPoint("BOTTOMLEFT", anchor, point == "TOPRIGHT" and "BOTTOMRIGHT" or "BOTTOMLEFT", 0, bottomInset)
+        else
+            layer.bar:SetHeight(segmentHeight)
+        end
     end
     anchorClip(o.clip, hasFill and fill or nil)
     sizeBar(o)
     if o.others then
-        anchorClip(o.others.clip, hasFill and fill or nil)
-        sizeBar(o.others)
+        -- Other healers' StatusBar receives the total incoming heal (own + others, secret-safe), so it
+        -- begins at o.clip's TOPLEFT (identical anchor to o.bar — zero vertical rounding drift) while
+        -- its own clip begins at ownFill's right edge (zero overlap with own).
+        if hasOwnFill then
+            anchorClip(o.others.clip, ownFill)
+            sizeBar(o.others, o.clip, "TOPLEFT")
+        else
+            anchorClip(o.others.clip, hasFill and fill or nil)
+            sizeBar(o.others)
+        end
     end
     if o.hot then
-        -- after the end of the direct heal: the own bar's fill reaches health + heal
-        local after = hasDirectHeal and (ownFill ~= nil and (type(ownFill) == "table" or type(ownFill) == "userdata")) and ownFill
-            or (hasFill and fill or nil)
+        -- After the furthest direct-heal edge: other healers' total when visible, else own direct heal, else health.
+        local after = (hasOthersFill and othersFill) or (hasOwnFill and ownFill) or (hasFill and fill or nil)
         anchorClip(o.hot.clip, after)
-        sizeBar(o.hot)
+        -- When anchored to othersFill/ownFill, clip TOPLEFT already sits at -topInset; only healthFill starts at y = 0.
+        sizeBar(o.hot, nil, nil, (hasOthersFill or hasOwnFill) and 0 or -topInset)
     end
-    o.layoutSignature, o.healthFill, o.ownFill = signature, fill, ownFill
+    o.layoutSignature, o.healthFill, o.ownFill, o.othersFill = signature, fill, ownFill, othersFill
 end
 
 local function paintLayer(layer, color, opacity, textureId)
@@ -267,14 +297,19 @@ local function paintLayer(layer, color, opacity, textureId)
     local last = layer.paintKey
     if last and last[1] == path and last[2] == tiled and last[3] == r and last[4] == g and last[5] == b and last[6] == a then return end
     pcall(function()
-        layer.bar:SetStatusBarColor(r, g, b, a)
         layer.bar:SetStatusBarTexture(path)
         local fill = layer.bar:GetStatusBarTexture()
         if fill then
-            fill:SetTexture(path, tiled and "REPEAT" or nil, tiled and "REPEAT" or nil)
-            fill:SetHorizTile(tiled)
-            fill:SetVertTile(tiled)
+            if tiled then
+                fill:SetTexture(path, "REPEAT", "REPEAT")
+                fill:SetHorizTile(true)
+                fill:SetVertTile(true)
+            else
+                fill:SetHorizTile(false)
+                fill:SetVertTile(false)
+            end
         end
+        layer.bar:SetStatusBarColor(r, g, b, a)
         if BIT.UI and BIT.UI.BarMask then BIT.UI.BarMask.Refresh(layer.bar) end -- the repaint may drop the shape mask
         layer.paintKey = { path, tiled, r, g, b, a } -- only a repaint that went through is remembered
     end)
@@ -299,7 +334,7 @@ local function setLayer(layer, maxHealth, value)
     layer.clip:Show()
 end
 
-local function setLabel(o, incoming, hot)
+local function setLabel(o, incoming, hot, everyone)
     local amount
     if not isSecret(incoming) and (incoming == nil or type(incoming) == "number") then
         amount = (incoming or 0) + (hot or 0)
@@ -308,7 +343,10 @@ local function setLabel(o, incoming, hot)
     o.label:SetShown(shown and true or false)
     if shown then
         o.label:ClearAllPoints()
-        o.label:SetPoint("LEFT", (hot and hot > 0 and o.hot.bar or o.bar):GetStatusBarTexture(), "RIGHT", 2, 0)
+        local anchorBar = (hot and hot > 0 and o.hot.bar)
+            or (everyone and o.others and o.others.bar)
+            or o.bar
+        o.label:SetPoint("LEFT", anchorBar:GetStatusBarTexture(), "RIGHT", 2, 0)
         o.label:SetText(string.format("~%d", math.floor(amount + 0.5)))
     end
 end
@@ -351,8 +389,8 @@ local function updateBar(unit, healthBar, enabled)
     end
     o.unit = unit
     local ok, err = pcall(function()
-        layoutOverlay(o, healthBar, not plainZero)
         paintOverlay(o)
+        layoutOverlay(o, healthBar, not plainZero, everyone ~= nil)
         -- Keep the direct band empty while only the other bands carry healing.
         if plainZero then
             o.bar:SetMinMaxValues(0, maxHealth)
@@ -364,7 +402,7 @@ local function updateBar(unit, healthBar, enabled)
         end
         setLayer(o.others, maxHealth, everyone)
         setLayer(o.hot, maxHealth, hot)
-        setLabel(o, plainZero and 0 or incoming, hot)
+        setLabel(o, plainZero and 0 or incoming, hot, everyone)
     end)
     if not ok then
         o.layoutSignature = nil
@@ -604,6 +642,14 @@ local UNIT_EVENTS = {
     UNIT_MAXHEALTH = true,
 }
 
+local function migrateSettings(s)
+    if type(s) ~= "table" then return end
+    if s.heightDefaultVersion ~= 1 then
+        if s.heightPercent == 45 then s.heightPercent = 100 end
+        s.heightDefaultVersion = 1
+    end
+end
+
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -622,6 +668,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
             return
         end
         settings = BIT.Settings("HealPrediction", DEFAULTS)
+        migrateSettings(settings)
         ns.settings = settings
         updateAll()
         self:UnregisterEvent("ADDON_LOADED")
@@ -743,19 +790,26 @@ function ns.DrawSample(healthBar, maxHealth, heal, others, hot, flag)
         return true
     end
     local incoming = settings.allHealers and others or heal
+    local everyone = settings.showOthers ~= false and not settings.allHealers and others or nil
+    if everyone ~= nil and (everyone <= 0 or (type(incoming) == "number" and everyone <= incoming)) then
+        everyone = nil
+    end
+    local hasDirect = incoming ~= nil and incoming > 0
+    local hasOthers = everyone ~= nil and everyone > 0
     local ok = pcall(function()
-        layoutOverlay(o, healthBar, incoming ~= nil and incoming > 0)
         paintOverlay(o)
+        layoutOverlay(o, healthBar, hasDirect, hasOthers)
         setLayer(o, maxHealth, incoming)
-        if not incoming or incoming <= 0 then
+        if not hasDirect then
             o.bar:SetMinMaxValues(0, maxHealth)
             o.bar:SetValue(0)
+            o.bar:Show()
             o.clip:Show()
         end
-        setLayer(o.others, maxHealth, settings.showOthers ~= false and not settings.allHealers and others or nil)
+        setLayer(o.others, maxHealth, everyone)
         local shownHot = settings.showHots ~= false and hot or nil
         setLayer(o.hot, maxHealth, shownHot)
-        setLabel(o, incoming, shownHot)
+        setLabel(o, incoming, shownHot, everyone)
     end)
     return ok
 end
@@ -775,6 +829,7 @@ if BIT.RegisterWaker then
     BIT.RegisterWaker("HealPrediction", function()
         if not settings and type(BIT.Settings) == "function" then
             settings = BIT.Settings("HealPrediction", DEFAULTS)
+            migrateSettings(settings)
             ns.settings = settings
         end
     end)
