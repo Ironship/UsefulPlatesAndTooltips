@@ -10,6 +10,8 @@ has its own name, so both addons can be installed together.
 local API = UsefulPlatesAndTooltips_API
 local DoT = API and API.Get("DoT")
 local Cast = API and API.Get("CastPrediction")
+local Heal = API and API.Get("HealPrediction")
+local Frames = API and API.Get("Frames")
 ```
 
 The original DoT global remains available for existing consumers:
@@ -26,7 +28,7 @@ Additions can raise a version; incompatible contracts need a different API name.
 
 | Function | Result |
 |---|---|
-| `API.Get(name)` | `"DoT"`, `"CastPrediction"` or `"SpellDamageInfo"` API table, or `nil` if absent or disabled |
+| `API.Get(name)` | `"DoT"`, `"CastPrediction"`, `"HealPrediction"`, `"SpellDamageInfo"` or `"Frames"` API table, or `nil` if absent or disabled |
 | `API.GetVersion(name)` | Sub-API version, or `nil` |
 | `API.GetModules()` | A new list of enabled sub-API names |
 | `API.GetEvents()` | A new list of declared event names, including disabled modules |
@@ -44,6 +46,7 @@ module's enabled setting takes effect after `/reload`.
 |---|---|
 | `DOTS_CHANGED` | DoT damage or tracked identity changed for `target`, `focus` or a `nameplateN` |
 | `CAST_PREDICTION_CHANGED` | A pending cast started, ended, changed an exposed field, or moved to another unit token |
+| `HEAL_PREDICTION_CHANGED` | Tracked HoT/food/drink estimates or client incoming healing changed for `player`, `target`, `focus`, `targettarget`, `partyN` or `raidN` |
 
 For cast events, `unit` is the current recipient token, the previous token when the cast ends, or `nil` when the
 recipient is not visible on a supported token. Consumers with multiple bars should refresh all their cast overlays,
@@ -204,3 +207,73 @@ the current frame.
 
 Immediately redraws the numbers on a single registered `button` without waiting for the coalesced refresh timer (useful
 when a wheel or paged frame swaps `button.action` on open). Returns `true` when updated.
+
+## HealPrediction API (version 1)
+
+`API.Get("HealPrediction")` returns the API while HealPrediction is enabled, on Forever and Retail. It exposes
+DoesItDiePlus' own HoT, food and drink estimates alongside the client's incoming-heal reading, so a unit frame addon
+or UI plugin (such as a DaylightUI plugin drawing on `API.Attach(frame)`) can render heal predictions in its own style.
+
+### `Heal.GetHotAmount(unit [, horizon]) -> amount`
+
+Rounded remaining healing (plain number, `0` when none or the module is off) from the player's own heals over time on
+`unit`, plus active food on `"player"` when enabled. `horizon` is in seconds and defaults to the user's configured
+horizon (`GetHotHorizon()`).
+
+### `Heal.GetManaAmount([horizon]) -> amount`
+
+Rounded remaining mana (plain number, `0` when none or the module is off) from the player's active drink over `horizon`
+seconds (defaults to `GetHotHorizon()`).
+
+### `Heal.GetIncoming(unit [, allHealers]) -> direct, hot`
+
+Returns the client's native incoming-heal value (`UnitGetIncomingHeals`) and the rounded HoT estimate (`GetHotAmount`).
+`allHealers` defaults to the user's `All healers` setting. Note: `direct` may be `nil` or a secret value in combat on
+WoW: Forever — pass it straight into `StatusBar:SetValue`, never compare or format it in Lua.
+
+### `Heal.GetHotHorizon() -> seconds`
+
+The user's configured HoT horizon in seconds (`math.huge` when *Whole remaining effect* is enabled), or `nil` while the
+module is off.
+
+### `Heal.RegisterCallback(owner, func)` / `Heal.UnregisterCallback(owner)`
+
+Convenience aliases for `API.RegisterCallback(owner, "HEAL_PREDICTION_CHANGED", func)` and
+`API.UnregisterCallback(owner, "HEAL_PREDICTION_CHANGED")`. `func(event, unit)` fires when tracked HoTs, food, drink or
+incoming direct heals change for `unit`.
+
+## Frames API (version 1)
+
+`API.Get("Frames")` is always available and lets unit frame, raid frame, nameplate and action bar addons register their
+own bars directly with DoesItDiePlus, so DoTInfo, CastPrediction, ShieldsInfo, HealPrediction, Range, HunterRangeFinder,
+ResourceDing, SpellDamageInfo and TriggerGlow attach to them automatically. User-configured overrides in `/upt frame`
+still take precedence.
+
+All callbacks run under `pcall`; registering again with the same `owner` replaces the previous callback.
+
+| Function | Contract |
+|---|---|
+| `Frames.RegisterUnitFrameSource(owner, fn)` | `fn(unit, part) -> host, healthBar, portrait` (`unit` is `"player"`, `"target"`, `"focus"`, `"targettarget"`; `part` is `"Player"`, `"Target"`, `"Focus"`, `"TargetTarget"`) |
+| `Frames.RegisterPlateBarSource(owner, fn)` | `fn(plate) -> healthBar, path` (`plate` is Blizzard's nameplate from `C_NamePlate`) |
+| `Frames.RegisterGroupFramesSource(owner, fn)` | `fn(out)` appends `{ unit, bar, host, kind }` (or returns a list); `kind` is `"party"`, `"raid"` or `nil` |
+| `Frames.RegisterPowerBarSource(owner, fn)` | `fn(unit) -> statusBar` (visible `StatusBar`, e.g. `"player"` mana bar) |
+| `Frames.RegisterActionButtonSource(owner, fn)` | `fn(add)` calls `add(button, slotFn)` where `slotFn(button) -> actionSlot` |
+| `Frames.Unregister(owner)` | Removes every frame source registered under `owner` |
+
+```lua
+local API = UsefulPlatesAndTooltips_API
+local Frames = API and API.Get("Frames")
+if Frames then
+    Frames.RegisterUnitFrameSource("MyUI", function(unit)
+        local f = MyUI:GetUnitFrame(unit)
+        if f and f:IsVisible() then return f, f.Health, f.Portrait end
+    end)
+    Frames.RegisterGroupFramesSource("MyUI", function(out)
+        for frame, unit in MyUI:IterateRaidFrames() do
+            if frame:IsVisible() then
+                out[#out + 1] = { unit = unit, bar = frame.Health, host = frame, kind = "raid" }
+            end
+        end
+    end)
+end
+```

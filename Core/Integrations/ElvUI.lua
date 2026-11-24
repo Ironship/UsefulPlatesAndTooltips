@@ -10,7 +10,7 @@ local Plate = BIT.Plate
 local read = Plate.Read
 
 -- A unit frame only counts while it is on screen: without a target it is hidden, and Blizzard's frame answers.
-Plate.RegisterUnitFrameSource(function(_, part)
+Plate.RegisterUnitFrameSource("ElvUI", function(_, part)
   local elv = type(ElvUI) == "table" and _G["ElvUF_" .. part]
   if type(elv) ~= "table" or read(elv.IsForbidden, elv) == true or read(elv.IsVisible, elv) ~= true then return end
   local bar = read(function() return elv.Health end)
@@ -23,7 +23,16 @@ Plate.RegisterUnitFrameSource(function(_, part)
   return elv, bar, portrait
 end)
 
-Plate.RegisterPlateBarSource(function(plate)
+local POWER_PART = { player = "Player", target = "Target", focus = "Focus", targettarget = "TargetTarget" }
+
+Plate.RegisterPowerBarSource("ElvUI", function(unit)
+  local part = POWER_PART[unit]
+  local elv = part and type(ElvUI) == "table" and _G["ElvUF_" .. part]
+  if type(elv) ~= "table" or read(elv.IsForbidden, elv) == true or read(elv.IsVisible, elv) ~= true then return end
+  return read(function() return elv.Power end)
+end)
+
+Plate.RegisterPlateBarSource("ElvUI", function(plate)
   if type(ElvUI) ~= "table" then return end
   local elv = read(function() return plate.unitFrame end)
   if type(elv) ~= "table" or type(elv.UpdateAllElements) ~= "function" then return end

@@ -5,7 +5,7 @@
 ## Notes-ruRU: Информация для WoW: Forever: урон заклинаний, периодический урон, лечение, щиты, дальность, серии приемов, сравнение характеристик и числа на панелях действий. /upt
 ## Author: Ironship
 ## Version: 0.9.143
-## OptionalDeps: ElvUI, HydraUI, EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
+## OptionalDeps: ElvUI, HydraUI, DaylightUI, EllesmereUI, EllesmereUIActionBars, EllesmereUINameplates, EllesmereUIUnitFrames, EllesmereUIRaidFrames, EllesmereUIBags
 ## SavedVariables: UsefulPlatesAndTooltipsDB, UsefulPlatesAndTooltips_SpellDamageInfoDB, UsefulPlatesAndTooltips_DoTInfoDB, UsefulPlatesAndTooltips_ResourceDingDB
 
 Core\Init.lua
@@ -36,6 +36,7 @@ Core\TalentMods.lua
 Core\PlateLayout.lua
 Core\Integrations\ElvUI.lua
 Core\Integrations\HydraUI.lua
+Core\Integrations\DaylightUI.lua
 Core\Orbs.lua
 Core\Appearance.lua
 Core\Gamepad.lua
@@ -126,6 +127,7 @@ Modules\ShieldsInfo\ShieldsInfo.lua
 Modules\HealPrediction\Core.lua
 Modules\HealPrediction\Hots.lua
 Modules\HealPrediction\Options.lua
+Modules\HealPrediction\API.lua
 
 # Hunter-specific range ladder, beside the existing class range marker
 Modules\HunterRangeFinder\HunterRangeFinder.lua
