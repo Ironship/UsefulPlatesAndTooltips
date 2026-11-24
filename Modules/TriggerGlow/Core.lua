@@ -58,7 +58,13 @@ local function trace(msg)
   if type(log) ~= "table" then log = {}; settings.log = log end
   log[#log + 1] = string.format("%.1f %s", GetTime and GetTime() or 0, msg)
   if #log > MAX_LOG then table.remove(log, 1) end
-  if settings.debug then print("|cff888888TriggerGlow: " .. msg .. "|r") end
+  if settings.debug then
+    if BIT.SayModule then
+      BIT.SayModule("TriggerGlow", "|cff888888" .. tostring(msg) .. "|r", "ffbb33")
+    else
+      print("|cffffbb33TriggerGlow|r: |cff888888" .. tostring(msg) .. "|r")
+    end
+  end
 end
 ns.trace = trace
 

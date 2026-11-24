@@ -9,7 +9,7 @@ if not BIT or not BIT.RegisterTab then return end
 -- { command as typed, what it does }. "/upt <word> ..." goes to BIT.commands, the others to
 -- the part's own slash command.
 local SECTIONS = {
-  { title = "Spell numbers (SpellDamageInfo)", rows = {
+  { title = "SPELL NUMBERS (SPELLDAMAGEINFO)", rows = {
     { "/sdi status", "Print the current settings." },
     { "/sdi buttons", "Print what the number on each action button was made from." },
     { "/sdi where", "Read the frame under the mouse 4 seconds after the click." },
@@ -19,39 +19,39 @@ local SECTIONS = {
     { "/sdi dump all", "The same for every rank of every class. Takes up to a minute." },
     { "/sdi dump items", "Save the use texts of the items in your bags and on your bars." },
   } },
-  { title = "DoTs (DoTInfo)", rows = {
+  { title = "DOTS (DOTINFO)", rows = {
     { "/dotinfo debug", "Switch the event trace in the chat window on or off." },
     { "/dotinfo check", "Check how your spells' descriptions are read." },
     { "/dotinfo ticks", "Open the tick viewer." },
     { "/dotinfo plates", "Print what can be read from the nameplates on screen." },
     { "/dotinfo skull", "Show the kill icon on the target portrait for 5 seconds." },
   } },
-  { title = "Cast prediction", rows = {
+  { title = "CAST PREDICTION", rows = {
     { "/upt castprobe", "Print what the prediction can read right now." },
     { "/upt castpred census", "Print the talents the prediction knows about." },
   } },
-  { title = "Heal prediction", rows = {
+  { title = "HEAL PREDICTION", rows = {
     { "/upt healprobe", "Print what the incoming-heal reading returns right now." },
     { "/upt healdebug target", "Print the heal-over-time reading for your target." },
   } },
-  { title = "Stats and bag arrows (StatsInfo)", rows = {
+  { title = "STATS AND BAG ARROWS (STATSINFO)", rows = {
     { "/upt probe", "Record what StatsInfo can read about your character." },
     { "/upt bagprobe", "Print whether the bag arrows are wired up." },
   } },
-  { title = "Points and sounds (ResourceDing)", rows = {
+  { title = "POINTS AND SOUNDS (RESOURCEDING)", rows = {
     { "/rding probe", "Print what the full-bar decision rests on right now." },
     { "/rding test", "Play the selected sound." },
   } },
-  { title = "Range", rows = {
+  { title = "RANGE", rows = {
     { "/upt rangecheck", "Print the range reading for your target." },
     { "/upt hunterprobe", "Print the hunter range ladder's readings." },
   } },
-  { title = "Performance", rows = {
+  { title = "PERFORMANCE", rows = {
     { "/upt perf", "Print which parts of the addon used the most CPU time this session." },
     { "/upt perf slow", "Print the slowest single calls, with the memory each allocated." },
     { "/upt perf reset", "Start the counters over." },
   } },
-  { title = "Frames and API", rows = {
+  { title = "FRAMES AND API", rows = {
     { "/upt frame", "Print which unit frames the markers are drawn on." },
     { "/upt api", "Print the addon API version and its parts." },
   } },
@@ -92,35 +92,42 @@ local function buildTraces(content, y)
   local Trace = BIT.Trace
   if type(Trace) ~= "table" then return y end
   local UI = BIT.UI
-  local heading = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  heading:SetPoint("TOPLEFT", 8, y - 6)
+  local header = UI.Header(content, "")
+  header:SetPoint("TOPLEFT", 10, y - 4)
   local clear = UI.Button(content, BIT.L("Clear"), 80, function() Trace.Clear() end)
-  clear:SetPoint("TOPRIGHT", -8, y - 2)
+  clear:SetPoint("TOPRIGHT", -10, y - 2)
   -- raises a real Lua error on purpose: it must show up in the box below (and in the game's
   -- own error window, when that is switched on)
   local test = UI.Button(content, BIT.L("Test"), 80, function()
     error("trace test: this error was raised on purpose by the Debug tab")
   end)
   test:SetPoint("RIGHT", clear, "LEFT", -6, 0)
+  header:SetPoint("RIGHT", test, "LEFT", -10, 0)
+  local heading = header.label
   y = y - HEADING
 
   local box = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  box:SetPoint("TOPLEFT", 8, y)
-  box:SetPoint("RIGHT", -8, 0)
+  box:SetPoint("TOPLEFT", 10, y)
+  box:SetPoint("RIGHT", -10, 0)
   box:SetHeight(TRACE_HEIGHT)
   UI.Backdrop(box, 0.09)
-  local scroll = CreateFrame("ScrollFrame", nil, box)
-  scroll:SetPoint("TOPLEFT", 6, -6)
-  scroll:SetPoint("BOTTOMRIGHT", -6, 6)
-  scroll:EnableMouseWheel(true)
-  local edit = CreateFrame("EditBox", nil, scroll)
+  local col = UI.ScrollColumn(box)
+  col:SetPoint("TOPLEFT", 6, -6)
+  col:SetPoint("BOTTOMRIGHT", -6, 6)
+  local scroll = col.scroll
+  local edit = CreateFrame("EditBox", nil, col.content)
+  edit:SetPoint("TOPLEFT", 0, 0)
   edit:SetMultiLine(true)
   edit:SetAutoFocus(false)
   edit:SetFontObject("GameFontHighlightSmall")
-  edit:SetWidth(math.max(60, (content:GetWidth() or 600) - 28))
-  scroll:SetScrollChild(edit)
+  edit:SetWidth(math.max(60, (content:GetWidth() or 600) - 44))
+  if type(edit.EnableMouseWheel) == "function" then edit:EnableMouseWheel(false) end
 
   local shown = ""
+  local function fitEdit()
+    local h = edit:GetHeight()
+    col:Fit(math.max(TRACE_HEIGHT - 12, type(h) == "number" and h + 8 or TRACE_HEIGHT - 12))
+  end
   local function refresh()
     local n = #Trace.entries
     heading:SetText(string.format(BIT.L("Errors and blocked actions of this addon (%d)"), n))
@@ -129,18 +136,19 @@ local function buildTraces(content, y)
     edit:SetText(shown)
     edit:SetCursorPosition(0)
     scroll:SetVerticalScroll(0)
+    fitEdit()
   end
   edit:SetScript("OnTextChanged", function(self, userInput)
     if userInput then self:SetText(shown) end
+    fitEdit()
   end)
+  edit:SetScript("OnSizeChanged", fitEdit)
   edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  scroll:SetScript("OnMouseWheel", function(self, delta)
-    local max = math.max(0, (edit:GetHeight() or 0) - (self:GetHeight() or 0))
-    local v = (self:GetVerticalScroll() or 0) - (delta or 0) * 36
-    self:SetVerticalScroll(math.min(math.max(v, 0), max))
-  end)
-  scroll:SetScript("OnSizeChanged", function(_, width)
-    if type(width) == "number" and width > 0 then edit:SetWidth(width) end
+  scroll:HookScript("OnSizeChanged", function(_, width)
+    if type(width) == "number" and width > 0 then
+      edit:SetWidth(width)
+      fitEdit()
+    end
   end)
   -- a click anywhere in the box puts the cursor in the text, so Ctrl+A / Ctrl+C work
   box:EnableMouse(true)
@@ -154,8 +162,8 @@ local function build(content)
   local UI = BIT.UI
   local y = -8
   local note = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  note:SetPoint("TOPLEFT", 8, y)
-  note:SetPoint("RIGHT", -8, 0)
+  note:SetPoint("TOPLEFT", 10, y)
+  note:SetPoint("RIGHT", -10, 0)
   note:SetJustifyH("LEFT")
   note:SetText(BIT.L("Each button runs the command written on it; the answer comes in the chat window. "
     .. "What the dump commands save is written to disk at logout or with Reload UI."))
@@ -163,9 +171,15 @@ local function build(content)
   local reload = UI.Button(content, BIT.L("Reload UI"), BUTTON_WIDTH, function()
     if type(ReloadUI) == "function" then ReloadUI() end
   end)
-  reload:SetPoint("TOPLEFT", 8, y)
+  reload:SetPoint("TOPLEFT", 10, y)
   y = y - ROW - 4
   y = buildTraces(content, y)
+
+  local cmdCard = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  cmdCard:SetPoint("TOPLEFT", 10, y)
+  cmdCard:SetPoint("RIGHT", -10, 0)
+  UI.Backdrop(cmdCard, 0.09)
+  local cy = -10
 
   for _, section in ipairs(SECTIONS) do
     local rows = {}
@@ -173,26 +187,28 @@ local function build(content)
       if handler(row[1]) then rows[#rows + 1] = row end
     end
     if #rows > 0 then
-      local heading = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-      heading:SetPoint("TOPLEFT", 8, y - 6)
-      heading:SetText(BIT.L(section.title))
-      y = y - HEADING
+      local heading = UI.Header(cmdCard, section.title)
+      heading:SetPoint("TOPLEFT", 10, cy - 2)
+      heading:SetPoint("RIGHT", cmdCard, "RIGHT", -10, 0)
+      cy = cy - HEADING
       for _, row in ipairs(rows) do
         local command = row[1]
-        local button = UI.Button(content, command, BUTTON_WIDTH, function() run(command) end)
-        button:SetPoint("TOPLEFT", 8, y)
-        local text = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local button = UI.Button(cmdCard, command, BUTTON_WIDTH, function() run(command) end)
+        button:SetPoint("TOPLEFT", 10, cy)
+        local text = cmdCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         text:SetPoint("LEFT", button, "RIGHT", 10, 0)
         -- a width, not a second anchor: LEFT and RIGHT on two frames would disagree on the height
-        text:SetWidth(math.max(60, (content:GetWidth() or 600) - BUTTON_WIDTH - 26))
+        text:SetWidth(math.max(60, (content:GetWidth() or 600) - BUTTON_WIDTH - 48))
         text:SetJustifyH("LEFT")
         text:SetWordWrap(false)
         text:SetText(BIT.L(row[2]))
-        y = y - ROW
+        cy = cy - ROW
       end
+      cy = cy - 4
     end
   end
-  content:SetHeight(-y + 12)
+  cmdCard:SetHeight(-cy + 8)
+  content:SetHeight(-y + cmdCard:GetHeight() + 12)
 end
 
 -- Loaded last, so the tab is the last one. plain: a tool page, not a part that can be switched

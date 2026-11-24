@@ -11,12 +11,12 @@ BIT.RegisterLocale("deDE", {
   ["Quest rewards (sample)"] = "Questbelohnungen (Beispiel)",
   ["Static sample: bag and quest arrows follow their settings; live upgrades are rated against your gear."] =
     "Statisches Beispiel: Taschen- und Questpfeile folgen ihren Einstellungen; echte Upgrades werden an Eurer Ausrüstung gemessen.",
-  ["The size the preview's text is drawn in. The same field the shared appearance editor changes."] =
-    "Die Größe, in der der Text der Vorschau gezeichnet wird. Dasselbe Feld, das der gemeinsame Editor für das Aussehen ändert.",
-  ["Scales the preview's card, rows, icons and bag button. The same field the shared appearance editor changes."] =
-    "Skaliert die Karte, die Zeilen, die Symbole und die Taschenschaltfläche der Vorschau. Dasselbe Feld, das der gemeinsame Editor für das Aussehen ändert.",
-  ["How see-through the preview's lines and bag button are. The same field the shared appearance editor changes."] =
-    "Wie durchsichtig die Zeilen und die Taschenschaltfläche der Vorschau sind. Dasselbe Feld, das der gemeinsame Editor für das Aussehen ändert.",
+  ["Preview only: changes the font size of the sample card without touching the live game tooltip."] =
+    "Nur Vorschau: Ändert die Schriftgröße der Beispielkarte, ohne den echten Spiel-Tooltip zu verändern.",
+  ["Preview only: zooms the sample tooltip and bag slots without touching the live game UI."] =
+    "Nur Vorschau: Skaliert den Beispiel-Tooltip und die Taschenplätze, ohne die echte Spieloberfläche zu verändern.",
+  ["Preview only: adjusts the sample card's opacity without touching the live game UI."] =
+    "Nur Vorschau: Passt die Deckkraft der Beispielkarte an, ohne die echte Spieloberfläche zu verändern.",
 
   -- the sample item: the game's own words for what a real item tooltip shows
   ["Embossed Leather Vest (sample)"] = "Geprägte Lederweste (Beispiel)",

@@ -45,6 +45,7 @@ BIT.RegisterLocale("ruRU", {
   ["Hunter only. Settings are here for an alt."] = "Только для охотников. Настройки доступны и для другого персонажа.",
 
   -- окно настроек
+  ["Settings"] = "Настройки",
   ["Enable %s"] = "Включить %s",
   ["Reload UI"] = "Перезагрузить интерфейс",
   ["Reset module"] = "Сбросить модуль",
@@ -63,6 +64,8 @@ BIT.RegisterLocale("ruRU", {
   ["Switched off after a reload of the interface."] = "Выключится после перезагрузки интерфейса.",
   ["Its settings are here while it runs; its appearance and a sample preview are below -- they need no module runtime. Tick Enable to open the settings before the next reload."] =
     "Настройки доступны здесь, пока модуль работает; его оформление и пример ниже доступны и без запущенного модуля. Отметьте «Включить», чтобы открыть настройки до следующей перезагрузки.",
+  ["This module is switched off. Tick Enable above to open its settings and live preview before the next reload."] =
+    "Этот модуль выключен. Отметьте «Включить» выше, чтобы открыть его настройки и предпросмотр до следующей перезагрузки.",
   ["%s is switched off. /upt opens the settings, where it can be switched on."] =
     "%s выключен. Введите /upt, чтобы открыть настройки и включить его.",
   ["%s/%s: tabs"] = "%s/%s: вкладки",
@@ -171,6 +174,7 @@ BIT.RegisterLocale("ruRU", {
 
   -- панель оформления
   ["Appearance"] = "Оформление",
+  ["APPEARANCE"] = "ОФОРМЛЕНИЕ",
   ["Advanced"] = "Дополнительно",
   ["Hide advanced"] = "Скрыть дополнительные настройки",
   ["Editing: this module"] = "Настройка: этот модуль",
@@ -608,4 +612,23 @@ BIT.RegisterLocale("ruRU", {
   ["Errors and blocked actions of this addon (%d)"] = "Ошибки и заблокированные действия этого аддона (%d)",
   ["Nothing caught since the last reload. Lua errors and \"blocked action\" reports that name this addon appear here with their stack."] =
     "С последней перезагрузки ничего не поймано. Ошибки Lua и сообщения о заблокированных действиях, упоминающие этот аддон, появятся здесь со стеком вызовов.",
+  ["SPELL NUMBERS (SPELLDAMAGEINFO)"] = "ЧИСЛА ЗАКЛИНАНИЙ (SPELLDAMAGEINFO)",
+  ["DOTS (DOTINFO)"] = "ПЕРИОДИЧЕСКИЙ УРОН (DOTINFO)",
+  ["CAST PREDICTION"] = "ПРОГНОЗ ЗАКЛИНАНИЙ",
+  ["HEAL PREDICTION"] = "ПРОГНОЗ ИСЦЕЛЕНИЯ",
+  ["STATS AND BAG ARROWS (STATSINFO)"] = "ХАРАКТЕРИСТИКИ И СТРЕЛКИ СУМОК (STATSINFO)",
+  ["POINTS AND SOUNDS (RESOURCEDING)"] = "ОЧКИ И ЗВУКИ (RESOURCEDING)",
+  ["RANGE"] = "ДАЛЬНОСТЬ",
+  ["PERFORMANCE"] = "ПРОИЗВОДИТЕЛЬНОСТЬ",
+  ["FRAMES AND API"] = "РАМКИ И API",
+
+  -- общие заголовки разделов вкладок
+  ["FILL"] = "ЗАЛИВКА",
+  ["OUTLINE"] = "КОНТУР",
+  ["KILL ICON"] = "ЗНАЧОК УБИЙСТВА",
+  ["ABSORB NUMBER"] = "ЧИСЛО ПОГЛОЩЕНИЯ",
+  ["POSITION"] = "ПОЛОЖЕНИЕ",
+  ["INDICATORS"] = "ИНДИКАТОРЫ",
+  ["FEATURES"] = "ФУНКЦИИ",
+  ["EXPERIMENTS (ON BY DEFAULT IN THIS BETA)"] = "ЭКСПЕРИМЕНТЫ (В ЭТОЙ БЕТЕ ВКЛЮЧЕНЫ ПО УМОЛЧАНИЮ)",
 })

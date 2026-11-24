@@ -52,7 +52,11 @@ local function isSecret(v)
 end
 
 local function say(msg)
-  if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffSpellDamageInfo|r: " .. msg) end
+  if BIT and BIT.SayModule then
+    BIT.SayModule("SpellDamageInfo", msg, "66ccff")
+  elseif DEFAULT_CHAT_FRAME then
+    DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffSpellDamageInfo|r: " .. tostring(msg))
+  end
 end
 
 ---------------------------------------------------------------------------------------------

@@ -45,7 +45,7 @@ local DEFAULTS = {
 }
 
 local COLOR_PRESETS = {
-    { id = "green",  label = "Green",  rgb = { 0.35, 1, 0.45 } },
+    { id = "green",  label = "Green",  rgb = { 0.3, 1, 0.3 } },
     { id = "cyan",   label = "Cyan",   rgb = { 0.2, 0.9, 1 } },
     { id = "gold",   label = "Gold",   rgb = { 1, 0.85, 0.1 } },
     { id = "white",  label = "White",  rgb = { 1, 1, 1 } },
@@ -54,10 +54,10 @@ local COLOR_PRESETS = {
 }
 local COLOR_BY_ID = {}
 for _, preset in ipairs(COLOR_PRESETS) do COLOR_BY_ID[preset.id] = preset.rgb end
--- The shared palette (Core/Looks.lua) adds the rest; a saved "#rrggbb" id is read by colorOf.
+-- The shared palette (Core/Looks.lua) is authoritative for every shared color name; a saved "#rrggbb" id is read by colorOf.
 do
     for _, preset in ipairs(BIT.Looks and BIT.Looks.Palette or {}) do
-        if not COLOR_BY_ID[preset.id] then COLOR_BY_ID[preset.id] = preset.rgb end
+        COLOR_BY_ID[preset.id] = preset.rgb
     end
 end
 
@@ -67,7 +67,11 @@ local settings
 local function db() return settings end
 
 local function print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff66ff99HealPrediction|r " .. msg)
+    if BIT.SayModule then
+        BIT.SayModule("HealPrediction", msg, "66ff99")
+    elseif DEFAULT_CHAT_FRAME then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff66ff99HealPrediction|r: " .. tostring(msg))
+    end
 end
 
 local warned = false
@@ -173,6 +177,9 @@ local function newLayer(healthBar, levelOffset, withLabel)
     local layer = { clip = clip, bar = bar }
     if withLabel then
         layer.label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local font = (type(GameFontHighlightSmall) == "table" and type(GameFontHighlightSmall.GetFont) == "function"
+            and GameFontHighlightSmall:GetFont()) or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+        pcall(layer.label.SetFont, layer.label, font, 10, "OUTLINE")
         layer.label:SetPoint("LEFT", bar:GetStatusBarTexture(), "RIGHT", 2, 0)
     end
     clip:Hide()

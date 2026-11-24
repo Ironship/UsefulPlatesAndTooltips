@@ -9,6 +9,10 @@ local function inCombat() return InCombatLockdown and InCombatLockdown() end
 local function visible(frame)
   return frame and (frame.IsVisible and frame:IsVisible() or not frame.IsVisible and frame:IsShown())
 end
+local function onScreenKeyboardOpen()
+  local kb = _G.ClassicConsoleGamepadUIKeyboard
+  return type(kb) == "table" and type(kb.IsShown) == "function" and kb:IsShown() == true
+end
 
 function UI.ConsolePortActive()
   return ConsolePort and type(ConsolePort.IsCursorActive) == "function" and ConsolePort:IsCursorActive()
@@ -65,13 +69,16 @@ local function reveal(node, host)
     if scroll:IsObjectType("ScrollFrame") then
       local top, bottom, high, low = node:GetTop(), node:GetBottom(), scroll:GetTop(), scroll:GetBottom()
       if top and bottom and high and low then
-        local offset = scroll:GetVerticalScroll()
-        local scale = node:GetEffectiveScale() / scroll:GetEffectiveScale()
+        local offset = scroll:GetVerticalScroll() or 0
+        local nodeScale = (node.GetEffectiveScale and node:GetEffectiveScale()) or 1
+        local scrollScale = (scroll.GetEffectiveScale and scroll:GetEffectiveScale()) or 1
+        local scale = scrollScale > 0 and (nodeScale / scrollScale) or 1
         if top * scale > high then offset = offset - (top * scale - high) - 4
         elseif bottom * scale < low then offset = offset + (low - bottom * scale) + 4 end
-        scroll:SetVerticalScroll(math.max(0, math.min(scroll:GetVerticalScrollRange(), offset)))
+        local range = (scroll.GetVerticalScrollRange and scroll:GetVerticalScrollRange()) or 0
+        scroll:SetVerticalScroll(math.max(0, math.min(range, offset)))
+        if type(scroll.syncScroll) == "function" then scroll.syncScroll() end
       end
-      return
     end
     scroll = scroll:GetParent()
   end
@@ -83,8 +90,13 @@ local function focus(host, node)
   if not mark then
     mark = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     mark:EnableMouse(false)
-    mark:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
-    mark:SetBackdropBorderColor(1, .82, 0, 1)
+    local hasNineSlice = type(Enum) == "table" and Enum.UITextureSliceMode ~= nil
+    if hasNineSlice and BIT.UI and BIT.UI.RoundBorder then
+      BIT.UI.RoundBorder(mark, BIT.UI.COLOR and BIT.UI.COLOR.heading or { 1, 0.82, 0, 1 }, "BORDER", true)
+    elseif type(mark.SetBackdrop) == "function" then
+      mark:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
+      mark:SetBackdropBorderColor(1, .82, 0, 1)
+    end
     mark.actionHint = mark:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     mark.actionHint:SetPoint("RIGHT", mark, "RIGHT", -5, 0)
   end
@@ -93,10 +105,18 @@ local function focus(host, node)
   mark:SetPoint("TOPLEFT", node, "TOPLEFT", -2, 2)
   mark:SetPoint("BOTTOMRIGHT", node, "BOTTOMRIGHT", 2, -2)
   mark:SetFrameLevel(node:GetFrameLevel() + 5)
-  local label = node.GetFontString and node:GetFontString()
-  mark.actionHint:SetText(node:IsObjectType("Button") and UI.Key("PAD1") or "")
-  local labelWidth = label and label:GetStringWidth() or node:GetWidth()
-  mark.actionHint:SetShown(labelWidth + mark.actionHint:GetStringWidth() + 16 <= node:GetWidth())
+  local isButton = node:IsObjectType("Button") == true
+  local label = rawget(node, "label") or (node.GetFontString and node:GetFontString())
+  local hasArrow = rawget(node, "arrow") ~= nil
+  local swatch = rawget(node, "swatch")
+  local leftPad = (swatch and swatch.IsShown and swatch:IsShown()) and ((swatch:GetWidth() or 0) + 14) or 0
+  local rightPad = hasArrow and 22 or 5
+  mark.actionHint:ClearAllPoints()
+  mark.actionHint:SetPoint("RIGHT", mark, "RIGHT", -rightPad, 0)
+  mark.actionHint:SetText(isButton and UI.Key("PAD1") or "")
+  local labelWidth = (label and type(label.GetStringWidth) == "function" and label:GetStringWidth()) or node:GetWidth()
+  local hintWidth = (mark.actionHint.GetStringWidth and mark.actionHint:GetStringWidth()) or 0
+  mark.actionHint:SetShown(isButton and (leftPad + labelWidth + hintWidth + rightPad + 12 <= node:GetWidth()))
   mark:Show()
   reveal(node, host)
   script(node, "OnEnter")
@@ -131,7 +151,7 @@ local function candidates(host)
 end
 
 function UI.Navigate(host, key)
-  if inCombat() or UI.ConsolePortActive() then return false end
+  if inCombat() or UI.ConsolePortActive() or onScreenKeyboardOpen() then return false end
   local direction = ({ PADDUP = -1, PADDDOWN = 1, PADDLEFT = -1, PADDRIGHT = 1 })[key]
   if not direction and key ~= "PAD1" then return false end
   local nodes, index = candidates(host)
@@ -169,7 +189,7 @@ function UI.Attach(frame, handler)
   UI.EnableButtons(frame)
   frame:SetScript("OnGamePadButtonDown", function(self, key)
     if inCombat() then return end
-    local handled = not UI.ConsolePortActive() and handler(self, key)
+    local handled = not UI.ConsolePortActive() and not onScreenKeyboardOpen() and handler(self, key)
     self:SetPropagateKeyboardInput(not handled)
   end)
   frame:HookScript("OnHide", UI.Clear)

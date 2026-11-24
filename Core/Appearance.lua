@@ -696,6 +696,9 @@ local SAMPLE_BAR_MAX, SAMPLE_BAR_VALUE = 100, 62
 -- Blizzard reference source). commit(r, g, b, a) runs while the user drags; cancel() runs on
 -- Cancel with the values the dialog opened with. Returns true when the native picker exists.
 local function openNativeColorPicker(commit, r, g, b, a, hasOpacity, cancel)
+  -- In Blizzard's native Gamepad Mode, opening ColorPickerFrame from addon code taints
+  -- FrameControlsManager and later blocks SetPreferredGamepadInteractTarget; use the inline RGB fields instead.
+  if BIT and BIT.UI and type(BIT.UI.IsGamepadMode) == "function" and BIT.UI.IsGamepadMode() then return false end
   local picker = ColorPickerFrame
   if not picker or type(picker.SetupColorPickerAndShow) ~= "function" then return false end
   -- Setup dispatches both swatch and opacity callbacks on some clients. Suppress
@@ -745,8 +748,8 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   panel.controls = controls
   panel.sliders, panel.checks = controls.sliders, controls.checks
 
-  local x = 12
-  local y = -8
+  local x = 6
+  local y = -4
   local scopeIsGlobal = false
   local refreshPanel
 
@@ -764,17 +767,24 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     commit("colors", { [role] = { r, g, b, a } })
   end
 
-  local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", x, y)
-  title:SetText(BIT.L("Appearance"))
-  y = y - 30
+  if BIT.UI and BIT.UI.Header then
+    local header = BIT.UI.Header(panel, "APPEARANCE")
+    header:SetPoint("TOPLEFT", x, y)
+    header:SetWidth(width - 2 * x)
+    y = y - 24
+  else
+    local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", x, y)
+    title:SetText(BIT.L("Appearance"))
+    y = y - 24
+  end
 
   -- Scope, raw role names and the font path live in this frame. It stays hidden
   -- until Advanced is opened, so the first screen is the everyday controls.
   local advanced = CreateFrame("Frame", nil, panel)
   advanced:Hide()
   panel.advanced = advanced
-  local ax, ay = 12, -8
+  local ax, ay = x, -8
   local advancedButton
   advancedButton = BIT.UI.Button(panel, BIT.L("Advanced"), 160, function()
     panel:SetAdvanced(not panel.advancedOpen)
@@ -862,13 +872,13 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     controls.swatches[role] = swatch
     if i % 2 == 0 then
       ay = ay - 24
-      ax = 12
+      ax = x
     else
       ax = 170
     end
   end
   if #roles % 2 == 1 then ay = ay - 24 end
-  ax = 12
+  ax = x
 
   -- Validated RGB edit fields, used only when the native picker is unavailable.
   local rgbRole
@@ -880,15 +890,15 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   rgbTitle:SetPoint("LEFT", 0, 0)
   local rgbBoxes = {}
   for i, name in ipairs({ "R", "G", "B", "A" }) do
-    local box = CreateFrame("EditBox", nil, rgbFrame, "InputBoxTemplate")
-    box:SetSize(48, 18)
-    box:SetFont(DEFAULTS.font, 12, "")
+    local box = (BIT.UI and BIT.UI.EditBox) and BIT.UI.EditBox(rgbFrame, 48, 20)
+      or CreateFrame("EditBox", nil, rgbFrame, "InputBoxTemplate")
+    box:SetSize(48, 20)
     box:SetTextColor(1, 1, 1, 1)
     box:SetNumeric(true)
     box:SetAutoFocus(false)
     box:SetPoint("LEFT", rgbTitle, "RIGHT", 8 + (i - 1) * 54, 0)
     local boxLabel = rgbFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    boxLabel:SetPoint("BOTTOM", box, "TOP", 0, 0)
+    boxLabel:SetPoint("BOTTOM", box, "TOP", 0, 2)
     boxLabel:SetText(name)
     box:SetScript("OnEnterPressed", function()
       local vals = {}
@@ -919,9 +929,9 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     local fontLabel = advanced:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     fontLabel:SetPoint("TOPLEFT", ax, ay)
     fontLabel:SetText(BIT.L("Font path:"))
-    local fontBox = CreateFrame("EditBox", nil, advanced, "InputBoxTemplate")
-    fontBox:SetSize(math.max(80, width - 180), 20)
-    fontBox:SetFont(DEFAULTS.font, 12, "")
+    local fontBox = (BIT.UI and BIT.UI.EditBox) and BIT.UI.EditBox(advanced, math.max(80, width - 180), 22)
+      or CreateFrame("EditBox", nil, advanced, "InputBoxTemplate")
+    fontBox:SetSize(math.max(80, width - 180), 22)
     fontBox:SetTextColor(1, 1, 1, 1)
     fontBox:SetAutoFocus(false)
     fontBox:SetPoint("LEFT", fontLabel, "RIGHT", 6, 0)
@@ -935,11 +945,12 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   advanced:SetSize(width, -ay + 8)
 
   -- The shared rows (Core/LookRows.lua): the same slider, drop-down and check box as every module's own options.
+  -- Rows indent their own labels by +6 px, so anchoring them at 0 aligns labels flush with x = 6 headers/buttons.
   local function slider(label, minv, maxv, step, key, display, suffix)
     local row = BIT.Looks.Rows.Slider(panel, label, minv, maxv, step,
       function() return currentStyle()[key] end,
       function(v) commit(key, v) end, { display = display, suffix = suffix })
-    row:SetPoint("TOPLEFT", x, y)
+    row:SetPoint("TOPLEFT", 0, y)
     y = y - row:GetHeight()
     controls.sliders[key] = row
   end
@@ -958,7 +969,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     end
     local shapeRow = BIT.Looks.Rows.Choice(panel, "Shape", list,
       function() return currentStyle().shape end, function(id) commit("shape", id) end)
-    shapeRow:SetPoint("TOPLEFT", x, y)
+    shapeRow:SetPoint("TOPLEFT", 0, y)
     y = y - shapeRow:GetHeight()
     controls.shape = shapeRow
   end
@@ -978,7 +989,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     local outlineRow = BIT.Looks.Rows.Choice(panel, "Text outline", {
       { id = "NONE", label = "None" }, { id = "OUTLINE", label = "Outline" }, { id = "THICKOUTLINE", label = "Thick outline" },
     }, function() return currentStyle().outline end, function(id) commit("outline", id) end)
-    outlineRow:SetPoint("TOPLEFT", x, y)
+    outlineRow:SetPoint("TOPLEFT", 0, y)
     y = y - outlineRow:GetHeight()
     controls.outline = outlineRow
   end
@@ -988,8 +999,8 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
     function() return currentStyle().reducedMotion end,
     function(v) commit("reducedMotion", v) end,
     { tooltip = "Limits the animations (pulses, glides, sweeps) to the calm ones." })
-  motion:SetPoint("TOPLEFT", x, y)
-  y = y - motion:GetHeight()
+  motion:SetPoint("TOPLEFT", 0, y)
+  y = y - motion:GetHeight() - 4
   controls.checks.reducedMotion = motion
 
   -- The Minimal preset is scope-aware: editing this module writes that module's
@@ -1028,11 +1039,14 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
   y = y - math.max(24, (resetHint:GetStringHeight() or 14) + 10)
   controls.resetHint = resetHint
 
-  -- The module's real renderer also owns the appearance sample, including while off.
+  -- The module's real renderer also owns the appearance sample on OFF pages;
+  -- embedded ON tabs already have a full live preview pane beside them (hideSample = true).
   local tab = BIT.tabs and BIT.tabs[moduleName]
   local sample, renderSample
-  local sampleTop, sampleHeight = y, 96
-  if tab and type(tab.buildPreview) == "function" and type(tab.previewRender) == "function" then
+  local sampleTop, sampleHeight = y, capabilities.hideSample and 0 or 96
+  if capabilities.hideSample then
+    renderSample = function() end
+  elseif tab and type(tab.buildPreview) == "function" and type(tab.previewRender) == "function" then
     local ok, scene = pcall(tab.buildPreview, panel)
     if ok and type(scene) == "table" and type(scene.SetPoint) == "function" then
       sample = scene
@@ -1040,7 +1054,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
       BIT.Say("the " .. moduleName .. " appearance sample could not be built: " .. tostring(scene))
     end
   end
-  if sample then
+  if not capabilities.hideSample and sample then
     sample:SetPoint("TOPLEFT", x, sampleTop)
     renderSample = function()
       local ok, err = pcall(tab.previewRender, sample, Style.Resolve(moduleName, legacy))
@@ -1058,7 +1072,7 @@ function BIT.UI.Appearance(parent, moduleName, capabilities, refresh, legacy)
         if panel.layout then panel.layout() end
       end
     end
-  else
+  elseif not capabilities.hideSample then
     sample = CreateFrame("Frame", nil, panel)
     sample:SetPoint("TOPLEFT", x, sampleTop)
     sample:SetSize(width - 24, 96)

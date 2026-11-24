@@ -11,13 +11,67 @@ local _, BIT = ...
 local Addon = BIT.Module and BIT.Module("ResourceDing") or BIT
 
 local SOUL_SHARD = 6265
-local DIAMOND = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_3" -- the purple raid diamond
+local TEX_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Modules\\ResourceDing\\Textures\\"
+local SHARD_GEM = TEX_DIR .. "ShardGem"
+local SHARD_BEZEL = TEX_DIR .. "ShardBezel"
+local SHARD_GLOW = TEX_DIR .. "ShardGlow"
 local MAX_DIAMONDS = 10
 local QUIET_AFTER_WORLD = 3 -- seconds to let the post-loading count settle
 
 local count, lastMaximum, quietUntil = nil, nil, 0
 local row, more
 local diamonds = {}
+
+local function shardOpacity(style)
+  if type(style) == "table" and type(style.opacity) == "number" then return style.opacity end
+  if BIT and BIT.Style and type(BIT.Style.Resolve) == "function" then
+    local ok, resolved = pcall(BIT.Style.Resolve, "ResourceDing")
+    if ok and type(resolved) == "table" and type(resolved.opacity) == "number" then return resolved.opacity end
+  end
+  return 1
+end
+
+-- Shared 3D faceted Soul Shard crystal widget (live nameplate HUD + Settings live preview):
+-- soft violet halo behind the newest shard, 3D faceted amethyst crystal, sculpted lit metallic bezel.
+function Addon.CreateShard(parent)
+  local shard = CreateFrame("Frame", nil, parent)
+  shard.glow = shard:CreateTexture(nil, "BACKGROUND", nil, -1)
+  shard.glow:SetTexture(SHARD_GLOW)
+  shard.glow:SetPoint("CENTER", shard, "CENTER")
+  shard.glow:Hide()
+  shard.gem = shard:CreateTexture(nil, "ARTWORK", nil, 0)
+  shard.gem:SetTexture(SHARD_GEM)
+  shard.gem:SetAllPoints(shard)
+  shard.bezel = shard:CreateTexture(nil, "OVERLAY", nil, 1)
+  shard.bezel:SetTexture(SHARD_BEZEL)
+  shard.bezel:SetAllPoints(shard)
+  return shard
+end
+
+function Addon.LayoutShard(shard, size)
+  if type(shard) ~= "table" then return end
+  shard:SetSize(size, size)
+  if shard.glow then
+    shard.glow:SetSize(size * 2.0, size * 2.0)
+    shard.glow:ClearAllPoints()
+    shard.glow:SetPoint("CENTER", shard, "CENTER")
+  end
+end
+
+function Addon.PaintShard(shard, style, isNewest)
+  if type(shard) ~= "table" then return end
+  local alpha = shardOpacity(style)
+  if shard.gem then shard.gem:SetVertexColor(1, 1, 1, alpha) end
+  if shard.bezel then shard.bezel:SetVertexColor(1, 1, 1, alpha) end
+  if shard.glow then
+    shard.glow:SetVertexColor(1, 1, 1, alpha)
+    shard.glow:SetShown(isNewest == true)
+  end
+end
+
+function Addon.ShardStep(size)
+  return math.max(size, size + math.floor(size / 10))
+end
 
 local function isSecret(v) return type(issecretvalue) == "function" and issecretvalue(v) or false end
 
@@ -81,31 +135,41 @@ function Addon.RefreshShards()
   if not row then
     row = CreateFrame("Frame", nil, UIParent)
     more = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local font = (type(GameFontHighlightSmall) == "table" and type(GameFontHighlightSmall.GetFont) == "function"
+      and GameFontHighlightSmall:GetFont()) or STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    pcall(more.SetFont, more, font, 10, "OUTLINE")
   end
   local size = tonumber(Addon.db.dotSize) or 14
   if size ~= size then size = 14 end
   if size < 8 then size = 8 elseif size > 24 then size = 24 end
   local shown = math.min(count, MAX_DIAMONDS)
+  local step = Addon.ShardStep(size)
+  local style
+  if BIT and BIT.Style and type(BIT.Style.Resolve) == "function" then
+    local ok, resolved = pcall(BIT.Style.Resolve, "ResourceDing")
+    if ok and type(resolved) == "table" then style = resolved end
+  end
   for i = 1, MAX_DIAMONDS do
     local d = diamonds[i]
     if i <= shown then
       if not d then
-        d = row:CreateTexture(nil, "ARTWORK")
-        d:SetTexture(DIAMOND)
+        d = Addon.CreateShard(row)
         diamonds[i] = d
       end
-      d:SetSize(size, size)
+      Addon.LayoutShard(d, size)
+      Addon.PaintShard(d, style, i == shown)
       d:ClearAllPoints()
-      d:SetPoint("LEFT", row, "LEFT", (i - 1) * (size - 2), 0)
+      d:SetPoint("LEFT", row, "LEFT", (i - 1) * step, 0)
       d:Show()
     elseif d then
       d:Hide()
     end
   end
+  local span = shown > 0 and ((shown - 1) * step + size) or size
   more:SetText(count > MAX_DIAMONDS and ("+" .. (count - MAX_DIAMONDS)) or "")
   more:ClearAllPoints()
-  more:SetPoint("LEFT", row, "LEFT", shown * (size - 2) + 4, 0)
-  row:SetSize(shown * (size - 2) + 2, size)
+  more:SetPoint("LEFT", row, "LEFT", span + 4, 0)
+  row:SetSize(span, size)
   row:SetParent(plate)
   row:ClearAllPoints()
   local shardOffset = tonumber(Addon.db.shardOffset) or -60
@@ -170,6 +234,9 @@ local function start()
       Addon.RefreshShards()
     end
   end)
+  if BIT and BIT.Style and type(BIT.Style.Subscribe) == "function" then
+    BIT.Style.Subscribe("ResourceDing", Addon.RefreshShards)
+  end
   quietUntil = GetTime() + QUIET_AFTER_WORLD
   Addon.CheckShards()
 end

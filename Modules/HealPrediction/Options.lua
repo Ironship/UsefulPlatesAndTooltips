@@ -5,9 +5,8 @@ local _, BIT = ...
 
 local ns = BIT.Module("HealPrediction")
 
-local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 500
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
 local PREVIEW_WIDTH = 290
-local COL_HEIGHT = 440
 local ROW_HEIGHT = 26
 local SIDE = 12
 
@@ -194,17 +193,9 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildPreview(pane)
-    pane:SetSize(PREVIEW_WIDTH, COL_HEIGHT)
     BIT.UI.Backdrop(pane, 0.09)
 
-    local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText(BIT.L("Live preview"))
-    local rule = pane:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-    rule:SetHeight(1)
-    rule:SetPoint("TOPLEFT", 8, -34)
-    rule:SetPoint("TOPRIGHT", -8, -34)
+    local title = BIT.UI.PreviewHeader(pane, "Live preview", SIDE)
 
     -- The same Murloc target frame the other tabs preview on, with the module's own segment
     -- drawn from the health edge exactly as it is on the real frame.
@@ -238,15 +229,16 @@ local function buildPreview(pane)
         ns.DrawSample(mock.bar, 100, state.heal, state.heal + state.others, hot, which)
     end
 
-    -- FRAME: which mock carries the sample (the same switch as ShieldsInfo's preview).
+    -- FRAME: which mock carries the sample (the same switch and header as ShieldsInfo's preview).
+    local whichFrame = BIT.Looks.TryItHeader(pane, scene, 0, -12, "FRAME")
     local switch = CreateFrame("Frame", nil, pane)
     switch:SetSize(PREVIEW_WIDTH - 2 * SIDE, 22)
-    switch:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -8)
+    switch:SetPoint("TOPLEFT", whichFrame, "BOTTOMLEFT", 0, -4)
     local switchButtons = {}
     local left = 0
     for _, entry in ipairs(FRAMES) do
         local label = BIT.L(entry.label)
-        local button = BIT.UI.Button(switch, label, 70, function()
+        local button = BIT.UI.Button(switch, label, 66, function()
             if which == entry.id then return end
             if ns.HideSample then ns.HideSample(mock.bar) end
             kits[which].frame:Hide()
@@ -255,11 +247,13 @@ local function buildPreview(pane)
             for id, b in pairs(switchButtons) do b:SetAlpha(id == which and 1 or 0.55) end
             redraw()
         end)
-        button:SetHeight(20)
+        local fs = button.GetFontString and button:GetFontString()
+        local w = math.max(66, math.ceil(fs and fs.GetStringWidth and fs:GetStringWidth() or 0) + 18)
+        button:SetSize(w, 20)
         button:SetPoint("TOPLEFT", switch, "TOPLEFT", left, 0)
         button:SetAlpha(entry.id == which and 1 or 0.55)
         switchButtons[entry.id] = button
-        left = left + 74
+        left = left + w + 4
     end
 
     -- The two sliders are the sample's own numbers, never settings.
@@ -270,7 +264,7 @@ local function buildPreview(pane)
             state.health = math.max(1, math.min(100, math.floor(value + 0.5)))
             redraw()
         end)
-    healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -4, -4)
+    healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -4)
     local healSlider = BIT.Looks.PreviewSlider(pane, "Incoming heal", 0, 100,
         function() return state.heal end,
         function(value)
@@ -282,7 +276,7 @@ local function buildPreview(pane)
     -- SIMULATE: a heal is cast (its segment grows, the other healers' band joins), lands, and its HoT runs down.
     local saved
     local sim = BIT.Looks.Simulate(pane, healSlider, {
-        x = 4, y = -10, length = 10,
+        x = 6, y = -10, length = 10,
         text = "A heal is cast and lands, then its heal over time ticks down.",
         start = function() saved = { health = state.health, heal = state.heal, others = state.others } end,
         frame = function(t)
@@ -309,13 +303,9 @@ local function buildPreview(pane)
     })
     pane.simulate = sim
 
-    local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", sim, "BOTTOMLEFT", 2, -8)
-    hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
-    hint:SetJustifyH("LEFT")
-    hint:SetText(BIT.L("The Show on target frame option controls this sample; the other Show on options control live frames. "
+    local hint = BIT.UI.PreviewHint(pane, "The Show on target frame option controls this sample; the other Show on options control live frames. "
         .. "The segment starts at the health edge (the green bar's "
-        .. "end) and is cropped at the bar's right end when the heal would overheal."))
+        .. "end) and is cropped at the bar's right end when the heal would overheal.", SIDE)
 
     pane.title = title
     pane.hint = hint
@@ -344,27 +334,21 @@ if BIT.RegisterTab then
             if window == parent then return end
             window = parent
             controls = {}
-            local note1 = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            note1:SetPoint("TOPLEFT", 12, -6)
-            note1:SetPoint("RIGHT", -12, 0)
-            note1:SetJustifyH("LEFT")
-            note1:SetText(BIT.L("The client already knows how much healing is coming (UnitGetIncomingHeals). "
+            BIT.UI.TabSummary(parent, BIT.L("The client already knows how much healing is coming (UnitGetIncomingHeals). "
                 .. "This module redraws direct heals and adds estimates for your own heals over time."))
             local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-            pane:SetPoint("TOPLEFT", 10, -46)
+            pane:SetPoint("TOPLEFT", 10, -(BIT.UI.TAB_TOP or 44))
+            pane:SetPoint("BOTTOMLEFT", 10, 10)
+            pane:SetWidth(PREVIEW_WIDTH)
             buildPreview(pane)
             panel = pane
             local area = CreateFrame("Frame", nil, parent, "BackdropTemplate")
             area:SetPoint("TOPLEFT", pane, "TOPRIGHT", 10, 0)
-            area:SetSize(WINDOW_WIDTH - PREVIEW_WIDTH - 30, COL_HEIGHT)
+            area:SetPoint("BOTTOMRIGHT", -10, 10)
             BIT.UI.Backdrop(area, 0.09)
-            local divider = area:CreateTexture(nil, "ARTWORK")
-            divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-            divider:SetHeight(1)
-            divider:SetPoint("TOPLEFT", 8, -34)
-            divider:SetPoint("TOPRIGHT", -8, -34)
+            BIT.UI.PreviewHeader(area, "Settings", 12)
             local column = BIT.UI.ScrollColumn(area)
-            column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -42)
+            column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
             column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
             tabKeys = {}
             column:Fit((buildSettings(column.content) or 0) + 12)

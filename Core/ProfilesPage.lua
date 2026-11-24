@@ -30,20 +30,11 @@ local function fitButton(btn, minW)
 end
 
 local function confirmPopup(key, text, buttonText, onAccept)
-  if type(StaticPopupDialogs) ~= "table" or type(StaticPopup_Show) ~= "function" then
-    onAccept()
+  if BIT.UI and type(BIT.UI.Confirm) == "function" then
+    BIT.UI.Confirm(BIT.L("Profiles"), text, buttonText, onAccept)
     return
   end
-  StaticPopupDialogs[key] = {
-    text = text,
-    button1 = buttonText,
-    button2 = CANCEL,
-    OnAccept = onAccept,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-  }
-  StaticPopup_Show(key)
+  onAccept()
 end
 
 local function anyModulePending()
@@ -61,19 +52,20 @@ local function build(content)
   local y = 8
   local refreshAll
 
-  local note = UI.Note(content,
-    "Profiles save which modules are enabled and all module settings (appearance, frames and options). "
-      .. "Learned combat data and language are kept across profiles. Switching profiles reloads the interface.",
-    math.max(460, (content:GetWidth() or 600) - 16))
-  note:SetPoint("TOPLEFT", 8, -y)
-  y = y + note:GetHeight() + 10
+  local note = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  note:SetPoint("TOPLEFT", 10, -y)
+  note:SetPoint("RIGHT", -10, 0)
+  note:SetJustifyH("LEFT")
+  note:SetText(BIT.L("Profiles save which modules are enabled and all module settings (appearance, frames and options). "
+    .. "Learned combat data and language are kept across profiles. Switching profiles reloads the interface."))
+  y = y + math.max(28, (note:GetStringHeight() or 24) + 10)
 
   -- Status summary: character + active profile + pending reload button
   local statusBox = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  statusBox:SetPoint("TOPLEFT", 8, -y)
-  statusBox:SetPoint("RIGHT", -8, 0)
+  statusBox:SetPoint("TOPLEFT", 10, -y)
+  statusBox:SetPoint("RIGHT", -10, 0)
   statusBox:SetHeight(54)
-  UI.Backdrop(statusBox, 0.08)
+  UI.Backdrop(statusBox, 0.09)
 
   local statusReload = fitButton(UI.Button(statusBox, BIT.L("Reload UI"), 110, reloadNow), 100)
   statusReload:SetPoint("RIGHT", -10, 0)
@@ -90,17 +82,24 @@ local function build(content)
   activeLine:SetJustifyH("LEFT")
   y = y + 62
 
+  local card = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  card:SetPoint("TOPLEFT", 10, -y)
+  card:SetPoint("RIGHT", -10, 0)
+  UI.Backdrop(card, 0.09)
+  local cardTop = y
+  local cy = 10
+
   -------------------------------------------------------------------------------------------
   -- Section 1: This character
   -------------------------------------------------------------------------------------------
-  local h1 = UI.Header(content, "THIS CHARACTER")
-  y = UI.PlaceRow(h1, y, 22)
+  local h1 = UI.Header(card, "THIS CHARACTER")
+  cy = UI.PlaceRow(h1, cy, 24)
 
-  local activeRow = Rows.Row(content, "Active profile", {
+  local activeRow = Rows.Row(card, "Active profile", {
     tooltip = "Which profile this character uses. Default is shared across characters; choose this character's "
       .. "name or create a named profile for separate settings and enabled modules.",
   })
-  local activeBtn = UI.Button(activeRow, "", activeRow.layout.control + 20, function(self)
+  local activeBtn = UI.DropdownButton(activeRow, activeRow.layout.control + 20, function(self)
     if not (Looks and Looks.PickList) then return end
     local charKey = Profiles.CharacterKey()
     local list = {}
@@ -140,11 +139,11 @@ local function build(content)
     end)
   end)
   activeBtn:SetPoint("LEFT", activeRow, "LEFT", activeRow.layout.label, 0)
-  activeRow:SetPoint("TOPLEFT", 0, -y)
-  y = y + ROW + 2
+  activeRow:SetPoint("TOPLEFT", 0, -cy)
+  cy = cy + ROW + 2
 
   -- One-click shortcut between shared Default and this character's own profile.
-  local quickRow = CreateFrame("Frame", nil, content)
+  local quickRow = CreateFrame("Frame", nil, card)
   quickRow:SetHeight(26)
   local quickBtn = UI.Button(quickRow, "", 280, function()
     local charKey = Profiles.CharacterKey()
@@ -175,24 +174,24 @@ local function build(content)
       end)
     end
   end)
-  quickBtn:SetPoint("LEFT", quickRow, "LEFT", activeRow.layout.label, 0)
-  y = UI.PlaceRow(quickRow, y, 30)
+  quickBtn:SetPoint("LEFT", quickRow, "LEFT", activeRow.layout.label - 6, 0)
+  cy = UI.PlaceRow(quickRow, cy, 32)
 
   -------------------------------------------------------------------------------------------
   -- Section 2: Modules in this profile (quick toggle checklist)
   -------------------------------------------------------------------------------------------
-  local h2 = UI.Header(content, "MODULES IN THIS PROFILE")
-  y = UI.PlaceRow(h2, y, 22)
+  local h2 = UI.Header(card, "MODULES IN THIS PROFILE")
+  cy = UI.PlaceRow(h2, cy, 24)
 
-  local modHintRow = CreateFrame("Frame", nil, content)
+  local modHintRow = CreateFrame("Frame", nil, card)
   modHintRow:SetHeight(16)
   local modHint = modHintRow:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   modHint:SetPoint("LEFT", 0, 0)
   modHint:SetPoint("RIGHT", 0, 0)
   modHint:SetJustifyH("LEFT")
-  y = UI.PlaceRow(modHintRow, y, 18)
+  cy = UI.PlaceRow(modHintRow, cy, 18)
 
-  local modBar = CreateFrame("Frame", nil, content)
+  local modBar = CreateFrame("Frame", nil, card)
   modBar:SetHeight(24)
   local enableAll = fitButton(UI.Button(modBar, BIT.L("Enable all"), 92, function()
     for _, modName in ipairs(BIT.HubModuleOrder()) do BIT.SetSwitchedOn(modName, true) end
@@ -211,14 +210,14 @@ local function build(content)
   local modReload = fitButton(UI.Button(modBar, BIT.L("Reload UI"), 96, reloadNow), 96)
   modReload:SetPoint("RIGHT", 0, 0)
   modReload:Hide()
-  y = UI.PlaceRow(modBar, y, 28)
+  cy = UI.PlaceRow(modBar, cy, 28)
 
   local modNames = type(BIT.HubModuleOrder) == "function" and BIT.HubModuleOrder() or {}
   local modChecks = {}
   local cols = 2
   local colW = 260
   local gridRows = math.ceil(#modNames / cols)
-  local grid = CreateFrame("Frame", nil, content)
+  local grid = CreateFrame("Frame", nil, card)
   grid:SetHeight(math.max(26, gridRows * 26))
   for i, modName in ipairs(modNames) do
     local col = (i - 1) % cols
@@ -235,25 +234,20 @@ local function build(content)
     box:SetPoint("TOPLEFT", col * colW, -row * 26)
     modChecks[#modChecks + 1] = { name = modName, box = box }
   end
-  y = UI.PlaceRow(grid, y, grid:GetHeight() + 8)
+  cy = UI.PlaceRow(grid, cy, grid:GetHeight() + 10)
 
   -------------------------------------------------------------------------------------------
   -- Section 3: Manage profiles (new, copy from, delete, reset)
   -------------------------------------------------------------------------------------------
-  local h3 = UI.Header(content, "MANAGE PROFILES")
-  y = UI.PlaceRow(h3, y, 22)
+  local h3 = UI.Header(card, "MANAGE PROFILES")
+  cy = UI.PlaceRow(h3, cy, 24)
 
   -- New named profile
-  local newRow = Rows.Row(content, "New profile", {
+  local newRow = Rows.Row(card, "New profile", {
     tooltip = "Create a named profile (e.g. Healer, Tank, Alt) and switch this character to it.",
   })
-  local newBox = CreateFrame("EditBox", nil, newRow, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  newBox:SetSize(160, 22)
+  local newBox = UI.EditBox(newRow, 160, 22)
   newBox:SetPoint("LEFT", newRow, "LEFT", newRow.layout.label, 0)
-  UI.Backdrop(newBox, 0.13)
-  newBox:SetFontObject("GameFontHighlightSmall")
-  newBox:SetTextInsets(6, 6, 0, 0)
-  newBox:SetAutoFocus(false)
   newBox:SetMaxLetters(48)
   newBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   newBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
@@ -286,15 +280,15 @@ local function build(content)
   copyCreateBtn:SetPoint("LEFT", newBox, "RIGHT", 6, 0)
   local blankCreateBtn = fitButton(UI.Button(newRow, BIT.L("Blank"), 68, function() createAndSwitch(false) end), 68)
   blankCreateBtn:SetPoint("LEFT", copyCreateBtn, "RIGHT", 6, 0)
-  newRow:SetPoint("TOPLEFT", 0, -y)
-  y = y + ROW + 2
+  newRow:SetPoint("TOPLEFT", 0, -cy)
+  cy = cy + ROW + 2
 
   -- Copy settings from another profile into the selected profile
   local copySource
-  local copyRow = Rows.Row(content, "Copy settings from", {
+  local copyRow = Rows.Row(card, "Copy settings from", {
     tooltip = "Overwrite this profile's settings with a copy from another profile (keeps learned combat data).",
   })
-  local copyPickBtn = UI.Button(copyRow, "", 200, function(self)
+  local copyPickBtn = UI.DropdownButton(copyRow, 200, function(self)
     if not (Looks and Looks.PickList) then return end
     local selected = Profiles.Selected()
     local list = {}
@@ -323,15 +317,15 @@ local function build(content)
       end)
   end), 72)
   copyDoBtn:SetPoint("LEFT", copyPickBtn, "RIGHT", 6, 0)
-  copyRow:SetPoint("TOPLEFT", 0, -y)
-  y = y + ROW + 2
+  copyRow:SetPoint("TOPLEFT", 0, -cy)
+  cy = cy + ROW + 2
 
   -- Delete an unused profile
   local deleteTarget
-  local delRow = Rows.Row(content, "Delete profile", {
+  local delRow = Rows.Row(card, "Delete profile", {
     tooltip = "Remove a profile that is not currently in use. Default cannot be deleted.",
   })
-  local delPickBtn = UI.Button(delRow, "", 200, function(self)
+  local delPickBtn = UI.DropdownButton(delRow, 200, function(self)
     if not (Looks and Looks.PickList) then return end
     local active, selected = Profiles.Active(), Profiles.Selected()
     local list = {}
@@ -364,11 +358,11 @@ local function build(content)
       end)
   end), 72)
   delDoBtn:SetPoint("LEFT", delPickBtn, "RIGHT", 6, 0)
-  delRow:SetPoint("TOPLEFT", 0, -y)
-  y = y + ROW + 8
+  delRow:SetPoint("TOPLEFT", 0, -cy)
+  cy = cy + ROW + 10
 
   -- Reset current profile
-  local resetBtn = Looks.ResetButton(content, function()
+  local resetBtn = Looks.ResetButton(card, function()
     local target = Profiles.Selected()
     confirmPopup("UPT_RESET_PROFILE",
       string.format(BIT.L("Reset all settings in profile \"%s\" to defaults and reload? Learned combat data is kept."),
@@ -380,8 +374,9 @@ local function build(content)
   end, 160)
   resetBtn:SetText(BIT.L("Reset profile"))
   fitButton(resetBtn, 160)
-  resetBtn:SetPoint("TOPLEFT", 8, -y)
-  y = y + 34
+  resetBtn:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -10, 10)
+  card:SetHeight(cy + 34)
+  y = cardTop + card:GetHeight()
 
   refreshAll = function()
     local charKey = Profiles.CharacterKey()
@@ -399,7 +394,7 @@ local function build(content)
     end
     statusReload:SetShown(pendingProfile or pendingMods)
 
-    activeBtn:SetText(labelForProfile(selected) .. "  v")
+    activeBtn:SetLabel(labelForProfile(selected))
     if charKey then
       quickBtn:Show()
       if selected == charKey then
@@ -437,7 +432,7 @@ local function build(content)
       copySource = copyCandidates[1]
     end
     local hasCopy = copySource ~= nil
-    copyPickBtn:SetText(hasCopy and (labelForProfile(copySource) .. "  v") or BIT.L("(no other profiles)"))
+    copyPickBtn:SetLabel(hasCopy and labelForProfile(copySource) or BIT.L("(no other profiles)"))
     copyPickBtn:SetEnabled(hasCopy)
     copyDoBtn:SetEnabled(hasCopy)
 
@@ -453,7 +448,7 @@ local function build(content)
       deleteTarget = delCandidates[1]
     end
     local hasDel = deleteTarget ~= nil
-    delPickBtn:SetText(hasDel and (deleteTarget .. "  v") or BIT.L("(none to delete)"))
+    delPickBtn:SetLabel(hasDel and deleteTarget or BIT.L("(none to delete)"))
     delPickBtn:SetEnabled(hasDel)
     delDoBtn:SetEnabled(hasDel)
 

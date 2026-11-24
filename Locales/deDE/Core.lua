@@ -45,6 +45,7 @@ BIT.RegisterLocale("deDE", {
   ["Hunter only. Settings are here for an alt."] = "Nur für Jäger. Die Einstellungen stehen hier für einen Zweitcharakter.",
 
   -- the window
+  ["Settings"] = "Einstellungen",
   ["Enable %s"] = "%s aktivieren",
   ["Reload UI"] = "UI neu laden",
   ["Reset module"] = "Modul zurücksetzen",
@@ -63,6 +64,8 @@ BIT.RegisterLocale("deDE", {
   ["Switched off after a reload of the interface."] = "Wird nach einem Neuladen der Oberfläche ausgeschaltet.",
   ["Its settings are here while it runs; its appearance and a sample preview are below -- they need no module runtime. Tick Enable to open the settings before the next reload."] =
     "Seine Einstellungen stehen hier, solange es läuft; sein Aussehen und eine Beispielvorschau stehen unten -- sie brauchen keine Modullaufzeit. Setzt das Häkchen bei Aktivieren, um die Einstellungen schon vor dem nächsten Neuladen zu öffnen.",
+  ["This module is switched off. Tick Enable above to open its settings and live preview before the next reload."] =
+    "Dieses Modul ist ausgeschaltet. Setzt oben das Häkchen bei Aktivieren, um seine Einstellungen und die Live-Vorschau schon vor dem nächsten Neuladen zu öffnen.",
   ["%s is switched off. /upt opens the settings, where it can be switched on."] =
     "%s ist ausgeschaltet. /upt öffnet die Einstellungen, in denen es eingeschaltet werden kann.",
   ["%s/%s: tabs"] = "%s/%s: Reiter",
@@ -170,6 +173,7 @@ BIT.RegisterLocale("deDE", {
 
   -- the appearance panel
   ["Appearance"] = "Aussehen",
+  ["APPEARANCE"] = "AUSSEHEN",
   ["Advanced"] = "Erweitert",
   ["Hide advanced"] = "Erweitert ausblenden",
   ["Editing: this module"] = "Bearbeitet: dieses Modul",
@@ -607,4 +611,23 @@ BIT.RegisterLocale("deDE", {
   ["Errors and blocked actions of this addon (%d)"] = "Fehler und blockierte Aktionen dieses Addons (%d)",
   ["Nothing caught since the last reload. Lua errors and \"blocked action\" reports that name this addon appear here with their stack."] =
     "Seit dem letzten Neuladen wurde nichts abgefangen. Lua-Fehler und Meldungen über „blockierte Aktionen“, die dieses Addon nennen, erscheinen hier mit ihrem Stack.",
+  ["SPELL NUMBERS (SPELLDAMAGEINFO)"] = "ZAUBERZAHLEN (SPELLDAMAGEINFO)",
+  ["DOTS (DOTINFO)"] = "DOTS (DOTINFO)",
+  ["CAST PREDICTION"] = "ZAUBERPROGNOSE",
+  ["HEAL PREDICTION"] = "HEILUNGSPROGNOSE",
+  ["STATS AND BAG ARROWS (STATSINFO)"] = "WERTE UND TASCHENPFEILE (STATSINFO)",
+  ["POINTS AND SOUNDS (RESOURCEDING)"] = "PUNKTE UND TÖNE (RESOURCEDING)",
+  ["RANGE"] = "REICHWEITE",
+  ["PERFORMANCE"] = "LEISTUNG",
+  ["FRAMES AND API"] = "FENSTER UND API",
+
+  -- unified ALL-CAPS section headers across module tabs
+  ["FILL"] = "FÜLLUNG",
+  ["OUTLINE"] = "UMRISS",
+  ["KILL ICON"] = "KILL-SYMBOL",
+  ["ABSORB NUMBER"] = "ABSORPTIONSZAHL",
+  ["POSITION"] = "POSITION",
+  ["INDICATORS"] = "ANZEIGEN",
+  ["FEATURES"] = "FUNKTIONEN",
+  ["EXPERIMENTS (ON BY DEFAULT IN THIS BETA)"] = "EXPERIMENTE (IN DIESER BETA STANDARDMÄSSIG AN)",
 })

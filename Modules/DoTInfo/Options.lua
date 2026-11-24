@@ -15,7 +15,7 @@ local ns = BIT.Module("DoTInfo")
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 local TAB_ROWS = ns.Retail and 2 or 3 -- three tabs per row; Forever has the Native auras tab as a seventh
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 626 + (TAB_ROWS - 2) * 26 -- tab rows plus the longest page (Nameplates, 17 rows)
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
 local HEADER_HEIGHT = 52 -- title bar: title, presets, close button
 local TAB_HEIGHT = 26
 local PREVIEW_WIDTH = 290
@@ -340,21 +340,11 @@ local function choice(parent, key, labelText, list, opts)
 end
 
 local function pushButton(parent, text, width, onClick)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetText(BIT.L(text))
-    -- A longer translation widens the button instead of overflowing it.
-    button:SetSize(math.max(width, math.ceil(button:GetFontString():GetStringWidth()) + 20), 22)
-    button:SetScript("OnClick", onClick)
-    return BIT.UI.SkinButton(button)
+    return BIT.UI.FitButton(parent, BIT.L(text), width, onClick)
 end
 
 local function actionRow(parent, labelText, buttonText, onClick, opts)
-    opts = opts or {}
-    local row = makeRow(parent, labelText, opts)
-    local button = pushButton(row, buttonText, 90, onClick)
-    button:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-    function row:Refresh() self:ApplyEnabled(button) end
-    return row
+    return BIT.Looks.Rows.Button(parent, labelText, buttonText, onClick, rowOpts(opts))
 end
 
 ---------------------------------------------------------------------------
@@ -366,7 +356,7 @@ local function selectTab(tab)
     activeTab = tab
     for _, other in ipairs(tabs) do
         local selected = other == tab
-        other.content:SetShown(selected)
+        other.column:SetShown(selected)
         BIT.UI.TabSelected(other.button, selected)
         if other.footer then other.footer:SetShown(selected) end
     end
@@ -376,10 +366,11 @@ end
 local function addTab(name)
     local area = window.settingsArea
     local tab = { keys = {}, y = 0 }
-    tab.content = CreateFrame("Frame", nil, area)
-    tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40 - (TAB_ROWS - 1) * TAB_HEIGHT)
-    tab.content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, 40)
-    tab.content:Hide()
+    tab.column = BIT.UI.ScrollColumn(area)
+    tab.column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40 - (TAB_ROWS - 1) * TAB_HEIGHT)
+    tab.column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
+    tab.column:Hide()
+    tab.content = tab.column.content
 
     local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
     button:SetText(BIT.L(name))
@@ -408,12 +399,22 @@ local function addTab(name)
     function tab:choice(key, ...) return place(choice(self.content, key, ...), key) end
     function tab:action(...) return place(actionRow(self.content, ...)) end
     function tab:gap() self.y = self.y + 8 end
-    function tab:header(text) return place(BIT.UI.Header(self.content, text)) end
+    function tab:header(text)
+        if self.y > 0 then self.y = self.y + 8 end
+        local row = BIT.UI.Header(self.content, text)
+        row:SetPoint("TOPLEFT", self.content, "TOPLEFT", 6, -self.y)
+        row:SetPoint("RIGHT", self.content, "RIGHT", -6, 0)
+        self.y = self.y + 24
+        return row
+    end
     function tab:note(text)
-        local row = BIT.UI.Note(self.content, text, 470)
-        row:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, -tab.y)
+        local row = BIT.UI.Note(self.content, text, 464)
+        row:SetPoint("TOPLEFT", self.content, "TOPLEFT", 6, -tab.y)
         tab.y = tab.y + row:GetHeight() + 8
         return row
+    end
+    function tab:finish()
+        self.column:Fit(self.y + 12)
     end
 
     table.insert(tabs, tab)
@@ -489,6 +490,7 @@ local function buildTabs()
     icon:note("Cast prediction has its own kill icon (Cast > Marker). If you use both, set both, or switch one off.")
 
     local marker = addTab("Marker")
+    marker:header("SHOW ON")
     marker:checkbox("showMarkers", "Show damage marker", { tooltip = "Marks the damage your DoTs still have to "
         .. "deal on the target's health bar. If the health ends inside it, the target dies." })
     marker:checkbox("targetMarkers", "Show on target frame", { enabledIf = function(s) return s.showMarkers end,
@@ -501,6 +503,7 @@ local function buildTabs()
         .. "in the nameplate look (Nameplates tab)." })
     marker:choice("nameplateMode", "Show on nameplates", lists.nameplateModes, { enabledIf = markersOn, tooltip = "Draws a marker "
         .. "(and optionally the kill icon) on every enemy nameplate with your DoTs on it, in its own look on the Nameplates tab." })
+    marker:header("FILL")
     marker:choice("dotColors", "DoT colors", lists.dotColors, { tooltip = "One color, or one segment per DoT "
         .. "with green poisons, purple curses/shadow damage and red bleeds. Rainbow gives each spell a separate color." })
     marker:choice("fillTexture", "Fill style", lists.fills)
@@ -511,7 +514,7 @@ local function buildTabs()
         .. "target health bar the marker starts from. Follow health bar turns it around on a mirrored bar that "
         .. "drains the other way; choose Right to left if your unit frame addon is not recognized." })
     marker:checkbox("segmentDividers", "Show dividers between DoTs", { enabledIf = perDot })
-    marker:gap()
+    marker:header("OUTLINE")
     marker:choice("outlineStyle", "Outline", lists.outlines)
     marker:choice("dashLength", "Dash length", lists.dashLengths, { enabledIf = isDashed })
     marker:slider("outlineThickness", "Outline thickness", 1, 8, 1, { enabledIf = hasOutline })
@@ -548,6 +551,7 @@ local function buildTabs()
     local plateSingle = function(s) return platesOn(s) and s.plateDotColors == "single" end
     local plateOutline = function(s) return platesOn(s) and s.plateOutlineStyle ~= "none" end
     local plates = addTab("Nameplates")
+    plates:header("KILL ICON")
     plates:choice("plateIcon", "Kill icon", lists.icons, { enabledIf = plateIcon })
     plates:slider("nameplateIconSize", "Kill icon size", 12, 128, 1, { enabledIf = plateIcon })
     plates:choice("nameplateIconPosition", "Kill icon position", lists.nameplateIconPositions,
@@ -556,13 +560,14 @@ local function buildTabs()
         { enabledIf = plateIcon, tooltip = "Pixels right (+) or left (-) of the chosen position." })
     plates:slider("plateIconOffsetY", "Icon vertical offset", -40, 40, 1,
         { enabledIf = plateIcon, tooltip = "Pixels up (+) or down (-) from the chosen position." })
-    plates:gap()
+    plates:header("FILL")
     plates:choice("plateDotColors", "DoT colors", lists.dotColors, { enabledIf = platesOn,
         tooltip = "By effect type: green poisons, purple curses/shadow damage and red bleeds. Rainbow: a separate color per spell." })
     plates:choice("plateFillTexture", "Fill style", lists.fills, { enabledIf = platesOn })
     plates:choice("plateFillDirection", "Fill direction", lists.plateFillDirections)
     plates:choice("plateFillColor", "Fill color", lists.colors, { enabledIf = plateSingle })
     plates:slider("plateFillOpacity", "Fill opacity", 0, 100, 5, { suffix = "%", enabledIf = platesOn })
+    plates:header("OUTLINE")
     plates:choice("plateOutlineStyle", "Outline", lists.outlines, { enabledIf = platesOn })
     plates:choice("plateDashLength", "Dash length", lists.dashLengths,
         { enabledIf = function(s) return platesOn(s) and s.plateOutlineStyle == "dashed" end })
@@ -577,6 +582,7 @@ local function buildTabs()
     plates.footer:Hide()
 
     local behavior = addTab("Behavior")
+    behavior:header("BEHAVIOR")
     if not ns.Retail then
         behavior:choice("waitFirstTick", "Wait for first tick", lists.waitModes, { tooltip = "Whether a new DoT "
             .. "counts before its first tick lands. \"When unsure\" waits for finishers with unknown combo points "
@@ -620,7 +626,7 @@ local function buildTabs()
             { tooltip = "Forget the tick sizes learned from earlier casts." })
     end
     -- Another addon's unit frames live on the hub's Frames page (Core/FramesPage.lua): they steer every marker.
-    behavior:gap()
+    behavior:header("DIAGNOSTICS")
     behavior:action("Another unit frame addon", "Open Frames", function()
         if BIT.OpenSettings then BIT.OpenSettings("Frames") end
     end, { tooltip = "ElvUI, Shadowed Unit Frames and other unit frame addons: where their health bars are is set once "
@@ -631,7 +637,7 @@ local function buildTabs()
     if not ns.Retail then
         -- WoW: Forever. Segments drawn by the game's own aura frames (RogueAuras.lua); a tab of their own so Behavior fits.
         local native = addTab("Native auras")
-        native:header("Features")
+        native:header("FEATURES")
         native:checkbox("nativeDots", "Native aura segments", { tooltip = "Deadly Poison, Deep Wound, Ignite, "
             .. "Righteous Judgement, Immolation Trap, Explosive Trap, Wyvern Sting and Flamestrike are drawn from the real "
             .. "aura: its start, time left and removal come from the game, the size from the spell description and your "
@@ -645,7 +651,7 @@ local function buildTabs()
             .. "spell description and your stats. One or two extra aura frames per spell on every hostile nameplate: check "
             .. "/upt perf before keeping it on. On by default in this beta. The spells of \"Native aura segments\" are drawn this "
             .. "way whenever that option is on." })
-        native:header("Experiments (on by default in this beta)")
+        native:header("EXPERIMENTS (ON BY DEFAULT IN THIS BETA)")
         native:checkbox("nativeGateReplace", "Aura-gated segments on nameplates (experiment)", { enabledIf = function(s) return s.showMarkers and s.nameplateMode ~= "off" and s.plateDotColors ~= "single" end, tooltip = "The DoT "
             .. "segments on nameplates are drawn by the game's own aura frames, with the length the addon calculates (they "
             .. "still drop tick by tick), so a segment is shown only while the real aura is on the mob: when a mob resets "
@@ -659,235 +665,52 @@ local function buildTabs()
             .. "it, the addon never reads the aura. Watch it when a mob resets after you run away, a DoT is dispelled or "
             .. "resisted. Needs \"Native segment for every DoT\" for DoTs the addon does not have fixed segments for. On by "
             .. "default in this beta." })
-        native:header("Diagnostics")
+        native:header("DIAGNOSTICS")
         native:checkbox("nativeShowAll", "Show native next to plain segments", { enabledIf = function(s) return s.nativeDots or s.nativeAllDots or s.nativeGateReplace or s.nativeGate end, tooltip = "For checking the "
             .. "native segments: they are normally hidden wherever the addon draws the same DoT itself (a warlock's own "
             .. "Corruption, for instance). With this on they are drawn anyway, white and half transparent in a thin row under "
             .. "the bar, starting at its left edge, so you can compare their length and time left with the plain segment on "
             .. "the bar. Cast a single DoT on a mob and watch both. Off by default." })
     end
+    for _, tab in ipairs(tabs) do tab:finish() end
 end
 
 local function buildPreview(pane)
-    -- y in px from the pane's top (pane: PREVIEW_WIDTH x ~486); every block on the same 12 px side margins.
+    -- y in px from the pane's top; every block on the same 12 px side margins.
     local SIDE = 12
     local CARD_WIDTH = PREVIEW_WIDTH - 2 * SIDE -- 266
     local RULE = BIT.UI.COLOR.divider
 
-    -- Forever ships its own bronze ("-c60") versions of the modern HUD art: those first, else the plain atlas
-    -- (Retail). false when neither exists, so the caller keeps a plain fallback.
-    local function setAtlas(texture, name)
-        if not (C_Texture and C_Texture.GetAtlasInfo) then return false end
-        for _, candidate in ipairs({ name .. "-c60", name }) do
-            if C_Texture.GetAtlasInfo(candidate) then
-                texture:SetAtlas(candidate)
-                return true
-            end
-        end
-        return false
-    end
-    local function fontOr(name, fallback) return _G[name] and name or fallback end
-    -- Vertical gradient (bottom colour, top colour); a flat colour where the client has no gradient API.
-    local function gradient(texture, bottom, top)
-        texture:SetTexture(WHITE)
-        if CreateColor and pcall(texture.SetGradient, texture, "VERTICAL",
-            CreateColor(bottom[1], bottom[2], bottom[3], bottom[4]), CreateColor(top[1], top[2], top[3], top[4])) then
-            return
-        end
-        texture:SetVertexColor(bottom[1], bottom[2], bottom[3], (bottom[4] + top[4]) / 2)
-    end
-    -- Section header: small gold caps and a hairline to the right margin.
-    local function header(text, anchor, gap)
-        local label = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
-        label:SetText(BIT.L(text))
-        label:SetTextColor(0.85, 0.7, 0.3)
-        local rule = pane:CreateTexture(nil, "ARTWORK")
-        rule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
-        rule:SetHeight(1)
-        rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
-        rule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
-        return label
-    end
-
     -- Title row, level with the tab row on the right (its divider is also 34 px down).
-    local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText(BIT.L("Live preview"))
-    local titleRule = pane:CreateTexture(nil, "ARTWORK")
-    titleRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
-    titleRule:SetHeight(1)
-    titleRule:SetPoint("TOPLEFT", 8, -34)
-    titleRule:SetPoint("TOPRIGHT", -8, -34)
+    BIT.UI.PreviewHeader(pane, "Live preview", SIDE)
 
-    -- Scene (44..234): a patch of dusky world behind the mock frames, so they read as the game's own HUD.
-    local scene = CreateFrame("Frame", nil, pane, "BackdropTemplate")
-    scene:SetSize(CARD_WIDTH, 190)
+    -- Scene (44..234): shared dusky world backdrop and mock frames (Core/Preview.lua).
+    local scene = BIT.UI.Preview.Scene(pane, CARD_WIDTH, 190)
     scene:SetPoint("TOP", pane, "TOP", 0, -44)
-    scene:SetBackdrop({ edgeFile = WHITE, edgeSize = 1 })
-    scene:SetBackdropBorderColor(0, 0, 0, 1)
-    local ground = scene:CreateTexture(nil, "BACKGROUND", nil, -8)
-    ground:SetPoint("TOPLEFT", 1, -1)
-    ground:SetPoint("BOTTOMRIGHT", -1, 1)
-    ground:SetTexture("Interface\\FrameGeneral\\UI-Background-Rock")
-    ground:SetTexCoord(0, 0.26, 0, 0.18) -- about 1:1 texels on a 266 x 190 patch
-    ground:SetVertexColor(0.75, 0.8, 0.75)
-    local sky = scene:CreateTexture(nil, "BACKGROUND", nil, -7)
-    sky:SetAllPoints(ground)
-    gradient(sky, { 0.055, 0.08, 0.04, 0.25 }, { 0.07, 0.1, 0.15, 0.6 })
-    local topShade = scene:CreateTexture(nil, "BACKGROUND", nil, -6)
-    topShade:SetPoint("TOPLEFT", ground, "TOPLEFT")
-    topShade:SetPoint("TOPRIGHT", ground, "TOPRIGHT")
-    topShade:SetHeight(26)
-    gradient(topShade, { 0, 0, 0, 0 }, { 0, 0, 0, 0.6 })
-    local bottomShade = scene:CreateTexture(nil, "BACKGROUND", nil, -6)
-    bottomShade:SetPoint("BOTTOMLEFT", ground, "BOTTOMLEFT")
-    bottomShade:SetPoint("BOTTOMRIGHT", ground, "BOTTOMRIGHT")
-    bottomShade:SetHeight(30)
-    gradient(bottomShade, { 0, 0, 0, 0.65 }, { 0, 0, 0, 0 })
 
-    -- Mock target frame: Forever's own target frame (TargetFrameTemplate, 232 x 100) rebuilt from its atlases at
-    -- Blizzard's offsets, so the marker and kill icon land where they will in combat.
-    local mock = CreateFrame("Frame", nil, scene)
-    mock:SetSize(232, 100)
-    mock:SetPoint("TOP", scene, "TOP", 0, -4)
+    local targetMock = BIT.UI.Preview.TargetFrame(scene, {
+        name = "Murloc Raider", level = "12", health = preview.health, layerFrame = window,
+    })
+    targetMock.frame:SetPoint("TOP", scene, "TOP", 0, -4)
+    window.healthPercent = targetMock.healthPercent
+    window.healthValue = targetMock.healthValue
+    window.healthBar = targetMock.healthBar
+    window.host = targetMock.host
+    window.mock = targetMock.frame
 
-    local portrait = mock:CreateTexture(nil, "BACKGROUND", nil, 1)
-    portrait:SetSize(58, 58)
-    portrait:SetPoint("TOPRIGHT", mock, "TOPRIGHT", -26, -19)
-    portrait:SetTexture("Interface\\Icons\\Achievement_Reputation_MurlocOracle")
-    portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- the icon's own border would show at the circle's edge
-    local mask = mock:CreateMaskTexture()
-    mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-    mask:SetAllPoints(portrait)
-    portrait:AddMaskTexture(mask)
-
-    local frameArt = mock:CreateTexture(nil, "BACKGROUND", nil, 2)
-    frameArt:SetSize(192, 67)
-    frameArt:SetPoint("TOPLEFT", mock, "TOPLEFT", 20, -16)
-    local hasFrameArt = setAtlas(frameArt, "UI-HUD-UnitFrame-Target-PortraitOn")
-    if not hasFrameArt then
-        frameArt:ClearAllPoints()
-        frameArt:SetPoint("TOPLEFT", mock, "TOPLEFT", 18, -22)
-        frameArt:SetSize(134, 42)
-        frameArt:SetColorTexture(0, 0, 0, 0.55)
-    end
-
-    local nameBand = mock:CreateTexture(nil, "BORDER")
-    nameBand:SetSize(135, 18)
-    nameBand:SetPoint("TOPLEFT", mock, "TOPLEFT", 22, -25)
-    if setAtlas(nameBand, "UI-HUD-UnitFrame-Target-PortraitOn-Type") then
-        nameBand:SetVertexColor(1, 0, 0) -- hostile, as UnitSelectionColor colours it
-    else
-        nameBand:Hide()
-    end
-
-    local name = mock:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    name:SetSize(117, 12)
-    name:SetPoint("TOPLEFT", mock, "TOPLEFT", 24, -26)
-    name:SetJustifyH("LEFT")
-    name:SetText("Murloc Raider")
-
-    local levelCircle = mock:CreateTexture(nil, "OVERLAY")
-    levelCircle:SetSize(39, 39)
-    levelCircle:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -13, 7)
-    local level = mock:CreateFontString(nil, "OVERLAY", fontOr("WhiteLargeNumberFont", "GameFontNormal"))
-    level:SetDrawLayer("OVERLAY", 2)
-    level:SetPoint("CENTER", levelCircle, "CENTER", 0, -0.5)
-    level:SetText("12")
-    level:SetTextColor(1, 0.82, 0) -- same-level ("fair") difficulty colour
-    if not setAtlas(levelCircle, "UI-HUD-UnitFrame-SmallCircle") then
-        levelCircle:Hide()
-        level:Hide()
-    end
-
-    -- Health bar: 126 x 20 in the frame art's upper slot (the lower, power slot stays empty: a murloc raider
-    -- has no mana). The marker is SetAllPoints'd onto this bar.
-    local healthBar = CreateFrame("StatusBar", nil, mock)
-    healthBar:SetSize(126, 20)
-    healthBar:SetPoint("TOPLEFT", mock, "TOPLEFT", 22, -39)
-    healthBar:SetMinMaxValues(0, 100)
-    healthBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-    if setAtlas(healthBar:GetStatusBarTexture(), "UI-HUD-UnitFrame-Target-PortraitOn-Bar-Health") then
-        healthBar:SetStatusBarColor(1, 1, 1)
-    else
-        healthBar:SetStatusBarColor(0.1, 0.8, 0.1)
-    end
-    if not hasFrameArt then
-        local healthBack = healthBar:CreateTexture(nil, "BACKGROUND")
-        healthBack:SetAllPoints()
-        healthBack:SetColorTexture(0.25, 0.08, 0.08, 1)
-    end
-    -- The numbers the game's own frame prints on the bar: percent on the left, health on the right.
-    local barText = fontOr("TextStatusBarText", "GameFontHighlightSmall")
-    window.healthPercent = healthBar:CreateFontString(nil, "OVERLAY", barText)
-    window.healthPercent:SetPoint("LEFT", healthBar, "LEFT", 3, 0)
-    window.healthValue = healthBar:CreateFontString(nil, "OVERLAY", barText)
-    window.healthValue:SetPoint("RIGHT", healthBar, "RIGHT", -3, 0)
-
-    window.healthBar = healthBar
-    window.host = { healthBar = healthBar, portrait = portrait, layerFrame = window }
-    window.mock = mock
-
-    -- Mock enemy nameplate: Forever's default ("Thin") plate, 190 wide: a 133 x 13 bar, the level badge right
-    -- of it, the name centred above. Drawn on by the real nameplate code (Nameplates.lua).
-    local mockPlate = CreateFrame("Frame", nil, scene)
-    mockPlate:SetSize(190, 36)
-    mockPlate:SetPoint("BOTTOM", scene, "BOTTOM", 0, 22)
-    local plateBar = CreateFrame("StatusBar", nil, mockPlate)
-    plateBar:SetSize(133, 13)
-    plateBar:SetPoint("BOTTOMLEFT", mockPlate, "BOTTOMLEFT", 12, 6)
-    plateBar:SetMinMaxValues(0, 100)
-    plateBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-    if setAtlas(plateBar:GetStatusBarTexture(), "UI-HUD-CoolDownManager-Bar") then
-        plateBar:SetStatusBarColor(1, 0, 0) -- hostile
-    else
-        plateBar:SetStatusBarColor(0.85, 0.1, 0.1)
-    end
-    local plateBack = mockPlate:CreateTexture(nil, "BACKGROUND")
-    plateBack:SetPoint("TOPLEFT", plateBar, "TOPLEFT", -2, 3)
-    plateBack:SetPoint("BOTTOMRIGHT", plateBar, "BOTTOMRIGHT", 6, -6)
-    if not setAtlas(plateBack, "UI-HUD-CoolDownManager-Bar-BG") then
-        plateBack:ClearAllPoints()
-        plateBack:SetAllPoints(plateBar)
-        plateBack:SetColorTexture(0.1, 0.02, 0.02, 1)
-    end
-    -- It is your target's plate: the target border (Forever: yellow art, vertex white).
-    local plateSelected = plateBar:CreateTexture(nil, "OVERLAY")
-    plateSelected:SetPoint("TOPLEFT", plateBack, "TOPLEFT", -3, 2)
-    plateSelected:SetPoint("BOTTOMRIGHT", plateBack, "BOTTOMRIGHT", 0, 2)
-    if setAtlas(plateSelected, "UI-HUD-CoolDownManager-Selected-yellow") then
-        plateSelected:SetVertexColor(1, 1, 1, 0.9)
-    else
-        plateSelected:Hide()
-    end
-    local plateLevel = mockPlate:CreateTexture(nil, "ARTWORK")
-    plateLevel:SetSize(28, 16)
-    plateLevel:SetPoint("LEFT", plateBar, "RIGHT", 5, 0)
-    local plateLevelText = mockPlate:CreateFontString(nil, "OVERLAY", fontOr("SystemFont_NamePlateLevel", "GameFontNormalSmall"))
-    plateLevelText:SetPoint("CENTER", plateLevel, "CENTER")
-    plateLevelText:SetText("12")
-    plateLevelText:SetTextColor(1, 0.82, 0)
-    if not setAtlas(plateLevel, "UI-HUD-Nameplates-LevelIndicator") then
-        plateLevel:Hide()
-        plateLevelText:Hide()
-    end
-    local plateName = mockPlate:CreateFontString(nil, "OVERLAY",
-        fontOr("SystemFont_NamePlate_Outlined", "GameFontHighlightSmallOutline"))
-    plateName:SetPoint("BOTTOMLEFT", plateBar, "TOPLEFT", 0, 6) -- clear of the target border, which rises 5 above the bar
-    plateName:SetPoint("RIGHT", plateLevel, "RIGHT")
-    plateName:SetJustifyH("CENTER")
-    plateName:SetText("Murloc Raider")
-    plateName:SetTextColor(1, 0.13, 0.13) -- hostile
-    window.mockPlate = mockPlate
-    window.plateHealthBar = plateBar
-    window.plateHost = { plate = mockPlate, healthBar = plateBar }
+    local plateMock = BIT.UI.Preview.Nameplate(scene, {
+        width = 190, name = "Murloc Raider", level = "12", health = preview.health,
+    })
+    plateMock.frame:SetPoint("BOTTOM", scene, "BOTTOM", 0, 22)
+    window.mockPlate = plateMock.frame
+    window.plateHealthBar = plateMock.bar
+    window.plateHost = { plate = plateMock.frame, healthBar = plateMock.bar }
 
     -- Shown over the mock frames while combat has the display back on the real target. On its own layer above
     -- the scene: a font string on the pane would draw under it.
     local noteLayer = CreateFrame("Frame", nil, scene)
     noteLayer:SetAllPoints(scene)
-    noteLayer:SetFrameLevel(mock:GetFrameLevel() + 10)
+    noteLayer:SetFrameLevel(targetMock.frame:GetFrameLevel() + 10)
     window.combatNote = noteLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     window.combatNote:SetPoint("CENTER", scene, "CENTER")
     window.combatNote:SetWidth(CARD_WIDTH - 24)
@@ -919,7 +742,7 @@ local function buildPreview(pane)
     window.statusBadge = badge
 
     -- Try it: the preview's own numbers (not settings).
-    local tryIt = header("TRY IT", badge, 16)
+    local tryIt = BIT.Looks.TryItHeader(pane, badge, 0, -16)
     local health = sliderRow(pane, "Target health", 0, 100, 1,
         function() return preview.health end,
         function(value)
@@ -938,34 +761,46 @@ local function buildPreview(pane)
             tooltip = "Remaining damage of two sample DoTs, in % of the target's max health." })
     damage:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, 0)
 
-    window.simulateButton = pushButton(pane, "Simulate", 162, function()
+    -- Single-row SIMULATE block matching BIT.Looks.Simulate in every other preview pane.
+    local simBlock = CreateFrame("Frame", nil, pane)
+    simBlock:SetPoint("TOPLEFT", damage, "BOTTOMLEFT", 6, -12)
+    simBlock:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
+    simBlock:SetHeight(24)
+    local simHead = simBlock:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    simHead:SetPoint("LEFT", simBlock, "LEFT", 0, 0)
+    simHead:SetText(BIT.L("SIMULATE"))
+    local hc = BIT.UI.COLOR.heading
+    simHead:SetTextColor(hc[1], hc[2], hc[3])
+    window.flashButton = pushButton(simBlock, "Flash", 64, function() ns.playFlash() end)
+    window.flashButton:SetHeight(20)
+    window.flashButton:SetPoint("RIGHT", simBlock, "RIGHT", 0, 0)
+    window.simulateButton = pushButton(simBlock, "Simulate", 82, function()
         if simulation then stopSimulation() else startSimulation() end
     end)
-    window.simulateButton:SetPoint("TOPLEFT", damage, "BOTTOMLEFT", 6, -10)
-    window.flashButton = pushButton(pane, "Flash", 96, function() ns.playFlash() end)
-    window.flashButton:SetPoint("LEFT", window.simulateButton, "RIGHT", 8, 0)
+    window.simulateButton:SetHeight(20)
+    window.simulateButton:SetPoint("RIGHT", window.flashButton, "LEFT", -6, 0)
+    local simRule = simBlock:CreateTexture(nil, "ARTWORK")
+    simRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
+    simRule:SetHeight(1)
+    simRule:SetPoint("LEFT", simHead, "RIGHT", 8, 0)
+    simRule:SetPoint("RIGHT", window.simulateButton, "LEFT", -8, 0)
 
-    local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", SIDE, 12)
-    hint:SetWidth(CARD_WIDTH)
-    hint:SetJustifyH("LEFT")
-    hint:SetText(BIT.L("While this window is open, the marker and kill icon are drawn here instead of on your target."))
-    local hintRule = pane:CreateTexture(nil, "ARTWORK")
-    hintRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
-    hintRule:SetHeight(1)
-    hintRule:SetPoint("BOTTOMLEFT", hint, "TOPLEFT", 0, 8)
-    hintRule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
+    BIT.UI.PreviewHint(pane, "While this window is open, the marker and kill icon are drawn here instead of on your target.", SIDE)
 end
 
 -- The presets, the preview and the settings, in window: the addon's own window, below its title bar
 -- with the presets beside anchor (its close button), or inside UsefulPlatesAndTooltips the tab it is built into.
-local function buildContent(top, anchor)
+local function buildContent(top, anchor, withSummary)
     -- Presets, right-aligned in the title bar: the shared "Look presets" button.
     local presetLabel = window:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     local presetButton = BIT.Looks.PresetButton(window, PRESETS, applyPreset)
     presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
     presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
     presetLabel:SetText(BIT.L("Both bars"))
+    if withSummary and BIT.UI.TabSummary then
+        BIT.UI.TabSummary(window, BIT.L("Marks on the target's health bar the damage your DoTs still have to deal, "
+            .. "with a kill icon when they will finish it."), presetLabel)
+    end
 
     local pane = CreateFrame("Frame", nil, window, "BackdropTemplate")
     pane:SetPoint("TOPLEFT", 10, -top)
@@ -987,7 +822,7 @@ local function buildContent(top, anchor)
     divider:SetPoint("TOPRIGHT", -8, -34 - (TAB_ROWS - 1) * TAB_HEIGHT)
 
     buildTabs()
-    local reset = pushButton(area, "Reset this tab", 120, function() resetTab(activeTab) end)
+    local reset = BIT.Looks.ResetButton(area, function() resetTab(activeTab) end)
     reset:SetPoint("BOTTOMRIGHT", -10, 10)
 
     window:SetScript("OnShow", function()
@@ -1012,30 +847,15 @@ local function buildContent(top, anchor)
 end
 
 local function createWindow()
-    window = CreateFrame("Frame", "UsefulPlatesAndTooltips_DoTInfoOptions", UIParent, "BackdropTemplate")
-    window:Hide() -- new frames start shown; ns.openOptions shows it (running OnShow)
-    window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    local _, _, close
+    window, _, close = BIT.UI.NativeWindow("UsefulPlatesAndTooltips_DoTInfoOptions", "DoTInfo", WINDOW_WIDTH, WINDOW_HEIGHT)
     window:SetPoint("CENTER")
-    window:SetFrameStrata("DIALOG")
-    window:SetToplevel(true)
-    window:SetClampedToScreen(true)
-    window:EnableMouse(true)
-    window:SetMovable(true)
-    window:RegisterForDrag("LeftButton")
-    window:SetScript("OnDragStart", window.StartMoving)
-    window:SetScript("OnDragStop", window.StopMovingOrSizing)
-    setBackdrop(window, 0.06, 0.97)
-    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "UsefulPlatesAndTooltips_DoTInfoOptions") end -- Escape closes it
+    if BIT.UI and BIT.UI.CloseOnEscape then BIT.UI.CloseOnEscape(window) end
 
-    local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -18)
-    title:SetText("DoTInfo")
-    title:SetTextColor(BIT.UI.COLOR.heading[1], BIT.UI.COLOR.heading[2], BIT.UI.COLOR.heading[3])
-
-    local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -6, -12)
-
-    buildContent(HEADER_HEIGHT, close)
+    local anchor = CreateFrame("Frame", nil, window)
+    anchor:SetSize(1, 22)
+    anchor:SetPoint("TOPRIGHT", -10, -28)
+    buildContent(HEADER_HEIGHT + 16, anchor, true)
 end
 
 function ns.openOptions()
@@ -1119,7 +939,7 @@ if BIT.RegisterTab then
         title = "DoTInfo",
         summary = "Marks on the target's health bar the damage your DoTs still have to deal, with a kill icon "
             .. "when they will finish it.",
-        width = WINDOW_WIDTH, height = WINDOW_HEIGHT - HEADER_HEIGHT + 44,
+        width = WINDOW_WIDTH, height = WINDOW_HEIGHT,
         build = function(parent)
             if window == parent then return end
             stopSimulation()
@@ -1136,7 +956,7 @@ if BIT.RegisterTab then
             local anchor = CreateFrame("Frame", nil, parent)
             anchor:SetSize(1, 22)
             anchor:SetPoint("TOPRIGHT", -10, -8)
-            buildContent(40, anchor)
+            buildContent(BIT.UI.TAB_TOP or 44, anchor, true)
         end,
         buildPreview = buildDoTPreview,
         previewRender = renderDoTPreview,

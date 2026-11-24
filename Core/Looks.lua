@@ -29,6 +29,32 @@ local FILL_DIR = "Interface\\AddOns\\" .. (ADDON or "UsefulPlatesAndTooltips") .
 local DOT_DIR = "Interface\\AddOns\\" .. (ADDON or "UsefulPlatesAndTooltips") .. "\\Modules\\DoTInfo\\Textures\\"
 
 ---------------------------------------------------------------------------------------------
+-- Kill icons (shared by DoTInfo and CastPrediction)
+---------------------------------------------------------------------------------------------
+
+Looks.KILL_ICONS = {
+    { id = "skull",  label = "Raid skull",      path = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8" },
+    { id = "cross",  label = "Red X",           path = "Interface\\RaidFrame\\ReadyCheck-NotReady" },
+    { id = "check",  label = "Green checkmark", path = "Interface\\RaidFrame\\ReadyCheck-Ready" },
+    { id = "boss",   label = "Boss skull",      path = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull" },
+    { id = "impact", label = "Impact",          path = "Interface\\SpellShadow\\Spell_Shadow_Shadowfury" },
+    { id = "shades", label = "Sunglasses",      path = DOT_DIR .. "Sunglasses" },
+}
+
+function Looks.KillIcons()
+    local list = { kind = "icon" }
+    for i, entry in ipairs(Looks.KILL_ICONS) do list[i] = entry end
+    return list
+end
+
+function Looks.KillIcon(id)
+    for _, entry in ipairs(Looks.KILL_ICONS) do
+        if entry.id == id then return entry end
+    end
+    return Looks.KILL_ICONS[1]
+end
+
+---------------------------------------------------------------------------------------------
 -- Colours
 ---------------------------------------------------------------------------------------------
 
@@ -115,12 +141,173 @@ function Looks.ColorEntry(list, id)
     return nil
 end
 
--- Blizzard's own colour picker. set("#rrggbb") runs while the user drags; Cancel sets the id the row had before (a name
--- stays a name, "school" stays "school").
+-- Taint-free RGB + Hex colour dialog used in Gamepad Mode (opening Blizzard's ColorPickerFrame from
+-- addon code in Gamepad Mode taints FrameControlsManager and blocks SetPreferredGamepadInteractTarget)
+-- or when ColorPickerFrame is unavailable.
+local customColorDialog
+local function openCustomColorDialog(currentId, rgb, set)
+    local UI = BIT.UI
+    if not customColorDialog then
+        local catcher = CreateFrame("Button", nil, UIParent)
+        catcher:SetAllPoints(UIParent)
+        catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+        catcher:SetFrameLevel(100)
+        local shade = catcher:CreateTexture(nil, "BACKGROUND")
+        shade:SetAllPoints()
+        shade:SetColorTexture(0, 0, 0, 0.45)
+        catcher:Hide()
+
+        local box = CreateFrame("Frame", "UsefulPlatesAndTooltipsColorPicker", catcher, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        box:SetSize(300, 224)
+        box:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
+        box:SetFrameStrata("FULLSCREEN_DIALOG")
+        box:SetFrameLevel(105)
+        box:EnableMouse(true)
+        box:SetClampedToScreen(true)
+        if UI and UI.Backdrop then UI.Backdrop(box, 0.06, 0.98, true) end
+
+        local heading = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        heading:SetPoint("TOPLEFT", 14, -12)
+        heading:SetText(BIT.L("Custom colour..."))
+        if UI and UI.COLOR then
+            heading:SetTextColor(UI.COLOR.heading[1], UI.COLOR.heading[2], UI.COLOR.heading[3])
+        end
+
+        local rule = box:CreateTexture(nil, "ARTWORK")
+        local d = (UI and UI.COLOR and UI.COLOR.divider) or { 1, 0.82, 0, 0.18 }
+        rule:SetColorTexture(d[1], d[2], d[3], d[4])
+        rule:SetHeight(1)
+        rule:SetPoint("TOPLEFT", 10, -32)
+        rule:SetPoint("TOPRIGHT", -10, -32)
+
+        local swatch = box:CreateTexture(nil, "ARTWORK")
+        swatch:SetSize(272, 22)
+        swatch:SetPoint("TOPLEFT", 14, -42)
+        swatch:SetColorTexture(1, 1, 1, 1)
+
+        local state = { r = 255, g = 255, b = 255, syncing = false }
+        local sliders = {}
+        local hexBox
+
+        local function applyLive()
+            local r, g, b = state.r / 255, state.g / 255, state.b / 255
+            swatch:SetColorTexture(r, g, b, 1)
+            local hex = Looks.Hex(r, g, b)
+            if hexBox and not hexBox:HasFocus() then hexBox:SetText(hex) end
+            if type(state.set) == "function" then state.set(hex) end
+        end
+
+        for i, spec in ipairs({ { "r", "R" }, { "g", "G" }, { "b", "B" } }) do
+            local key, labelText = spec[1], spec[2]
+            local y = -74 - (i - 1) * 28
+            local lbl = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            lbl:SetPoint("TOPLEFT", 16, y - 3)
+            lbl:SetText(labelText)
+            local sl = CreateFrame("Slider", nil, box)
+            sl:SetOrientation("HORIZONTAL")
+            sl:SetSize(196, 18)
+            sl:SetPoint("TOPLEFT", 38, y)
+            sl:SetMinMaxValues(0, 255)
+            sl:SetValueStep(1)
+            if sl.SetObeyStepOnDrag then sl:SetObeyStepOnDrag(true) end
+            sl:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+            if UI and UI.SkinSlider then UI.SkinSlider(sl, 6) end
+            local val = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            val:SetPoint("LEFT", sl, "RIGHT", 8, 0)
+            sl:SetScript("OnValueChanged", function(_, v)
+                v = math.max(0, math.min(255, math.floor(v + 0.5)))
+                val:SetText(tostring(v))
+                if state.syncing then return end
+                state[key] = v
+                applyLive()
+            end)
+            sliders[key] = { slider = sl, value = val }
+        end
+
+        local hexLabel = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        hexLabel:SetPoint("TOPLEFT", 16, -162)
+        hexLabel:SetText("Hex:")
+        hexBox = (UI and UI.EditBox) and UI.EditBox(box, 110, 22) or CreateFrame("EditBox", nil, box)
+        hexBox:SetPoint("LEFT", hexLabel, "RIGHT", 8, 0)
+        hexBox:SetMaxLetters(7)
+        hexBox:SetScript("OnEnterPressed", function(self)
+            local parsed = Looks.Rgb(self:GetText())
+            if parsed then
+                state.syncing = true
+                state.r = math.floor(parsed[1] * 255 + 0.5)
+                state.g = math.floor(parsed[2] * 255 + 0.5)
+                state.b = math.floor(parsed[3] * 255 + 0.5)
+                sliders.r.slider:SetValue(state.r)
+                sliders.g.slider:SetValue(state.g)
+                sliders.b.slider:SetValue(state.b)
+                state.syncing = false
+                applyLive()
+            end
+            self:ClearFocus()
+        end)
+        hexBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+        local function cancel()
+            local prev, fn = state.previousId, state.set
+            state.set = nil
+            box:Hide()
+            catcher:Hide()
+            if prev ~= nil and type(fn) == "function" then fn(prev) end
+        end
+        local function accept()
+            state.set = nil
+            box:Hide()
+            catcher:Hide()
+        end
+        catcher:SetScript("OnClick", cancel)
+
+        local cancelBtn = UI and UI.FitButton(box, CANCEL or BIT.L("Cancel"), 80, cancel) or CreateFrame("Button", nil, box)
+        cancelBtn:SetPoint("BOTTOMRIGHT", -14, 12)
+        local okBtn = UI and UI.FitButton(box, OKAY or "OK", 72, accept) or CreateFrame("Button", nil, box)
+        okBtn:SetPoint("RIGHT", cancelBtn, "LEFT", -8, 0)
+
+        if UI and UI.CloseOnEscape then UI.CloseOnEscape(box, cancel) end
+        if BIT.GamePadUI then
+            BIT.GamePadUI.Attach(box, function(self, key)
+                if key == "PAD2" then cancel(); return true end
+                if key == "PADLSHOULDER" or key == "PADRSHOULDER" then return true end
+                return BIT.GamePadUI.Navigate(self, key)
+            end)
+        end
+        customColorDialog = { catcher = catcher, box = box, swatch = swatch, sliders = sliders, hexBox = hexBox, state = state }
+    end
+
+    local dlg = customColorDialog
+    local st = dlg.state
+    st.previousId = currentId
+    st.set = set
+    st.syncing = true
+    st.r = math.max(0, math.min(255, math.floor((rgb[1] or 1) * 255 + 0.5)))
+    st.g = math.max(0, math.min(255, math.floor((rgb[2] or 1) * 255 + 0.5)))
+    st.b = math.max(0, math.min(255, math.floor((rgb[3] or 1) * 255 + 0.5)))
+    dlg.sliders.r.slider:SetValue(st.r)
+    dlg.sliders.g.slider:SetValue(st.g)
+    dlg.sliders.b.slider:SetValue(st.b)
+    dlg.sliders.r.value:SetText(tostring(st.r))
+    dlg.sliders.g.value:SetText(tostring(st.g))
+    dlg.sliders.b.value:SetText(tostring(st.b))
+    dlg.swatch:SetColorTexture(st.r / 255, st.g / 255, st.b / 255, 1)
+    dlg.hexBox:SetText(Looks.Hex(st.r / 255, st.g / 255, st.b / 255))
+    st.syncing = false
+    dlg.catcher:Show()
+    dlg.box:Show()
+    return true
+end
+
+-- Blizzard's own colour picker (or our taint-free RGB/Hex dialog in Gamepad Mode). set("#rrggbb") runs
+-- while the user drags; Cancel sets the id the row had before (a name stays a name, "school" stays "school").
 function Looks.PickColor(currentId, set)
-    local picker = ColorPickerFrame
-    if type(picker) ~= "table" or type(set) ~= "function" then return false end
+    if type(set) ~= "function" then return false end
     local rgb = Looks.Rgb(currentId) or { 1, 1, 1 }
+    local picker = ColorPickerFrame
+    if (BIT.UI and type(BIT.UI.IsGamepadMode) == "function" and BIT.UI.IsGamepadMode()) or type(picker) ~= "table" then
+        return openCustomColorDialog(currentId, rgb, set)
+    end
     pcall(picker.SetFrameStrata, picker, "FULLSCREEN_DIALOG")
     if type(picker.SetupColorPickerAndShow) == "function" then
         local starting = true
@@ -371,7 +558,7 @@ local menu
 
 local function build()
     menu = CreateFrame("Frame", "UsefulPlatesAndTooltips_PickList", UIParent, "BackdropTemplate")
-    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "UsefulPlatesAndTooltips_PickList") end -- Escape closes it
+    if BIT.UI and BIT.UI.CloseOnEscape then BIT.UI.CloseOnEscape(menu) end
     menu:SetFrameStrata("TOOLTIP") -- above every settings window, whatever strata and levels its rows use
     menu:EnableMouse(true)
     menu:EnableMouseWheel(true)
@@ -521,7 +708,8 @@ function Looks.PickList(owner, list, current, pick)
         if entry.id == current then menu.offset = math.max(0, math.min(#menu.list - ROWS, i - 4)) break end
     end
     local rows = math.min(ROWS, #menu.list)
-    menu:SetSize(math.max(owner:GetWidth() or 180, 190), rows * ROW_HEIGHT + 8)
+    local footer = #menu.list > ROWS and 14 or 0
+    menu:SetSize(math.max(owner:GetWidth() or 180, 190), rows * ROW_HEIGHT + 8 + footer)
     menu:ClearAllPoints()
     local bottom = owner.GetBottom and owner:GetBottom() or nil
     if bottom and bottom < rows * ROW_HEIGHT + 40 then
@@ -535,6 +723,10 @@ end
 
 function Looks.ClosePickList()
     if menu then menu:Hide() end
+end
+
+function Looks.IsPickListShown()
+    return menu ~= nil and menu:IsShown() == true
 end
 
 -- The colour list entry a module's option row should show and what a click does, shared by every row builder:

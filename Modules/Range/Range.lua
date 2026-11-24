@@ -655,8 +655,8 @@ end
 ---------------------------------------------------------------------------------------------
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 520
-local PREVIEW_TOP = 40 -- the presets' row above the two columns
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
+local PREVIEW_TOP = 44 -- the top summary/presets strip above the two columns
 local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = 26
 local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
@@ -777,10 +777,8 @@ local function editRow(parent, key, labelText, opts)
   opts = opts or {}
   local row = makeRow(parent, labelText, opts)
   local getText, setText = get(key), set(key)
-  local box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
-  box:SetSize(row.layout.control, 20)
-  box:SetPoint("LEFT", row, "LEFT", row.layout.label + 2, 0)
-  box:SetAutoFocus(false)
+  local box = BIT.UI.EditBox(row, row.layout.control, 22)
+  box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
   box:SetScript("OnEnterPressed", function(self) setText(self:GetText() or ""); self:ClearFocus() end)
   box:SetScript("OnEditFocusLost", function(self) setText(self:GetText() or "") end)
   box:SetScript("OnEscapePressed", function(self) self:SetText(getText() or ""); self:ClearFocus() end)
@@ -799,7 +797,7 @@ local function selectTab(tab)
   activeTab = tab
   for _, other in ipairs(tabs) do
     local selected = other == tab
-    other.content:SetShown(selected)
+    other.column:SetShown(selected)
     BIT.UI.TabSelected(other.button, selected)
     if other.footer then other.footer:SetShown(selected) end
   end
@@ -809,10 +807,11 @@ end
 local function addTab(name)
   local area = window.settingsArea
   local tab = { keys = {}, y = 0 }
-  tab.content = CreateFrame("Frame", nil, area)
-  tab.content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40)
-  tab.content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, 40)
-  tab.content:Hide()
+  tab.column = BIT.UI.ScrollColumn(area)
+  tab.column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
+  tab.column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
+  tab.column:Hide()
+  tab.content = tab.column.content
 
   local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
   button:SetText(BIT.L(name))
@@ -839,6 +838,7 @@ local function addTab(name)
   function tab:slider(key, ...) return place(slider(self.content, key, ...), key) end
   function tab:edit(key, ...) return place(editRow(self.content, key, ...), key) end
   function tab:gap() self.y = self.y + 8 end
+  function tab:finish() self.column:Fit(math.max(self.y + 12, 1)) end
 
   table.insert(tabs, tab)
   return tab
@@ -863,14 +863,7 @@ local function buildLivePreview(pane)
   local SIDE = 12
   local CARD_WIDTH = PREVIEW_WIDTH - 2 * SIDE -- 266
 
-  local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOPLEFT", SIDE, -12)
-  title:SetText(BIT.L("Live preview"))
-  local titleRule = pane:CreateTexture(nil, "ARTWORK")
-  titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-  titleRule:SetHeight(1)
-  titleRule:SetPoint("TOPLEFT", 8, -34)
-  titleRule:SetPoint("TOPRIGHT", -8, -34)
+  BIT.UI.PreviewHeader(pane, "Live preview", SIDE)
 
   -- A mock nameplate of an enemy: the mark goes above its health bar, where the real one goes.
   -- The shared preview kit draws the plate from the client's own atlases, so this reads like
@@ -898,21 +891,8 @@ local function buildLivePreview(pane)
   window.previewState:SetPoint("TOPRIGHT", scene, "BOTTOMRIGHT", 0, -6)
   window.previewState:SetJustifyH("LEFT")
 
-  local function header(text, anchor, gap)
-    local label = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
-    label:SetText(text)
-    label:SetTextColor(0.85, 0.7, 0.3)
-    local rule = pane:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-    rule:SetHeight(1)
-    rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
-    rule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
-    return label
-  end
-
   -- Try it: the preview's own state, not a setting.
-  local tryIt = header(BIT.L("TRY IT"), window.previewState, 12)
+  local tryIt = BIT.Looks.TryItHeader(pane, window.previewState, 0, -12)
   local toggle = checkboxRow(pane, "Try: out of range",
     function() return preview.out end,
     function(v) preview.out = v; changed() end,
@@ -967,11 +947,7 @@ local function buildLivePreview(pane)
   window.previewButtonNote:SetPoint("RIGHT", barCard, "RIGHT", -8, 0)
   window.previewButtonNote:SetJustifyH("LEFT")
 
-  local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("TOPLEFT", barCard, "BOTTOMLEFT", 0, -8)
-  hint:SetWidth(CARD_WIDTH)
-  hint:SetJustifyH("LEFT")
-  hint:SetText(BIT.L("A sample only: the mark and the dimming happen on your own target and bars."))
+  BIT.UI.PreviewHint(pane, "A sample only: the mark and the dimming happen on your own target and bars.", SIDE)
 end
 
 local function buildTabs()
@@ -1005,7 +981,11 @@ local function buildTabs()
       .. "main attacks." })
   spellTab:gap()
   window.spellsLine = spellTab.content:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  window.spellsLine:SetPoint("TOPLEFT", spellTab.content, "TOPLEFT", 0, -spellTab.y)
+  window.spellsLine:SetPoint("TOPLEFT", spellTab.content, "TOPLEFT", 6, -spellTab.y)
+  window.spellsLine:SetWidth(464)
+  window.spellsLine:SetJustifyH("LEFT")
+  spellTab.y = spellTab.y + 24
+  for _, tab in ipairs(tabs) do tab:finish() end
 end
 
 -- The presets, the preview and the settings in the tab's content frame: the presets
@@ -1017,6 +997,7 @@ local function buildContent(top, anchor)
   presetButton:SetPoint("RIGHT", anchor, "LEFT", -8, 0)
   presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
   presetLabel:SetText(BIT.L("Range"))
+  BIT.UI.TabSummary(window, BIT.L("A red X over your target while it is out of range, a green checkmark while it is in range."), presetLabel)
 
   local pane = CreateFrame("Frame", nil, window, "BackdropTemplate")
   pane:SetPoint("TOPLEFT", 10, -top)

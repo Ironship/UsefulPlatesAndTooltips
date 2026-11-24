@@ -620,7 +620,7 @@ local CAPABILITIES = {
     roles = { "distanceNear", "distanceMid", "distanceFar", "good", "bad", "unknown", "muted", "text" },
     shapes = { "segments", "bar", "dots" },
     font = true, geometry = true, border = true, scale = true, opacity = true,
-    width = 500, -- the editor lives in the settings tab's right column (see the tab below)
+    width = 470, -- fits inside the right ScrollColumn without clipping under the scrollbar
 }
 
 -- Old visual values that still mean something, mapped onto the shared style and
@@ -972,9 +972,8 @@ end)
 -- data preservation; only the two native icon flags have controls of their own.
 ----------------------------------------------------------------------------------------------
 
-local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 500
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
 local PREVIEW_WIDTH = 290
-local COL_HEIGHT = 440 -- both columns fit the window's viewport; only the Appearance tab scrolls
 local ROW_HEIGHT = 26
 local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
 local PREVIEW_LAYOUT = { label = 86, control = 146 }
@@ -1102,11 +1101,7 @@ local function setBackdrop(frame, shade, alpha)
 end
 
 local function pushButton(parent, text, width, onClick)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width, 22)
-    button:SetText(text)
-    button:SetScript("OnClick", onClick)
-    return BIT.UI.SkinButton(button)
+    return BIT.UI.Button(parent, text, width, onClick)
 end
 
 local function rowOpts(opts)
@@ -1159,7 +1154,7 @@ end
 local function actionRow(parent, labelText, buttonText, onClick, opts)
     opts = opts or {}
     local row = makeRow(parent, labelText, opts)
-    local button = pushButton(row, type(buttonText) == "function" and buttonText() or buttonText, 110, onClick)
+    local button = pushButton(row, type(buttonText) == "function" and buttonText() or buttonText, row.layout.control, onClick)
     button:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
     function row:Refresh()
         if type(buttonText) == "function" then button:SetText(buttonText()) end
@@ -1190,31 +1185,25 @@ end
 -- is taller than the area, and a scroll each keeps the left preview still.
 ----------------------------------------------------------------------------------------------
 
+local resetButton
 local function selectTab(tab)
     activeTab = tab
     for _, other in ipairs(tabs) do
         local selected = other == tab
-        other.content:SetShown(selected)
+        other.column:SetShown(selected)
         BIT.UI.TabSelected(other.button, selected)
     end
+    if resetButton then resetButton:SetShown(not (tab and tab.hasOwnReset)) end
 end
 
 local function addTab(name)
     local tab = { name = name, keys = {}, y = 0 }
-    local content = CreateFrame("ScrollFrame", nil, area)
-    content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40)
-    content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, 40)
-    content:EnableMouseWheel(true)
-    local inner = CreateFrame("Frame", nil, content)
-    inner:SetWidth((area:GetWidth() or 500) - 16)
-    content:SetScrollChild(inner)
-    content:SetScript("OnMouseWheel", function(_, delta)
-        local maxScroll = math.max(0, (inner:GetHeight() or 0) - (content:GetHeight() or 0))
-        local at = (content:GetVerticalScroll() or 0) - delta * 24
-        content:SetVerticalScroll(math.min(math.max(at, 0), maxScroll))
-    end)
-    tab.content, tab.inner = content, inner
-    content:Hide()
+    local column = BIT.UI.ScrollColumn(area)
+    column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
+    column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
+    column:Hide()
+    local inner = column.content
+    tab.column, tab.content, tab.inner = column, column.scroll, inner
 
     local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
     button:SetText(name)
@@ -1242,6 +1231,14 @@ local function addTab(name)
     function tab:action(...) return place(actionRow(self.inner, ...)) end
     function tab:info(...) return place(infoRow(self.inner, ...)) end
     function tab:custom(row, key, height) return place(row, key, height) end
+    function tab:header(text)
+        if self.y > 0 then self.y = self.y + 8 end
+        local row = BIT.UI.Header(self.inner, text)
+        row:SetPoint("TOPLEFT", self.inner, "TOPLEFT", 6, -self.y)
+        row:SetPoint("RIGHT", self.inner, "RIGHT", -6, 0)
+        self.y = self.y + 24
+        return row
+    end
     function tab:note(text)
         local line = self.inner:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         line:SetPoint("TOPLEFT", self.inner, "TOPLEFT", 0, -self.y)
@@ -1252,7 +1249,7 @@ local function addTab(name)
         return line
     end
     function tab:gap(height) self.y = self.y + (height or 8) end
-    function tab:finish() self.inner:SetHeight(math.max(self.y + 12, 1)) end
+    function tab:finish() self.column:Fit(math.max(self.y + 12, 1)) end
 
     tabs[#tabs + 1] = tab
     return tab
@@ -1281,6 +1278,7 @@ local function buildTabs(parent, isHunter)
     local hunterOnly = function() return isHunter end
 
     local display = addTab(BIT.L("Display"))
+    display:header("POSITION")
     parent.lockButton = display:action("Position",
         function() return settings.locked and BIT.L("Unlock and move") or BIT.L("Lock position") end,
         function() setLocked(not settings.locked) end,
@@ -1299,7 +1297,7 @@ local function buildTabs(parent, isHunter)
             tooltip = "How high the rail sits above the plate's health bar. Positive is up, negative is under the bar. The same seat as the combo dots." })
     plateClashLine = display:note(BIT.L("Nameplate lanes"))
     refreshPlateClash()
-    display:gap()
+    display:header("INDICATORS")
     parent.rangeText = display:checkbox("showRangeText", "Show range text",
         { tooltip = "The label under the rail (25-30 yd, MELEE, DEAD ZONE). Unchecked keeps only the coloured "
             .. "rail and the MELEE / Dead Zone icons." })
@@ -1307,7 +1305,7 @@ local function buildTabs(parent, isHunter)
         { tooltip = "Native Blizzard raid skull for the 5-8 yd dead zone. Unchecked hides it." })
     parent.meleeIcon = display:checkbox("showMeleeIcon", "Show Melee mark (native sword)",
         { tooltip = "Native Blizzard sword glyph for melee reach. Unchecked hides it." })
-    display:gap()
+    display:header("RANGE")
     parent.longRange = display:checkbox("longRange", "Extended range past 35 yd (Hawk Eye)",
         -- Once the spellbook has answered, the box shows that answer and a click could not change it.
         { enabledIf = function() return isHunter and detectedAutoMax == nil end,
@@ -1329,7 +1327,10 @@ local function buildTabs(parent, isHunter)
     end
 
     local appearance = addTab(BIT.L("Appearance"))
-    local editor = BIT.UI.Appearance(appearance.inner, M.moduleName, CAPABILITIES, refreshAll, hunterLegacy)
+    appearance.hasOwnReset = true -- BIT.UI.Appearance owns its own scope-aware reset button
+    local tabCaps = { hideSample = true }
+    for k, v in pairs(CAPABILITIES) do tabCaps[k] = v end
+    local editor = BIT.UI.Appearance(appearance.inner, M.moduleName, tabCaps, refreshAll, hunterLegacy)
     editor:SetPoint("TOPLEFT", appearance.inner, "TOPLEFT", 0, 0)
     editor.onLayout = function()
         appearance.y = (editor:GetHeight() or 0) + 8
@@ -1353,14 +1354,7 @@ local function buildLivePreview(pane)
     local SIDE = 12
     local CARD_WIDTH = PREVIEW_WIDTH - 2 * SIDE
 
-    local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText(BIT.L("Live preview"))
-    local titleRule = pane:CreateTexture(nil, "ARTWORK")
-    titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-    titleRule:SetHeight(1)
-    titleRule:SetPoint("TOPLEFT", 8, -34)
-    titleRule:SetPoint("TOPRIGHT", -8, -34)
+    BIT.UI.PreviewHeader(pane, "Live preview", SIDE)
 
     -- The scene: a patch of dusky world behind the mock plate, so the rail reads in place.
     local scene = BIT.UI.Preview.Scene(pane, CARD_WIDTH, 228)
@@ -1379,22 +1373,8 @@ local function buildLivePreview(pane)
     renderPreview()
     pane.hunterRail = sample
 
-    -- Section header: small gold caps and a hairline to the right margin.
-    local function header(text, anchor, gap)
-        local label = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
-        label:SetText(text)
-        label:SetTextColor(0.85, 0.7, 0.3)
-        local rule = pane:CreateTexture(nil, "ARTWORK")
-        rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-        rule:SetHeight(1)
-        rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
-        rule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
-        return label
-    end
-
     -- TRY IT: the mock target's own band, never a saved setting.
-    local tryIt = header(BIT.L("TRY IT"), scene, 14)
+    local tryIt = BIT.Looks.TryItHeader(pane, scene, 0, -14)
     local bandRow = sliderRow(pane, "Target band", 1, #BAND_ORDER, 1,
         function() return bandIndex(previewBand) or 1 end,
         function(value) setPreviewBand(BAND_ORDER[value]) end,
@@ -1421,12 +1401,8 @@ local function buildLivePreview(pane)
     })
     pane.hunterSimulate = simulate
 
-    local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", simulate, "BOTTOMLEFT", 0, -10)
-    hint:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
-    hint:SetJustifyH("LEFT")
-    hint:SetText(BIT.L("Drawn by the same code as the live HUD, on a mock enemy nameplate. Six dots by "
-        .. "default; a seventh past 35 yd only with Hawk Eye."))
+    BIT.UI.PreviewHint(pane, "Drawn by the same code as the live HUD, on a mock enemy nameplate. Six dots by "
+        .. "default; a seventh past 35 yd only with Hawk Eye.", SIDE)
 end
 
 local function build(parent)
@@ -1449,26 +1425,23 @@ local function build(parent)
     presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
     presetLabel:SetText(BIT.L("Rail"))
 
-    local note = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    note:SetPoint("TOPLEFT", 12, -6)
-    note:SetPoint("RIGHT", presetLabel, "LEFT", -12, 0)
-    note:SetJustifyH("LEFT")
-    note:SetText(isHunter
+    local note = BIT.UI.TabSummary(parent, isHunter
         and BIT.L("The rail rides above the target's nameplate while a living hostile target is selected; "
             .. "unlock to drag it to a screen spot of your own.")
         or BIT.L("The native range rail appears only on a Hunter. On another class these settings wait for the "
-            .. "hunter alt; the preview and the appearance editor need no hunter and no target."))
+            .. "hunter alt; the preview and the appearance editor need no hunter and no target."), presetLabel)
     parent.hunterNote = note
 
     local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    pane:SetPoint("TOPLEFT", 10, -46)
-    pane:SetSize(PREVIEW_WIDTH, COL_HEIGHT)
+    pane:SetPoint("TOPLEFT", 10, -(BIT.UI.TAB_TOP or 44))
+    pane:SetPoint("BOTTOMLEFT", 10, 10)
+    pane:SetWidth(PREVIEW_WIDTH)
     setBackdrop(pane, 0.09)
     parent.hunterPane = pane
 
     area = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     area:SetPoint("TOPLEFT", pane, "TOPRIGHT", 10, 0)
-    area:SetSize(WINDOW_WIDTH - PREVIEW_WIDTH - 30, COL_HEIGHT)
+    area:SetPoint("BOTTOMRIGHT", -10, 10)
     setBackdrop(area, 0.09)
     parent.hunterArea = area
 
@@ -1482,11 +1455,9 @@ local function build(parent)
     parent.hunterSample = sample
     buildTabs(parent, isHunter)
 
-    local reset = pushButton(area, BIT.L("Reset this tab"), 120, function() resetTab(activeTab) end)
-    local resetFont = reset:GetFontString()
-    reset:SetWidth(math.max(120, math.ceil(resetFont and resetFont:GetStringWidth() or 0) + 18))
-    reset:SetPoint("BOTTOMRIGHT", -10, 10)
-    parent.hunterResetTab = reset
+    resetButton = BIT.Looks.ResetButton(area, function() resetTab(activeTab) end)
+    resetButton:SetPoint("BOTTOMRIGHT", -10, 10)
+    parent.hunterResetTab = resetButton
     parent.hunterTabs = tabs
 
     tabRefresh = function()
@@ -1517,6 +1488,7 @@ BIT.RegisterTab("HunterRangeFinder", {
     title = "Hunter range",
     summary = "Six native dots tell a hunter the approximate range, 8-10 yd to 30-35 yd; a seventh past 35 yd with Hawk Eye.",
     width = WINDOW_WIDTH, height = WINDOW_HEIGHT,
+    usesStyle = true,
     capabilities = CAPABILITIES,
     legacy = hunterLegacy,
     buildPreview = buildPreview,

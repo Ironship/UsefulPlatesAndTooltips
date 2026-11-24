@@ -11,12 +11,12 @@ BIT.RegisterLocale("ruRU", {
   ["Quest rewards (sample)"] = "Награды за задания (пример)",
   ["Static sample: bag and quest arrows follow their settings; live upgrades are rated against your gear."] =
     "Статический пример: стрелки для сумок и заданий соответствуют настройкам; игровые улучшения сравниваются с вашей экипировкой.",
-  ["The size the preview's text is drawn in. The same field the shared appearance editor changes."] =
-    "Размер текста в предпросмотре. Это же значение меняется в общем редакторе оформления.",
-  ["Scales the preview's card, rows, icons and bag button. The same field the shared appearance editor changes."] =
-    "Масштабирует карточку, строки, значки и кнопку сумки в предпросмотре. Это же значение меняется в общем редакторе оформления.",
-  ["How see-through the preview's lines and bag button are. The same field the shared appearance editor changes."] =
-    "Прозрачность строк и кнопки сумки в предпросмотре. Это же значение меняется в общем редакторе оформления.",
+  ["Preview only: changes the font size of the sample card without touching the live game tooltip."] =
+    "Только предпросмотр: меняет размер шрифта карточки примера, не затрагивая игровую подсказку.",
+  ["Preview only: zooms the sample tooltip and bag slots without touching the live game UI."] =
+    "Только предпросмотр: масштабирует пример подсказки и ячейки сумки, не затрагивая интерфейс игры.",
+  ["Preview only: adjusts the sample card's opacity without touching the live game UI."] =
+    "Только предпросмотр: меняет непрозрачность карточки примера, не затрагивая интерфейс игры.",
 
   -- пример предмета: формулировки самой игры в подсказке предмета
   ["Embossed Leather Vest (sample)"] = "Тиснёный кожаный жилет (пример)",

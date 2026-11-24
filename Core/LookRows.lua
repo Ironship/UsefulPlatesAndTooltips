@@ -91,7 +91,9 @@ local function makeRow(parent, labelText, opts)
             enabled = not ok or result and true or false
         end
         self:SetAlpha(enabled and 1 or DISABLED_ALPHA)
+        self.dimmed = not enabled
         if widget then
+            widget.settingsRow = self
             widget:EnableMouse(enabled)
             if widget.EnableMouseWheel then widget:EnableMouseWheel(enabled) end
         end
@@ -121,6 +123,7 @@ function Rows.Choice(parent, labelText, list, get, set, opts)
     local arrow = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     arrow:SetPoint("RIGHT", -8, 0)
     arrow:SetText("v")
+    button.label, button.arrow, button.swatch = text, arrow, swatch
     local kind = list.kind
     local labelOf = opts.labelOf or function(entry) return entry.literal and entry.label or BIT.L(entry.label) end
     local function entryFor(value)
@@ -322,13 +325,20 @@ function Looks.ResetButton(parent, onClick, width)
     return button
 end
 
--- The "TRY IT" heading above the preview's own sliders (the sample's numbers, never settings).
-function Looks.TryItHeader(parent, anchor, x, y)
-    local text = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    text:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x or 4, y or -12)
-    text:SetText(BIT.L("TRY IT"))
-    text:SetTextColor(1, 0.82, 0)
-    return text
+-- A section heading inside a preview pane ("TRY IT", "FRAME", ...): gold caps + hairline to the pane's right margin.
+function Looks.TryItHeader(parent, anchor, x, y, text)
+    local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", x or 0, y or -12)
+    label:SetText(BIT.L(text or "TRY IT"))
+    local heading = BIT.UI and BIT.UI.COLOR and BIT.UI.COLOR.heading or { 1, 0.82, 0 }
+    label:SetTextColor(heading[1], heading[2], heading[3])
+    local rule = parent:CreateTexture(nil, "ARTWORK")
+    local divider = BIT.UI and BIT.UI.COLOR and BIT.UI.COLOR.divider or { 1, 0.82, 0, 0.18 }
+    rule:SetColorTexture(divider[1], divider[2], divider[3], divider[4])
+    rule:SetHeight(1)
+    rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
+    rule:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
+    return label
 end
 
 -- The "SIMULATE" block under a preview's TRY IT sliders: one button that plays a short scripted scene on the preview (the
@@ -346,9 +356,10 @@ function Looks.Simulate(pane, anchor, spec)
     block:SetPoint("RIGHT", pane, "RIGHT", -12, 0)
     block:SetHeight(24)
     local head = block:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    head:SetPoint("TOPLEFT", 0, 0)
+    head:SetPoint("LEFT", block, "LEFT", 0, 0)
     head:SetText(BIT.L("SIMULATE"))
-    head:SetTextColor(1, 0.82, 0)
+    local heading = BIT.UI and BIT.UI.COLOR and BIT.UI.COLOR.heading or { 1, 0.82, 0 }
+    head:SetTextColor(heading[1], heading[2], heading[3])
     local ticker, startedAt
     local button
     local function inCombat()
@@ -380,7 +391,13 @@ function Looks.Simulate(pane, anchor, spec)
         if ticker then stop() else start() end
     end)
     button:SetHeight(20)
-    button:SetPoint("TOPRIGHT", 0, 3)
+    button:SetPoint("RIGHT", block, "RIGHT", 0, 0)
+    local rule = block:CreateTexture(nil, "ARTWORK")
+    local divider = BIT.UI and BIT.UI.COLOR and BIT.UI.COLOR.divider or { 1, 0.82, 0, 0.18 }
+    rule:SetColorTexture(divider[1], divider[2], divider[3], divider[4])
+    rule:SetHeight(1)
+    rule:SetPoint("LEFT", head, "RIGHT", 8, 0)
+    rule:SetPoint("RIGHT", button, "LEFT", -8, 0)
     -- what the scene shows is the tooltip: the preview columns are full
     button:HookScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")

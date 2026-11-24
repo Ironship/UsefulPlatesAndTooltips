@@ -34,13 +34,8 @@ local function tell(text) if BIT.Say then BIT.Say(text) end end
 local function frameRow(parent, spec)
   local UI = BIT.UI
   local row = BIT.Looks.Rows.Row(parent, spec.label, { tooltip = spec.tooltip })
-  local box = CreateFrame("EditBox", nil, row, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  box:SetHeight(22)
+  local box = UI.EditBox(row, row.layout.control, 22)
   box:SetPoint("LEFT", row, "LEFT", row.layout.label, 0)
-  UI.Backdrop(box, 0.13)
-  box:SetFontObject("GameFontHighlightSmall")
-  box:SetTextInsets(6, 6, 0, 0)
-  box:SetAutoFocus(false)
   local function save(value) Frames.Set(spec.key, value) end
   box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   box:SetScript("OnEscapePressed", function(self)
@@ -75,33 +70,49 @@ local function frameRow(parent, spec)
 end
 
 local function build(content)
+  local UI = BIT.UI
   local y = -8
   local note = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  note:SetPoint("TOPLEFT", 8, y)
-  note:SetPoint("RIGHT", -8, 0)
+  note:SetPoint("TOPLEFT", 10, y)
+  note:SetPoint("RIGHT", -10, 0)
   note:SetJustifyH("LEFT")
   note:SetText(BIT.L("Only for another unit frame addon (ElvUI, Shadowed Unit Frames, ...) or custom nameplates: tell the "
     .. "addon where its health bars are. Empty rows are automatic. The markers of DoTs, Cast, Shields and Heals use these."))
-  y = y - math.max(30, (note:GetStringHeight() or 24) + 10)
+  y = y - math.max(30, (note:GetStringHeight() or 24) + 12)
+
+  local card = CreateFrame("Frame", nil, content, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  card:SetPoint("TOPLEFT", 10, y)
+  card:SetPoint("RIGHT", -10, 0)
+  UI.Backdrop(card, 0.09)
+
+  local cy = 10
+  local head = UI.Header(card, "FRAMES")
+  head:SetPoint("TOPLEFT", 10, -cy)
+  head:SetPoint("RIGHT", -10, 0)
+  cy = cy + 26
+
   local rows = {}
   for _, spec in ipairs(ROWS) do
-    local row = frameRow(content, spec)
-    row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, y)
+    local row = frameRow(card, spec)
+    row:SetPoint("TOPLEFT", card, "TOPLEFT", 4, -cy)
     rows[#rows + 1] = row
-    y = y - ROW
+    cy = cy + ROW
   end
+  cy = cy + 10
+
   -- Back to automatic: a path typed or picked wrong (a frame that is not the health bar) puts the markers in the wrong place.
-  local reset = BIT.Looks.ResetButton(content, function()
+  local reset = BIT.Looks.ResetButton(card, function()
     local cleared = Frames.Reset()
     for _, row in ipairs(rows) do row:Refresh() end
     tell(cleared > 0 and string.format(BIT.L("Frames reset: %d paths cleared, the addon finds the frames by itself again."), cleared)
       or BIT.L("Frames: no path was set, the addon already finds the frames by itself."))
   end, 140)
   reset:SetText(BIT.L("Reset frames"))
-  reset:SetWidth(math.max(140, reset:GetFontString():GetStringWidth() + 24))
-  reset:SetPoint("TOPLEFT", content, "TOPLEFT", 8, y - 8)
-  y = y - 30
-  content:SetHeight(-y + 12)
+  reset:SetWidth(math.max(140, math.ceil(reset:GetFontString():GetStringWidth() or 0) + 24))
+  reset:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -10, 10)
+  card:SetHeight(cy + 34)
+
+  content:SetHeight(-y + card:GetHeight() + 12)
 end
 
 BIT.RegisterTab("Frames", {

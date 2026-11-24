@@ -6,9 +6,8 @@ local _, BIT = ...
 
 local ns = BIT.Module("CastPrediction")
 
-local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 500
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
 local PREVIEW_WIDTH = 290
-local COL_HEIGHT = 440
 local ROW_HEIGHT = 26
 local SIDE = 12
 local HEALTH_SCALE = 10 -- the mock bars are 0..100; the marker works on a 0..1000 health scale
@@ -100,6 +99,8 @@ local function syncDisplayHost()
     if not (panel and window and window:IsVisible()) then return end
     if inCombat() then
         if panel.combatNote then panel.combatNote:Show() end
+        if panel.mockFrame then panel.mockFrame:SetAlpha(0.3) end
+        if panel.mockPlate then panel.mockPlate:SetAlpha(0.3) end
         if hostsSet then
             hostsSet = false
             releasePreview()
@@ -108,6 +109,8 @@ local function syncDisplayHost()
     elseif not hostsSet then
         hostsSet = true
         if panel.combatNote then panel.combatNote:Hide() end
+        if panel.mockFrame then panel.mockFrame:SetAlpha(1) end
+        if panel.mockPlate then panel.mockPlate:SetAlpha(1) end
         ns.setDisplayHost(panel.host)
         ns.setPlatePreview(panel.plateHost)
         updatePreview()
@@ -317,11 +320,8 @@ local function buildMarkerTab(parent)
     y = place(checkRow(parent, "Show killing spell icon", "showKillSpellIcon",
         "Enabled by default. When a cast or finisher would kill, show its spell icon instead of the generic kill icon. "
         .. "The finisher preview uses the icon for the finisher that would kill."), y)
-    y = place(choiceRow(parent, "Fallback kill icon", "killIcon", {
-        { id = "skull", label = "Raid skull" },
-        { id = "cross", label = "Red X" },
-        { id = "impact", label = "Impact" },
-    }, "Shown when the spell icon option is off or that spell's icon is unavailable."), y)
+    y = place(choiceRow(parent, "Fallback kill icon", "killIcon", BIT.Looks.KillIcons(),
+        "Shown when the spell icon option is off or that spell's icon is unavailable."), y)
     y = place(sliderRow(parent, "Kill icon size", "killIconSize", 12, 128, 1, nil, nil), y, 40)
     y = place(choiceRow(parent, "Kill icon position", "killIconPosition", {
         { id = "portrait", label = "Portrait" },
@@ -464,7 +464,7 @@ local function buildTabs(parent, area)
             BIT.UI.TabSelected(button, candidate == name)
         end
     end
-    local x = 6
+    local x = 8
     local builders = {
         Marker = buildMarkerTab, Text = buildLabelTab,
         Nameplates = buildNameplateTab, Prediction = buildPredictionTab,
@@ -482,7 +482,7 @@ local function buildTabs(parent, area)
         button:SetSize(BIT.UI.TabWidth(button.text), 26)
         button.text:SetPoint("CENTER")
         BIT.UI.SkinTabButton(button, button.text)
-        button:SetPoint("TOPLEFT", x, -6)
+        button:SetPoint("TOPLEFT", x, -8)
         x = x + button:GetWidth() + BIT.UI.TAB_GAP
         button:SetScript("OnClick", function() selectTab(name) end)
         tabButtons[name] = button
@@ -510,17 +510,9 @@ end
 ---------------------------------------------------------------------------------------------
 
 local function buildPreview(pane)
-    pane:SetSize(PREVIEW_WIDTH, COL_HEIGHT)
     BIT.UI.Backdrop(pane, 0.09)
 
-    local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", SIDE, -12)
-    title:SetText(BIT.L("Live preview"))
-    local titleRule = pane:CreateTexture(nil, "ARTWORK")
-    titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-    titleRule:SetHeight(1)
-    titleRule:SetPoint("TOPLEFT", 8, -34)
-    titleRule:SetPoint("TOPRIGHT", -8, -34)
+    local title = BIT.UI.PreviewHeader(pane, "Live preview", SIDE)
 
     local scene = BIT.UI.Preview.Scene(pane, PREVIEW_WIDTH - 2 * SIDE, 216)
     scene:SetPoint("TOP", pane, "TOP", 0, -44)
@@ -528,17 +520,23 @@ local function buildPreview(pane)
     local mock = BIT.UI.Preview.TargetFrame(scene, { name = "Murloc Raider", level = "12", health = preview.health })
     mock.frame:SetPoint("TOP", scene, "TOP", 0, -6)
     pane.host = mock.host
+    pane.mockFrame = mock.frame
     pane.targetHealthBar = mock.healthBar
     pane.healthPercent = mock.healthPercent
     pane.healthValue = mock.healthValue
 
     local plateMock = BIT.UI.Preview.Nameplate(scene, { name = "Murloc Raider", level = "12", health = preview.health })
     plateMock.frame:SetPoint("BOTTOM", scene, "BOTTOM", 0, 10)
+    pane.mockPlate = plateMock.frame
     pane.plateHost = { plate = plateMock.frame, healthBar = plateMock.bar }
     pane.plateHealthBar = plateMock.bar
 
     -- While a fight is on, the marker is on the real target; the preview returns after combat.
-    pane.combatNote = scene:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    -- On its own raised layer above the mock frames so they never draw over the note.
+    local noteLayer = CreateFrame("Frame", nil, scene)
+    noteLayer:SetAllPoints(scene)
+    noteLayer:SetFrameLevel(mock.frame:GetFrameLevel() + 10)
+    pane.combatNote = noteLayer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     pane.combatNote:SetPoint("CENTER", scene, "CENTER")
     pane.combatNote:SetWidth(PREVIEW_WIDTH - 60)
     pane.combatNote:SetJustifyH("CENTER")
@@ -554,7 +552,7 @@ local function buildPreview(pane)
             preview.health = math.max(1, math.min(100, math.floor(value + 0.5)))
             updatePreview()
         end)
-    healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -4, -4)
+    healthSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -4)
     pane.healthSlider = healthSlider
 
     local spellRow = CreateFrame("Frame", nil, pane)
@@ -604,12 +602,8 @@ local function buildPreview(pane)
     })
     pane.simulate = sim
 
-    local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", sim, "BOTTOMLEFT", 0, -8)
-    hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
-    hint:SetJustifyH("LEFT")
-    hint:SetText(BIT.L("Same marker on mock frames; sample damage is illustrative. Raise target health to hide "
-        .. "the kill icon. While in combat, the marker returns to your target."))
+    local hint = BIT.UI.PreviewHint(pane, "Same marker on mock frames; sample damage is illustrative. Raise target health to hide "
+        .. "the kill icon. While in combat, the marker returns to your target.", SIDE)
 
     pane.title = title
     pane.hint = hint
@@ -644,21 +638,19 @@ if BIT.RegisterTab then
             if window == parent then return end
             window = parent
             controls = {}
-            local note1 = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            note1:SetPoint("TOPLEFT", 12, -6)
-            note1:SetPoint("RIGHT", -12, 0)
-            note1:SetJustifyH("LEFT")
-            note1:SetText(BIT.L("The marker shows what the description and your spell power give; hits seen in "
+            BIT.UI.TabSummary(parent, BIT.L("The marker shows what the description and your spell power give; hits seen in "
                 .. "combat tune it. Crits, procs and resists stay unpredictable."))
 
             local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-            pane:SetPoint("TOPLEFT", 10, -46)
+            pane:SetPoint("TOPLEFT", 10, -(BIT.UI.TAB_TOP or 44))
+            pane:SetPoint("BOTTOMLEFT", 10, 10)
+            pane:SetWidth(PREVIEW_WIDTH)
             buildPreview(pane)
             panel = pane
 
             local area = CreateFrame("Frame", nil, parent, "BackdropTemplate")
             area:SetPoint("TOPLEFT", pane, "TOPRIGHT", 10, 0)
-            area:SetSize(WINDOW_WIDTH - PREVIEW_WIDTH - 30, COL_HEIGHT)
+            area:SetPoint("BOTTOMRIGHT", -10, 10)
             BIT.UI.Backdrop(area, 0.09)
             local divider = area:CreateTexture(nil, "ARTWORK")
             divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))

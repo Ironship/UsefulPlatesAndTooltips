@@ -2940,7 +2940,16 @@ local function renderMockTooltip(scene, style)
   caption:SetPoint("BOTTOMRIGHT", scene, "BOTTOMRIGHT", -12, 6)
   caption:SetFont(font, captionFont, outline)
   caption:SetTextColor(0.7, 0.7, 0.7, opacity)
-  local captionH = measure(caption, captionFont + 2)
+  if not scene.captionRule and BIT.UI and BIT.UI.COLOR then
+    local rule = scene:CreateTexture(nil, "ARTWORK")
+    local d = BIT.UI.COLOR.divider
+    rule:SetColorTexture(d[1], d[2], d[3], d[4])
+    rule:SetHeight(1)
+    rule:SetPoint("BOTTOMLEFT", caption, "TOPLEFT", 0, 6)
+    rule:SetPoint("RIGHT", scene, "RIGHT", -12, 0)
+    scene.captionRule = rule
+  end
+  local captionH = measure(caption, captionFont + 2) + 8
   local bagTop
   local rewardSize = math.max(18, math.floor(30 * scale + 0.5))
   local markerSize = math.max(14, math.floor(22 * scale + 0.5))
@@ -3090,27 +3099,23 @@ BIT.RegisterTab("StatsInfo", {
   title = "StatsInfo",
   summary = "In an item's tooltip: what its stats change against the item you wear in that slot.",
   -- the preview card at the left, the settings in tabs at its right
-  width = 760, height = 560,
+  width = 840, height = 560,
   build = function(parent)
     local UI, Rows = BIT.UI, BIT.Looks.Rows
-    local PANE_WIDTH = 300
-    local LAYOUT = { label = 200, control = 130 } -- the settings column is narrower than the other modules'
+    local TOP = UI.TAB_TOP or 44
+    local PANE_WIDTH = 274 -- 274 + 16 = 290 px card width, matching every other tab's preview pane
+    local LAYOUT = BIT.Looks.LAYOUT -- matches every other module's row geometry inside the 840 px hub
+
+    UI.TabSummary(parent, BIT.L("In an item's tooltip: what its stats change against the item you wear in that slot."))
 
     -- Left: the live preview card, like every other module's. A static sample item (the preview never reads
     -- the live API): the tooltip lines, three bag slots and the quest rewards. It follows the settings at the
     -- right and the TRY IT sliders under it.
     local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    card:SetPoint("TOPLEFT", 10, -10)
+    card:SetPoint("TOPLEFT", 10, -TOP)
     card:SetWidth(PANE_WIDTH + 16)
     UI.Backdrop(card, 0.09)
-    local cardTitle = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    cardTitle:SetPoint("TOPLEFT", 12, -12)
-    cardTitle:SetText(BIT.L("Live preview"))
-    local cardRule = card:CreateTexture(nil, "ARTWORK")
-    cardRule:SetColorTexture(unpack(UI.COLOR.divider))
-    cardRule:SetHeight(1)
-    cardRule:SetPoint("TOPLEFT", 8, -34)
-    cardRule:SetPoint("TOPRIGHT", -8, -34)
+    UI.PreviewHeader(card, "Live preview", 12)
 
     local pane = CreateFrame("Frame", nil, card)
     pane:SetPoint("TOPLEFT", 8, -40)
@@ -3123,33 +3128,32 @@ BIT.RegisterTab("StatsInfo", {
     end)
     buildMockTooltip(pane)
 
-    -- TRY IT: the appearance the preview is drawn in -- the same three fields the shared appearance editor
-    -- writes, so either one moves the preview. Each row is registered in tryItSliders so renderPreview
-    -- re-seats its thumb on the stored value after any write.
-    local tryIt = BIT.Looks.TryItHeader(pane, pane, 0, -10)
+    -- TRY IT: preview-only display sliders for inspecting the sample tooltip at different text sizes and scales.
+    local tryIt = BIT.Looks.TryItHeader(card, pane, 4, -10)
     local tryLayout = BIT.Looks.PREVIEW_LAYOUT
-    local fontSlider = Rows.Slider(pane, "Font size", 6, 48, 1,
+    local fontSlider = Rows.Slider(card, "Font size", 6, 48, 1,
       styleGet("fontSize", 12), styleSet("fontSize"),
       { layout = tryLayout, suffix = " px",
-        tooltip = "The size the preview's text is drawn in. The same field the shared appearance editor changes." })
-    local scaleSlider = Rows.Slider(pane, "Scale", 0.5, 3, 0.05,
+        tooltip = "Preview only: changes the font size of the sample card without touching the live game tooltip." })
+    local scaleSlider = Rows.Slider(card, "Scale", 0.5, 3, 0.05,
       styleGet("scale", 1), styleSet("scale"),
       { layout = tryLayout, display = function(v) return string.format("%.2fx", v) end,
-        tooltip = "Scales the preview's card, rows, icons and bag button. The same field the shared appearance editor changes." })
-    local opacitySlider = Rows.Slider(pane, "Opacity", 0, 1, 0.05,
+        tooltip = "Preview only: zooms the sample tooltip and bag slots without touching the live game UI." })
+    local opacitySlider = Rows.Slider(card, "Opacity", 0, 1, 0.05,
       styleGet("opacity", 1), styleSet("opacity"),
       { layout = tryLayout, display = function(v) return math.floor(v * 100 + 0.5) .. "%" end,
-        tooltip = "How see-through the preview's lines and bag button are. The same field the shared appearance editor changes." })
+        tooltip = "Preview only: adjusts the sample card's opacity without touching the live game UI." })
     tryItSliders = { fontSlider, scaleSlider, opacitySlider }
-    fontSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -4, -4)
+    fontSlider:SetPoint("TOPLEFT", tryIt, "BOTTOMLEFT", -6, -4)
     scaleSlider:SetPoint("TOPLEFT", fontSlider, "BOTTOMLEFT", 0, 0)
     opacitySlider:SetPoint("TOPLEFT", scaleSlider, "BOTTOMLEFT", 0, 0)
-    -- The card wraps the sample and the sliders, whatever height the sample measured itself at.
-    local AREA_HEIGHT = 500
+    -- The card matches the standard 506 px column height at normal scale and grows smoothly when zoomed.
+    local AREA_HEIGHT = (UI.TAB_HEIGHT or 560) - TOP - 10
     pane.onLayout = function()
-      local height = 40 + (pane:GetHeight() or 0) + 10 + 20 + 3 * 26 + 14
+      local slidersH = (fontSlider:GetHeight() or 26) + (scaleSlider:GetHeight() or 26) + (opacitySlider:GetHeight() or 26)
+      local height = math.max(AREA_HEIGHT, 40 + (pane:GetHeight() or 0) + 10 + 20 + slidersH + 14)
       card:SetHeight(height)
-      parent:SetHeight(math.max(AREA_HEIGHT, height) + 20)
+      parent:SetHeight(TOP + height + 10)
     end
 
     -- Right: the settings, in tabs, with "Reset this tab" under them.

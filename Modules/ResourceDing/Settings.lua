@@ -8,7 +8,6 @@ local ROW_HEIGHT = 26
 local SETTINGS_LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
 local PREVIEW_LAYOUT = BIT.Looks.PREVIEW_LAYOUT
 local DISABLED_ALPHA = 0.35
-local DIAMOND = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_3"
 local MAX_POINTS = 5
 
 local controls = {}
@@ -252,21 +251,23 @@ function updateLivePreview()
     end
   end
 
+  local shardStep = Addon.ShardStep and Addon.ShardStep(size) or size
+  local shardSpan = points > 0 and ((points - 1) * shardStep + size) or size
   scene.shardsRow:SetShown(showDiamonds)
   scene.shardsRow:ClearAllPoints()
   scene.shardsRow:SetPoint("TOP", scene.healthBar, "BOTTOM", 0, -shardOffset)
-  scene.shardsRow:SetSize(math.max(2, points * (size - 2) + 2), size)
+  scene.shardsRow:SetSize(math.max(2, shardSpan), size)
   for i = 1, MAX_POINTS do
     local diamond = scene.diamonds[i]
     if showDiamonds and i <= points then
       if not diamond then
-        diamond = scene.shardsRow:CreateTexture(nil, "ARTWORK")
-        diamond:SetTexture(DIAMOND)
+        diamond = Addon.CreateShard(scene.shardsRow)
         scene.diamonds[i] = diamond
       end
-      diamond:SetSize(size, size)
+      Addon.LayoutShard(diamond, size)
+      Addon.PaintShard(diamond, style, i == points)
       diamond:ClearAllPoints()
-      diamond:SetPoint("LEFT", scene.shardsRow, "LEFT", (i - 1) * (size - 2), 0)
+      diamond:SetPoint("LEFT", scene.shardsRow, "LEFT", (i - 1) * shardStep, 0)
       diamond:Show()
     elseif diamond then
       diamond:Hide()
@@ -285,14 +286,7 @@ function updateLivePreview()
 end
 
 local function buildLivePreview(pane)
-  local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOPLEFT", 12, -12)
-  title:SetText(BIT.L("Live preview"))
-  local titleRule = pane:CreateTexture(nil, "ARTWORK")
-  titleRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-  titleRule:SetHeight(1)
-  titleRule:SetPoint("TOPLEFT", 8, -34)
-  titleRule:SetPoint("TOPRIGHT", -8, -34)
+  BIT.UI.PreviewHeader(pane, "Live preview", 12)
 
   -- The scene and the mock enemy nameplate come from the shared preview kit (built from the
   -- client's own atlases), so the dots sit under a plate that reads like the game's own HUD.
@@ -311,15 +305,7 @@ local function buildLivePreview(pane)
   scene.caption:SetJustifyH("CENTER")
   previewScene = scene
 
-  local tryIt = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  tryIt:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -14)
-  tryIt:SetText(BIT.L("TRY IT"))
-  tryIt:SetTextColor(0.85, 0.7, 0.3)
-  local tryRule = pane:CreateTexture(nil, "ARTWORK")
-  tryRule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-  tryRule:SetHeight(1)
-  tryRule:SetPoint("LEFT", tryIt, "RIGHT", 8, 0)
-  tryRule:SetPoint("RIGHT", pane, "RIGHT", -12, 0)
+  local tryIt = BIT.Looks.TryItHeader(pane, scene, 0, -14)
 
   local points = sliderRow(pane, "Combo points", 0, MAX_POINTS, 1,
     function() return previewState.points end,
@@ -362,12 +348,8 @@ local function buildLivePreview(pane)
     end,
   })
 
-  local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", 12, 8)
-  hint:SetWidth(PANE_WIDTH - 24)
-  hint:SetJustifyH("LEFT")
-  hint:SetText(BIT.L("Hear a single cue when your class finisher resource reaches maximum. "
-    .. "The preview is a silent sample drawn with the live dots and diamonds, not your target."))
+  BIT.UI.PreviewHint(pane, "Hear a single cue when your class finisher resource reaches maximum. "
+    .. "The preview is a silent sample drawn with the live dots and diamonds, not your target.", 12)
   updateLivePreview()
 end
 
@@ -379,8 +361,11 @@ local function selectTab(tab)
   activeTab = tab
   for _, other in ipairs(tabs) do
     local selected = other == tab
-    other.content:SetShown(selected)
+    other.column:SetShown(selected)
     BIT.UI.TabSelected(other.button, selected)
+  end
+  if Addon.settingsPanel and Addon.settingsPanel.resetButton then
+    Addon.settingsPanel.resetButton:SetShown(not (tab and tab.hasOwnReset))
   end
   refreshControls()
   updateLivePreview()
@@ -389,18 +374,12 @@ end
 -- A tab whose methods add rows top to bottom and remember the setting keys, for "Reset this tab".
 local function addTab(name)
   local tab = { name = name, keys = {}, widgets = {}, y = 0 }
-  tab.content = CreateFrame("ScrollFrame", nil, settingsArea)
-  tab.content:SetPoint("TOPLEFT", settingsArea, "TOPLEFT", 8, -40)
-  tab.content:SetPoint("BOTTOMRIGHT", settingsArea, "BOTTOMRIGHT", -8, 40)
-  tab.content:Hide()
-  tab.content:EnableMouseWheel(true)
-  tab.inner = CreateFrame("Frame", nil, tab.content)
-  tab.inner:SetWidth(settingsArea:GetWidth() - 16)
-  tab.content:SetScrollChild(tab.inner)
-  tab.content:SetScript("OnMouseWheel", function(_, delta)
-    local limit = math.max(0, tab.inner:GetHeight() - tab.content:GetHeight())
-    tab.content:SetVerticalScroll(math.max(0, math.min(limit, tab.content:GetVerticalScroll() - delta * 24)))
-  end)
+  tab.column = BIT.UI.ScrollColumn(settingsArea)
+  tab.column:SetPoint("TOPLEFT", settingsArea, "TOPLEFT", 6, -40)
+  tab.column:SetPoint("BOTTOMRIGHT", settingsArea, "BOTTOMRIGHT", -6, 40)
+  tab.column:Hide()
+  tab.content = tab.column.scroll
+  tab.inner = tab.column.content
 
   local button = CreateFrame("Button", nil, settingsArea, "PanelTopTabButtonTemplate")
   button:SetText(BIT.L(name))
@@ -520,16 +499,17 @@ local function buildTabs()
   sound:gap()
 
   local appearance = addTab("Appearance")
+  appearance.hasOwnReset = true -- BIT.UI.Appearance owns its own scope-aware reset button
   local editor = BIT.UI.Appearance(appearance.inner, "ResourceDing", {
-    roles = Addon.DotStyleRoles, font = true, opacity = true, width = 400,
+    roles = Addon.DotStyleRoles, font = true, opacity = true, width = 470, hideSample = true,
   }, updateLivePreview)
   editor:SetPoint("TOPLEFT", 0, 0)
-  editor.onLayout = function() appearance.inner:SetHeight(editor:GetHeight() + 12) end
+  editor.onLayout = function() appearance.column:Fit(editor:GetHeight() + 12) end
   appearance.y = editor:GetHeight() + 12
   appearance.reset = function() BIT.Style.Reset("ResourceDing") end
 
   for _, tab in ipairs(tabs) do
-    tab.inner:SetHeight(math.max(1, tab.y + 12))
+    tab.column:Fit(math.max(1, tab.y + 12))
     for key, widget in pairs(tab.widgets) do widgets[key] = widget end
   end
   return widgets
@@ -553,14 +533,11 @@ function Addon.CreateSettingsPanel(parent)
   panel.name = "ResourceDing"
   Addon.settingsPanel = panel
 
-  local resourceText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  resourceText:SetPoint("TOPLEFT", 16, -10)
-  resourceText:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -16, -10)
-  resourceText:SetJustifyH("LEFT")
+  local resourceText = BIT.UI.TabSummary(panel, "")
   panel.resourceText = resourceText
 
   local pane = CreateFrame("Frame", nil, panel, "BackdropTemplate")
-  pane:SetPoint("TOPLEFT", 10, -36)
+  pane:SetPoint("TOPLEFT", 10, -(BIT.UI.TAB_TOP or 44))
   pane:SetPoint("BOTTOMLEFT", 10, 10)
   pane:SetWidth(PANE_WIDTH)
   setBackdrop(pane, 0.09)
@@ -761,12 +738,13 @@ end
 BIT.RegisterTab("ResourceDing", {
   buildPreview = buildResourceDingPreview,
   previewRender = renderResourceDingPreview,
+  usesStyle = true,
   capabilities = { roles = Addon.DotStyleRoles or { "text" }, shapes = false,
     geometry = false, border = false, font = true, scale = false, opacity = true },
   title = "ResourceDing",
   summary = "A sound when your combo points are full, and the points as dots under the target; for "
     .. "casters a sound when mana climbs to a level, and for warlocks one on each Soul Shard.",
-  width = 760, height = 500,
+  width = 840, height = 560,
   build = function(parent) Addon.CreateSettingsPanel(parent) end,
 })
 BIT.tabWords.ding = "ResourceDing"

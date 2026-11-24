@@ -88,7 +88,7 @@ local tabRows = 1
 local UI = BIT.UI or {} -- Appearance.lua (loaded before this file) may have added members
 BIT.UI = UI
 
--- NeedRoll's Native skin: Blizzard's frame/buttons, black surfaces, gold headings and white text.
+-- Native Blizzard frame/buttons, black inset surfaces, gold headings and white text.
 local TEX_DIR = "Interface\\AddOns\\UsefulPlatesAndTooltips\\Core\\Textures\\"
 UI.MEDIA = {
   rounded = TEX_DIR .. "Rounded",
@@ -96,46 +96,13 @@ UI.MEDIA = {
   border2 = TEX_DIR .. "RoundedBorder2",
 }
 UI.COLOR = {
-  panel = { 0, 0, 0, 1 },
-  panelIn = { 0.02, 0.02, 0.02, 1 },
   edge = { 0.35, 0.35, 0.35, 1 },
-  edgeOn = { 1, 0.82, 0, 0.8 },
   text = { 1, 1, 1, 1 },
   muted = { 0.63, 0.63, 0.63, 1 },
   heading = { 1, 0.82, 0, 1 },
-  button = { 0.20, 0.05, 0.03, 1 },
-  buttonHover = { 0.30, 0.08, 0.04, 1 },
-  buttonHoverGlow = { 0.38, 0.12, 0.05, 1 },
-  buttonDown = { 0.12, 0.03, 0.02, 1 },
-  buttonOff = { 0.10, 0.10, 0.10, 1 },
   track = { 0.08, 0.08, 0.08, 1 },
   divider = { 1, 0.82, 0, 0.18 },
-  danger = { 1, 0.125, 0.125, 1 },
 }
-
-local function sliced(parent, file, color, layer)
-  local tex = parent:CreateTexture(nil, layer)
-  tex:SetTexture(file)
-  if type(tex.SetTextureSliceMargins) == "function" and type(tex.SetTextureSliceMode) == "function"
-      and type(Enum) == "table" and Enum.UITextureSliceMode then
-    pcall(tex.SetTextureSliceMargins, tex, 5, 5, 5, 5)
-    pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
-  end
-  tex:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
-  tex:SetAllPoints()
-  return tex
-end
-
--- A rounded fill and (optionally) a rounded 1px or 2px outline drawn on the frame itself.
--- Returns both textures; frame.skinBg / frame.skinBorder address them for later tinting.
-function UI.RoundedOn(frame, fill, border, thick)
-  if type(frame) ~= "table" then return end
-  frame.skinBg = sliced(frame, UI.MEDIA.rounded, fill, "BACKGROUND")
-  if border then
-    frame.skinBorder = sliced(frame, thick and UI.MEDIA.border2 or UI.MEDIA.border1, border, "BORDER")
-  end
-  return frame.skinBg, frame.skinBorder
-end
 
 -- Black inset panels, matching the game's tooltip/settings furniture.
 function UI.Backdrop(frame, shade, alpha, thick)
@@ -213,12 +180,12 @@ function UI.RoundHighlight(frame, color)
   return tex
 end
 
--- A rounded 1px outline on an existing frame (the palette swatches).
-function UI.RoundBorder(frame, color, layer)
+-- A rounded 1px or 2px outline on an existing frame (palette swatches, gamepad focus).
+function UI.RoundBorder(frame, color, layer, thick)
   if type(frame) ~= "table" then return end
   local c = color or UI.COLOR.edge
   local tex = frame:CreateTexture(nil, layer or "OVERLAY")
-  tex:SetTexture(UI.MEDIA.border1)
+  tex:SetTexture(thick and UI.MEDIA.border2 or UI.MEDIA.border1)
   if type(tex.SetTextureSliceMargins) == "function" and type(Enum) == "table" and Enum.UITextureSliceMode then
     pcall(tex.SetTextureSliceMargins, tex, 5, 5, 5, 5)
     pcall(tex.SetTextureSliceMode, tex, Enum.UITextureSliceMode.Stretched)
@@ -226,6 +193,87 @@ function UI.RoundBorder(frame, color, layer)
   tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
   tex:SetAllPoints()
   return tex
+end
+
+-- One single-line text input style across every tab: dark tooltip backdrop, small highlight font.
+function UI.EditBox(parent, width, height)
+  local box = CreateFrame("EditBox", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+  box:SetSize(width or 160, height or 22)
+  UI.Backdrop(box, 0.13)
+  box:SetFontObject("GameFontHighlightSmall")
+  box:SetTextInsets(6, 6, 0, 0)
+  box:SetAutoFocus(false)
+  return box
+end
+
+-- Standard two-column module tab geometry shared by every module in the /upt hub.
+UI.TAB_WIDTH = 840
+UI.TAB_HEIGHT = 560
+UI.TAB_TOP = 44
+UI.PREVIEW_WIDTH = 290
+
+-- Consistent "Live preview" (or "Settings") title and gold divider rule at y = -34.
+function UI.PreviewHeader(pane, text, side)
+  local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  title:SetPoint("TOPLEFT", pane, "TOPLEFT", side or 12, -12)
+  title:SetText(BIT.L(text or "Live preview"))
+  local rule = pane:CreateTexture(nil, "ARTWORK")
+  local d = UI.COLOR.divider
+  rule:SetColorTexture(d[1], d[2], d[3], d[4])
+  rule:SetHeight(1)
+  rule:SetPoint("TOPLEFT", pane, "TOPLEFT", 8, -34)
+  rule:SetPoint("TOPRIGHT", pane, "TOPRIGHT", -8, -34)
+  return title, rule
+end
+
+-- Consistent bottom preview hint pinned to the card floor with a subtle gold divider rule above it.
+function UI.PreviewHint(pane, text, side)
+  local pad = side or 12
+  local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", pad, 12)
+  hint:SetPoint("BOTTOMRIGHT", pane, "BOTTOMRIGHT", -pad, 12)
+  hint:SetJustifyH("LEFT")
+  if text and text ~= "" then hint:SetText(BIT.L(text)) end
+  local rule = pane:CreateTexture(nil, "ARTWORK")
+  local d = UI.COLOR.divider
+  rule:SetColorTexture(d[1], d[2], d[3], d[4])
+  rule:SetHeight(1)
+  rule:SetPoint("BOTTOMLEFT", hint, "TOPLEFT", 0, 8)
+  rule:SetPoint("RIGHT", pane, "RIGHT", -pad, 0)
+  return hint, rule
+end
+
+-- Consistent top-strip summary text above the two columns of a module tab.
+function UI.TabSummary(parent, text, rightAnchor)
+  local note = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  note:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, -6)
+  if rightAnchor then
+    note:SetPoint("RIGHT", rightAnchor, "LEFT", -12, 0)
+  else
+    note:SetPoint("RIGHT", parent, "RIGHT", -12, 0)
+  end
+  note:SetJustifyH("LEFT")
+  if text and text ~= "" then note:SetText(text) end
+  return note
+end
+
+-- A drop-down button matching BIT.Looks.Rows.Choice: left-aligned highlight text and right-aligned gold "v".
+function UI.DropdownButton(parent, width, onClick)
+  local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  button:SetSize(width or 200, 22)
+  UI.SkinButton(button)
+  local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  label:SetPoint("LEFT", 8, 0)
+  label:SetPoint("RIGHT", -20, 0)
+  label:SetJustifyH("LEFT")
+  label:SetWordWrap(false)
+  local arrow = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  arrow:SetPoint("RIGHT", -8, 0)
+  arrow:SetText("v")
+  button.label, button.arrow = label, arrow
+  function button:SetLabel(text) label:SetText(text or "") end
+  if onClick then button:SetScript("OnClick", onClick) end
+  return button
 end
 
 -- The selected top tab lifts its native label and upper rim out of the content.
@@ -268,6 +316,195 @@ function UI.Button(parent, text, width, onClick)
   button:SetText(text)
   button:SetScript("OnClick", onClick)
   return UI.SkinButton(button)
+end
+
+-- Auto-sized panel button: widens when a translation exceeds minWidth instead of clipping text.
+function UI.FitButton(parent, text, minWidth, onClick)
+  local button = UI.Button(parent, text, minWidth or 80, onClick)
+  local fs = type(button.GetFontString) == "function" and button:GetFontString() or nil
+  local w = fs and type(fs.GetStringWidth) == "function" and fs:GetStringWidth() or 0
+  if type(w) == "number" then button:SetWidth(math.max(minWidth or 80, math.ceil(w) + 20)) end
+  return button
+end
+
+-- True while Blizzard's native Gamepad UI is active (C_InputInterfaceStyle, not C_GamePad).
+-- Opening Blizzard-managed frames (StaticPopup, ColorPickerFrame) from addon code in Gamepad Mode
+-- taints FrameControlsManager / InputBindingManager and later blocks SetPreferredGamepadInteractTarget.
+function UI.IsGamepadMode()
+  return type(C_InputInterfaceStyle) == "table" and type(Enum) == "table"
+    and type(Enum.InputDeviceInterfaceType) == "table"
+    and type(C_InputInterfaceStyle.GetCurrentStyle) == "function"
+    and C_InputInterfaceStyle.GetCurrentStyle() == Enum.InputDeviceInterfaceType.Gamepad
+    or false
+end
+
+-- Escape closes an addon frame without inserting into Blizzard's UISpecialFrames (which taints
+-- CloseSpecialWindows() for Blizzard panels closed in the same pass). Out of combat only:
+-- SetPropagateKeyboardInput is protected in combat, so keyboard capture turns off while fighting.
+function UI.CloseOnEscape(frame, onEscape)
+  if type(frame) ~= "table" or type(frame.EnableKeyboard) ~= "function" then return end
+  local function inCombat() return type(InCombatLockdown) == "function" and InCombatLockdown() == true end
+  local function syncKeys()
+    if inCombat() then
+      pcall(frame.EnableKeyboard, frame, false)
+    elseif frame:IsShown() then
+      pcall(frame.EnableKeyboard, frame, true)
+      if type(frame.SetPropagateKeyboardInput) == "function" then
+        pcall(frame.SetPropagateKeyboardInput, frame, true)
+      end
+    end
+  end
+  frame:HookScript("OnShow", syncKeys)
+  frame:HookScript("OnHide", function()
+    if not inCombat() then pcall(frame.EnableKeyboard, frame, false) end
+  end)
+  frame:HookScript("OnKeyDown", function(self, key)
+    if inCombat() then return end
+    if key == "ESCAPE" then
+      if type(GetCurrentKeyBoardFocus) == "function" and GetCurrentKeyBoardFocus() then
+        if type(self.SetPropagateKeyboardInput) == "function" then self:SetPropagateKeyboardInput(true) end
+        return
+      end
+      if type(self.SetPropagateKeyboardInput) == "function" then self:SetPropagateKeyboardInput(false) end
+      if type(onEscape) == "function" then onEscape(self) else self:Hide() end
+    elseif type(self.SetPropagateKeyboardInput) == "function" then
+      self:SetPropagateKeyboardInput(true)
+    end
+  end)
+  local watcher = CreateFrame("Frame", nil, frame)
+  pcall(watcher.RegisterEvent, watcher, "PLAYER_REGEN_DISABLED")
+  pcall(watcher.RegisterEvent, watcher, "PLAYER_REGEN_ENABLED")
+  watcher:SetScript("OnEvent", syncKeys)
+  syncKeys()
+end
+
+-- Taint-free modal confirmation dialog matching /upt's style: avoids Blizzard's StaticPopup_Show,
+-- whose GamepadPopupHandler hooks taint FrameControlsManager and InputBindingManager in Gamepad Mode.
+local confirmDialog
+function UI.Confirm(title, message, acceptLabel, onAccept)
+  if not confirmDialog then
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:SetFrameLevel(100)
+    local shade = catcher:CreateTexture(nil, "BACKGROUND")
+    shade:SetAllPoints()
+    shade:SetColorTexture(0, 0, 0, 0.45)
+    catcher:Hide()
+
+    local box = CreateFrame("Frame", "UsefulPlatesAndTooltipsConfirm", catcher, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    box:SetSize(380, 140)
+    box:SetPoint("CENTER", UIParent, "CENTER", 0, 30)
+    box:SetFrameStrata("FULLSCREEN_DIALOG")
+    box:SetFrameLevel(105)
+    box:EnableMouse(true)
+    box:SetClampedToScreen(true)
+    UI.Backdrop(box, 0.06, 0.98, true)
+
+    local heading = box:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    heading:SetPoint("TOPLEFT", 16, -14)
+    heading:SetPoint("RIGHT", -16, 0)
+    heading:SetJustifyH("LEFT")
+    heading:SetTextColor(UI.COLOR.heading[1], UI.COLOR.heading[2], UI.COLOR.heading[3])
+
+    local rule = box:CreateTexture(nil, "ARTWORK")
+    local d = UI.COLOR.divider
+    rule:SetColorTexture(d[1], d[2], d[3], d[4])
+    rule:SetHeight(1)
+    rule:SetPoint("TOPLEFT", 12, -34)
+    rule:SetPoint("TOPRIGHT", -12, -34)
+
+    local body = box:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    body:SetPoint("TOPLEFT", 16, -44)
+    body:SetWidth(348)
+    body:SetJustifyH("LEFT")
+    body:SetWordWrap(true)
+
+    local function dismiss()
+      box.pendingAccept = nil
+      box:Hide()
+      catcher:Hide()
+    end
+    catcher:SetScript("OnClick", dismiss)
+
+    local cancelBtn = UI.FitButton(box, CANCEL or BIT.L("Cancel"), 92, dismiss)
+    cancelBtn:SetPoint("BOTTOMRIGHT", -14, 14)
+
+    local acceptBtn = UI.FitButton(box, OKAY or BIT.L("Confirm"), 100, function()
+      local fn = box.pendingAccept
+      dismiss()
+      if type(fn) == "function" then fn() end
+    end)
+    acceptBtn:SetPoint("RIGHT", cancelBtn, "LEFT", -8, 0)
+
+    UI.CloseOnEscape(box, dismiss)
+    if BIT.GamePadUI then
+      BIT.GamePadUI.Attach(box, function(self, key)
+        if key == "PAD2" then dismiss(); return true end
+        if key == "PADLSHOULDER" or key == "PADRSHOULDER" then return true end
+        return BIT.GamePadUI.Navigate(self, key)
+      end)
+    end
+
+    confirmDialog = {
+      catcher = catcher, box = box, heading = heading, body = body,
+      acceptBtn = acceptBtn, cancelBtn = cancelBtn, dismiss = dismiss,
+    }
+  end
+  local dlg = confirmDialog
+  dlg.heading:SetText(title or "DoesItDiePlus")
+  dlg.body:SetText(message or "")
+  local acceptText = acceptLabel or OKAY or BIT.L("Confirm")
+  dlg.acceptBtn:SetText(acceptText)
+  local fs = type(dlg.acceptBtn.GetFontString) == "function" and dlg.acceptBtn:GetFontString() or nil
+  local w = fs and type(fs.GetStringWidth) == "function" and fs:GetStringWidth() or 0
+  dlg.acceptBtn:SetWidth(math.max(96, (type(w) == "number" and math.ceil(w) or 0) + 22))
+  local bodyH = type(dlg.body.GetStringHeight) == "function" and dlg.body:GetStringHeight() or 36
+  dlg.box:SetHeight(math.max(126, 44 + (type(bodyH) == "number" and math.ceil(bodyH) or 36) + 52))
+  dlg.box.pendingAccept = onAccept
+  dlg.catcher:Show()
+  dlg.box:Show()
+  return dlg.box
+end
+
+-- Native WoW dialog chrome (ButtonFrameTemplate, no portrait/inset) with BackdropTemplate fallback.
+function UI.NativeWindow(name, title, width, height)
+  local okTpl, frame = pcall(CreateFrame, "Frame", name, UIParent, "ButtonFrameTemplate")
+  local nativeChrome = okTpl and type(frame) == "table"
+  if not nativeChrome then
+    frame = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
+    UI.Backdrop(frame, 0.06, 0.97)
+  else
+    if type(ButtonFrameTemplate_HidePortrait) == "function" then ButtonFrameTemplate_HidePortrait(frame) end
+    if type(frame.Inset) == "table" then frame.Inset:Hide() end
+  end
+  frame:Hide()
+  frame:SetSize(width, height)
+  frame:SetFrameStrata("DIALOG")
+  frame:SetToplevel(true)
+  frame:SetClampedToScreen(true)
+  frame:EnableMouse(true)
+  frame:SetMovable(true)
+  frame:RegisterForDrag("LeftButton")
+  frame:SetScript("OnDragStart", frame.StartMoving)
+  frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+  local close = frame.CloseButton
+  if nativeChrome and (type(frame.SetTitle) == "function" or type(frame.TitleText) == "table") then
+    if type(frame.SetTitle) == "function" then frame:SetTitle(title) else frame.TitleText:SetText(title) end
+    if type(close) == "table" then close:SetScript("OnClick", function() frame:Hide() end) end
+  else
+    local heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    heading:SetPoint("TOPLEFT", 16, -16)
+    heading:SetText(title)
+    heading:SetTextColor(UI.COLOR.heading[1], UI.COLOR.heading[2], UI.COLOR.heading[3])
+    frame.titleText = heading
+    if type(close) ~= "table" then
+      close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+      close:SetPoint("TOPRIGHT", -6, -10)
+      frame.CloseButton = close
+    end
+  end
+  return frame, nativeChrome, close
 end
 
 -- Native list rows participate in SettingsPanel's gamepad focus; canvas controls do not.
@@ -315,74 +552,6 @@ function UI.Check(parent, labelText, get, set, tooltip, translated)
   box:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
   box:Refresh()
   return box
-end
-
--- A slider with its label above and its value to the right. The optional tooltip (the same
--- extra argument UI.Check takes) explains the setting while the label or the slider is hovered.
-function UI.Slider(parent, labelText, min, max, step, get, set, format, tooltip)
-  local holder = CreateFrame("Frame", nil, parent)
-  holder:SetSize(260, 40)
-  holder.label = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  holder.label:SetPoint("TOPLEFT", 0, 0)
-  holder.label:SetText(BIT.L(labelText))
-  local bar = CreateFrame("Slider", nil, holder)
-  bar:SetOrientation("HORIZONTAL")
-  bar:SetSize(200, 16)
-  bar:SetPoint("TOPLEFT", 0, -18)
-  bar:SetMinMaxValues(min, max)
-  bar:SetValueStep(step)
-  if bar.SetObeyStepOnDrag then bar:SetObeyStepOnDrag(true) end
-  bar:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-  UI.SkinSlider(bar, 6)
-  holder.value = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  holder.value:SetPoint("LEFT", bar, "RIGHT", 8, 0)
-  local function show(v) holder.value:SetText(UI.SliderLabel(format, v)) end
-  -- The label of a slider value. A format ending in a literal "%" means the value is a fraction
-  -- or multiplier: the label shows the percent (0.5 -> 50%). Without a format, whole values stay
-  -- plain and fractional values are multipliers, shown with an x (1.25 -> 1.25x). A function
-  -- formats the value itself. The stored value is never changed by the label.
-  function UI.SliderLabel(format, v)
-    if type(format) == "function" then return format(v) end
-    if type(format) == "string" then
-      if string.find(format, "%%", 1, true) then
-        return string.format("%d%%", math.floor(v * 100 + 0.5))
-      end
-      return string.format(format, v)
-    end
-    if v == math.floor(v) then return string.format("%d", v) end
-    local s = string.format("%.2f", v):gsub("0+$", ""):gsub("%.$", "")
-    return s .. "x"
-  end
-  bar:SetScript("OnValueChanged", function(_, v)
-    v = math.floor(v / step + 0.5) * step
-    show(v)
-    if holder.refreshing then return end
-    set(v)
-  end)
-  function holder:Refresh()
-    self.refreshing = true
-    bar:SetValue(get())
-    show(get())
-    self.refreshing = false
-  end
-  holder.bar = bar
-  -- Hovering the label or the slider shows the tooltip, so neither spot is dead.
-  if tooltip then
-    local function enter(self)
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      GameTooltip:SetText(BIT.L(labelText), 1, 0.82, 0)
-      GameTooltip:AddLine(BIT.L(tooltip), 1, 1, 1, true)
-      GameTooltip:Show()
-    end
-    local function leave() GameTooltip:Hide() end
-    holder:EnableMouse(true)
-    holder:SetScript("OnEnter", enter)
-    holder:SetScript("OnLeave", leave)
-    bar:SetScript("OnEnter", enter)
-    bar:SetScript("OnLeave", leave)
-  end
-  holder:Refresh()
-  return holder
 end
 
 ---------------------------------------------------------------------------------------------
@@ -494,12 +663,20 @@ function UI.ScrollColumn(parent)
     bar:SetValue(max - math.min(offset(), max))
     bar._sync = false
   end
+  local function fitWidth()
+    local w = type(scroll.GetWidth) == "function" and scroll:GetWidth() or 0
+    if type(w) == "number" and w > 0 then content:SetWidth(w) end
+  end
   scroll:SetScript("OnMouseWheel", function(_, delta)
     scroll:SetVerticalScroll(math.min(math.max(offset() - (delta or 0) * 24, 0), maxScroll()))
     sync()
   end)
   scroll:SetScript("OnSizeChanged", function(_, width)
-    if type(width) == "number" and width > 0 then content:SetWidth(width) end
+    if type(width) == "number" and width > 0 then content:SetWidth(width) else fitWidth() end
+    sync()
+  end)
+  holder:SetScript("OnShow", function()
+    fitWidth()
     sync()
   end)
   bar:SetScript("OnValueChanged", function(_, value)
@@ -508,7 +685,9 @@ function UI.ScrollColumn(parent)
     scroll:SetVerticalScroll(math.min(math.max(max - value, 0), max))
   end)
   holder.scroll, holder.content, holder.bar = scroll, content, bar
+  scroll.syncScroll = sync
   function holder:Fit(height)
+    fitWidth()
     content:SetHeight(math.max(1, height))
     sync()
   end
@@ -552,6 +731,14 @@ local function refreshSwitch(page)
   page.stateLine:SetText(stateText(page.name))
   local pending = (BIT.state[page.name] == "on") ~= BIT.IsSwitchedOn(page.name)
   page.reload:SetShown(pending)
+  if page.resetModule then
+    page.resetModule:ClearAllPoints()
+    if pending then
+      page.resetModule:SetPoint("RIGHT", page.reload, "LEFT", -8, 0)
+    else
+      page.resetModule:SetPoint("TOPRIGHT", -10, -7)
+    end
+  end
 end
 
 local function playerClass()
@@ -644,6 +831,7 @@ local function attachScroll(page, topOffset)
   end)
   page.scroll, page.content, page.scrollBar = scroll, content, bar
   page.syncScroll = syncBar
+  scroll.syncScroll = syncBar
   return content
 end
 
@@ -753,14 +941,12 @@ local function resetModule(name)
 end
 
 local function confirmResetModule(name)
-  StaticPopupDialogs["UPT_RESET_MODULE"] = {
-    text = BIT.L("Reset all settings for %s? The interface will reload. Module enable state, learned data and shared settings are kept."),
-    button1 = BIT.L("Reset module"), button2 = CANCEL,
-    OnAccept = function(_, moduleName) resetModule(moduleName) end,
-    timeout = 0, whileDead = true, hideOnEscape = true,
-  }
   local tab = BIT.tabs[name]
-  StaticPopup_Show("UPT_RESET_MODULE", pageName(name, tab), nil, name)
+  local label = pageName(name, tab)
+  local text = string.format(
+    BIT.L("Reset all settings for %s? The interface will reload. Module enable state, learned data and shared settings are kept."),
+    label)
+  UI.Confirm(label, text, BIT.L("Reset module"), function() resetModule(name) end)
 end
 
 local function buildPage(name)
@@ -793,18 +979,26 @@ local function buildPage(name)
       pages[name], parkedPages[name] = parkedPages[name], page
       selectTab(name)
     end, tab.summary, true)
-  page.switch:SetPoint("TOPLEFT", 4, -6)
+  page.switch:SetPoint("TOPLEFT", 10, -6)
   page.stateLine = page:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  page.stateLine:SetPoint("TOPLEFT", 32, -30)
-  page.stateLine:SetPoint("TOPRIGHT", -120, -30)
+  page.stateLine:SetPoint("TOPLEFT", 38, -30)
+  page.stateLine:SetPoint("TOPRIGHT", -160, -30)
   page.stateLine:SetHeight(16)
   page.stateLine:SetJustifyH("LEFT")
   page.reload = UI.Button(page, BIT.L("Reload UI"), 100, function()
     if type(ReloadUI) == "function" then ReloadUI() end
   end)
-  page.reload:SetPoint("TOPRIGHT", -4, -7)
-  page.resetModule = UI.Button(page, BIT.L("Reset module"), 140, function() confirmResetModule(name) end)
-  page.resetModule:SetPoint("RIGHT", page.reload, "LEFT", -8, 0)
+  page.reload:SetWidth(math.max(100, math.ceil(page.reload:GetFontString():GetStringWidth() or 0) + 24))
+  page.reload:SetPoint("TOPRIGHT", -10, -7)
+  page.resetModule = UI.Button(page, BIT.L("Reset module"), 120, function() confirmResetModule(name) end)
+  page.resetModule:SetWidth(math.max(120, math.ceil(page.resetModule:GetFontString():GetStringWidth() or 0) + 24))
+  page.resetModule:SetPoint("TOPRIGHT", -10, -7)
+  local switchRule = page:CreateTexture(nil, "ARTWORK")
+  local sd = UI.COLOR.divider
+  switchRule:SetColorTexture(sd[1], sd[2], sd[3], sd[4])
+  switchRule:SetHeight(1)
+  switchRule:SetPoint("TOPLEFT", 10, -(SWITCH_HEIGHT - 2))
+  switchRule:SetPoint("TOPRIGHT", -10, -(SWITCH_HEIGHT - 2))
   end
 
   local content = attachScroll(page, tab.plain and 0 or SWITCH_HEIGHT)
@@ -831,22 +1025,35 @@ local function buildPage(name)
     note:SetPoint("TOPLEFT", 8, -8)
     note:SetPoint("RIGHT", -8, 0)
     note:SetJustifyH("LEFT")
-    note:SetText((tab.summary and (BIT.L(tab.summary) .. "\n\n") or "")
-      .. BIT.L("Its settings are here while it runs; its appearance and a sample preview are below"
-      .. " -- they need no module runtime. Tick Enable to open the settings before the next reload."))
-    page.offNote = note
-    page.appearance = BIT.UI.Appearance(content, name, tab.capabilities, function()
-      if page.layoutOffPage then page.layoutOffPage() end
-    end, tab.legacy)
-    local function layoutOffPage()
-      local top = math.max(74, (note:GetStringHeight() or 54) + 20)
-      page.appearance:SetPoint("TOPLEFT", 8, -top)
-      content:SetHeight(math.max(viewport, top + page.appearance:GetHeight() + 12))
-      if page.syncScroll then page.syncScroll() end
+    if tab.usesStyle then
+      note:SetText((tab.summary and (BIT.L(tab.summary) .. "\n\n") or "")
+        .. BIT.L("Its settings are here while it runs; its appearance and a sample preview are below"
+        .. " -- they need no module runtime. Tick Enable to open the settings before the next reload."))
+      page.offNote = note
+      page.appearance = BIT.UI.Appearance(content, name, tab.capabilities, function()
+        if page.layoutOffPage then page.layoutOffPage() end
+      end, tab.legacy)
+      local function layoutOffPage()
+        local top = math.max(74, (note:GetStringHeight() or 54) + 20)
+        page.appearance:SetPoint("TOPLEFT", 8, -top)
+        content:SetHeight(math.max(viewport, top + page.appearance:GetHeight() + 12))
+        if page.syncScroll then page.syncScroll() end
+      end
+      page.appearance.onLayout = layoutOffPage
+      page.layoutOffPage = layoutOffPage
+      layoutOffPage()
+    else
+      note:SetText((tab.summary and (BIT.L(tab.summary) .. "\n\n") or "")
+        .. BIT.L("This module is switched off. Tick Enable above to open its settings and live preview before the next reload."))
+      page.offNote = note
+      local function layoutOffPage()
+        local top = math.max(74, (note:GetStringHeight() or 54) + 20)
+        content:SetHeight(math.max(viewport, top + 12))
+        if page.syncScroll then page.syncScroll() end
+      end
+      page.layoutOffPage = layoutOffPage
+      layoutOffPage()
     end
-    page.appearance.onLayout = layoutOffPage
-    page.layoutOffPage = layoutOffPage
-    layoutOffPage()
   end
 
   if page.layoutOffPage then page.layoutOffPage() else layoutContent() end
@@ -927,7 +1134,13 @@ local function createWindow()
     rememberWindowPoint()
   end)
   applyWindowPoint()
-  if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "UsefulPlatesAndTooltipsSettings") end
+  UI.CloseOnEscape(window, function(self)
+    if BIT.Looks and type(BIT.Looks.IsPickListShown) == "function" and BIT.Looks.IsPickListShown() then
+      BIT.Looks.ClosePickList()
+      return
+    end
+    self:Hide()
+  end)
 
   window:SetTitle("DoesItDiePlus")
   local close = window.CloseButton
@@ -988,18 +1201,18 @@ local function createWindow()
 
   -- The language of the settings, tooltips and chat lines. Its own label is not translated on purpose: whoever lands in a
   -- language they cannot read must still find it. The change applies after a reload, offered next to it.
-  local language = UI.Button(window, "", 150, function(self)
+  local language = UI.DropdownButton(window, 156, function(self)
     local Looks = BIT.Looks
     if not (Looks and Looks.PickList) then return end
     Looks.PickList(self, BIT.LanguageList(), BIT.LanguageChoice(), function(id)
       BIT.SetLanguage(id)
-      self:SetText("Language: " .. BIT.LanguageLabel())
+      self:SetLabel("Language: " .. BIT.LanguageLabel())
       window.languageReload:Show()
     end)
   end)
   language:SetHeight(20)
   language:SetPoint("TOPRIGHT", close, "TOPLEFT", -4, -3)
-  language:SetText("Language: " .. BIT.LanguageLabel())
+  language:SetLabel("Language: " .. BIT.LanguageLabel())
   language:HookScript("OnEnter", function(self)
     if not GameTooltip then return end
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
@@ -1027,6 +1240,12 @@ local function createWindow()
     addTabButton(name, pageName(name, tab), pageName(name, tab), BIT.L(tab.summary), extra)
   end
   layoutTabs()
+  local tabRule = window:CreateTexture(nil, "ARTWORK")
+  local td = UI.COLOR.divider
+  tabRule:SetColorTexture(td[1], td[2], td[3], td[4])
+  tabRule:SetHeight(1)
+  tabRule:SetPoint("TOPLEFT", MARGIN, -(headerBottom() - 1))
+  tabRule:SetPoint("TOPRIGHT", -MARGIN, -(headerBottom() - 1))
   window.baseHeight = HEADER_HEIGHT + TAB_HEIGHT * tabRows + SWITCH_HEIGHT + h + MARGIN
   -- The gamepad hint line below the pages adds to the window instead of taking from the pages,
   -- so a controller does not cut the bottom of every tab.
@@ -1062,7 +1281,14 @@ local function createWindow()
     events:SetScript("OnEvent", refreshHints)
     window:HookScript("OnShow", refreshHints)
     pad.Attach(window, function(self, key)
-      if key == "PAD2" then self:Hide(); return true end
+      if key == "PAD2" then
+        if BIT.Looks and type(BIT.Looks.IsPickListShown) == "function" and BIT.Looks.IsPickListShown() then
+          BIT.Looks.ClosePickList()
+        else
+          self:Hide()
+        end
+        return true
+      end
       if key == "PADLSHOULDER" or key == "PADRSHOULDER" then
         local index, order = 1, hubOrder()
         for i, name in ipairs(order) do if name == current then index = i end end
@@ -1144,8 +1370,16 @@ if type(SlashCmdList) == "table" then SlashCmdList.USEFULPLATESANDTOOLTIPS = sla
 
 local function registerOptionsPage()
   local function openSettings()
-    -- Keep Blizzard's panel open so its native gamepad binding teardown stays native.
-    if not (window and window:IsShown()) then BIT.OpenSettings() end
+    -- Keep Blizzard's panel open so its native gamepad binding teardown stays native, and defer
+    -- opening our window to the next frame so frame creation never runs inside SettingsPanel's click.
+    local function show()
+      if not (window and window:IsShown()) then BIT.OpenSettings() end
+    end
+    if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
+      C_Timer.After(0, show)
+    else
+      show()
+    end
   end
   if UI.RegisterSettingsLauncher("DoesItDiePlus",
       BIT.L("Open the settings window. You can also type /upt."), openSettings) then return end

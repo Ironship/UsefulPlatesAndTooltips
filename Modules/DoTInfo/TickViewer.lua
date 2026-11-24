@@ -42,27 +42,25 @@ local function spellLink(spellID)
 end
 
 local function pushButton(parent, text, width, onClick)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetText(BIT.L(text))
-    -- A longer translation widens the button instead of overflowing it.
-    button:SetSize(math.max(width, math.ceil(button:GetFontString():GetStringWidth()) + 20), 22)
-    button:SetScript("OnClick", onClick)
-    return BIT.UI.SkinButton(button)
+    return BIT.UI.FitButton(parent, BIT.L(text), width, onClick)
 end
 
 -- What SpellDamageInfo recorded of the player's casts (Blizzard's damage meter, read after each fight): per spell the
 -- average damage or healing of a cast over the last 100 casts, beside the description's own figure. A DoT or HoT counts
 -- everything it did within the fights; healing is what the meter counts. { key, spellID, name, perTick = per cast,
 -- tooltipPerTick = the description's figure, casts, healing, color } sorted by casts.
-local DAMAGE_COLOR, HEAL_COLOR = { 1, 0.82, 0.2 }, { 0.4, 1, 0.4 }
+local DAMAGE_COLOR, HEAL_COLOR = { 1, 0.82, 0.3 }, { 0.4, 1, 0.4 }
 local function castList()
     local list = {}
     local sdi = BIT.modules and BIT.modules.SpellDamageInfo
     if type(sdi) ~= "table" or type(sdi.History) ~= "table" then return list end
+    local fmt = type(sdi.Format) == "table" and sdi.Format or nil
+    local dmgColor = (fmt and fmt.DAMAGE_COLOR) or DAMAGE_COLOR
+    local healColor = (fmt and fmt.HEAL_COLOR) or HEAL_COLOR
     for _, row in ipairs(sdi.History.List()) do
         local healing = row.healing > row.damage
         local entry = { key = row.id, spellID = row.id, name = row.name, casts = row.casts, healing = healing,
-            perTick = healing and row.healing or row.damage, color = healing and HEAL_COLOR or DAMAGE_COLOR }
+            perTick = healing and row.healing or row.damage, color = healing and healColor or dmgColor }
         if type(sdi.DescriptionTotals) == "function" then
             local ok, damage, heal = pcall(sdi.DescriptionTotals, row.id)
             if ok and damage then entry.tooltipPerTick = (healing and heal or damage) > 0 and (healing and heal or damage) or nil end
@@ -225,18 +223,8 @@ end
 
 local function createViewer()
     local width = COLUMNS.total[1] + COLUMNS.total[2] + 56
-    local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    frame:Hide()
-    frame:SetSize(width, 112 + VISIBLE_ROWS * ROW_HEIGHT + 44)
-    frame:SetFrameStrata("DIALOG")
-    frame:SetToplevel(true)
-    frame:SetClampedToScreen(true)
-    frame:EnableMouse(true)
-    frame:SetMovable(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    BIT.UI.Backdrop(frame, 0.06, 0.97)
+    local frame, nativeChrome = BIT.UI.NativeWindow("UsefulPlatesAndTooltipsTickViewer", BIT.L("Learned tick sizes"),
+        width, 114 + VISIBLE_ROWS * ROW_HEIGHT + 46)
 
     -- Escape closes it, without adding to Blizzard's UISpecialFrames: the key goes to this frame while it's shown
     -- and passes on to the game otherwise. SetPropagateKeyboardInput is a protected function in combat (calling it
@@ -259,22 +247,23 @@ local function createViewer()
         end
     end)
 
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", 16, -16)
-    title:SetText(BIT.L("Learned tick sizes"))
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -6, -10)
     local intro = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    intro:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    intro:SetWidth(width - 32)
+    if nativeChrome then
+        intro:SetPoint("TOPLEFT", 14, -32)
+    elseif frame.titleText then
+        intro:SetPoint("TOPLEFT", frame.titleText, "BOTTOMLEFT", 0, -8)
+    else
+        intro:SetPoint("TOPLEFT", 14, -36)
+    end
+    intro:SetWidth(width - 28)
     intro:SetJustifyH("LEFT")
     intro:SetText(BIT.L("What each DoT really ticks for, learned from your casts and used instead of its tooltip. "
         .. "Tooltips leave out spell power and attack power: Bonus is how much more yours do. "
         .. "Hover a spell for details, shift-click to link it."))
 
     local list = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    list:SetPoint("TOPLEFT", 10, -100)
-    list:SetPoint("TOPRIGHT", -10, -100)
+    list:SetPoint("TOPLEFT", 10, -114)
+    list:SetPoint("TOPRIGHT", -10, -114)
     list:SetHeight(VISIBLE_ROWS * ROW_HEIGHT + 2)
     BIT.UI.Backdrop(list, 0.09)
     list:EnableMouseWheel(true)

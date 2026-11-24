@@ -4,9 +4,8 @@ local _, BIT = ...
 
 local ns = BIT.Module("TriggerGlow")
 
-local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 500
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
 local PREVIEW_WIDTH = 290
-local COL_HEIGHT = 440
 local ROW_HEIGHT = 26
 local SIDE = 12
 
@@ -316,44 +315,67 @@ end
 ns.RefreshSample = refreshSample
 
 local function buildPreview(pane)
-  pane:SetSize(PREVIEW_WIDTH, COL_HEIGHT)
   BIT.UI.Backdrop(pane, 0.09)
 
-  local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOPLEFT", SIDE, -12)
-  title:SetText(BIT.L("Live preview"))
-  local rule = pane:CreateTexture(nil, "ARTWORK")
-  rule:SetColorTexture(unpack(BIT.UI.COLOR.divider))
-  rule:SetHeight(1)
-  rule:SetPoint("TOPLEFT", 8, -34)
-  rule:SetPoint("TOPRIGHT", -8, -34)
+  local title = BIT.UI.PreviewHeader(pane, "Live preview", SIDE)
+  local cardW = PREVIEW_WIDTH - 2 * SIDE
+  local scene = BIT.UI.Preview.Scene(pane, cardW, 236)
+  scene:SetPoint("TOP", pane, "TOP", 0, -44)
 
   wipe(sampleButtons)
   local rows = { { 1, 2, 3 }, { 4, 5 } }
   for r, indices in ipairs(rows) do
-    local slot = (PREVIEW_WIDTH - 2 * SIDE) / #indices
-    local y = -88 - (r - 1) * 100
+    local slot = cardW / #indices
+    local y = -28 - (r - 1) * 104
     for col, i in ipairs(indices) do
       local sample = SAMPLES[i]
-      local f = CreateFrame("Frame", nil, pane)
+      local f = CreateFrame("Frame", nil, scene, "BackdropTemplate")
       f:SetSize(44, 44)
-      f:SetPoint("TOP", pane, "TOPLEFT", SIDE + slot * (col - 0.5), y)
+      f:SetPoint("TOP", scene, "TOPLEFT", slot * (col - 0.5), y)
+      f:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+      f:SetBackdropBorderColor(0, 0, 0, 1)
       local icon = f:CreateTexture(nil, "ARTWORK")
-      icon:SetAllPoints()
+      icon:SetPoint("TOPLEFT", 1, -1)
+      icon:SetPoint("BOTTOMRIGHT", -1, 1)
       icon:SetTexture(iconFor(sample))
-      local cap = pane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-      cap:SetPoint("TOP", f, "BOTTOM", 0, -32)
+      icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+      local cap = scene:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+      cap:SetPoint("TOP", f, "BOTTOM", 0, -24)
       cap:SetText(BIT.L(sample.label))
       sampleButtons[#sampleButtons + 1] = { frame = f, group = sample.group, on = true }
     end
   end
 
-  local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("TOPLEFT", SIDE, -296)
-  hint:SetWidth(PREVIEW_WIDTH - 2 * SIDE)
-  hint:SetJustifyH("LEFT")
-  hint:SetText(BIT.L("The five buttons show the style, color, size and opacity as set. The glow on your action "
-    .. "bars appears only while the spell's condition holds. \"Simulate on my bars\" shows it on the real buttons."))
+  -- SIMULATE: test the real action bar glow directly from the preview pane, matching the other modules.
+  local sim = CreateFrame("Frame", nil, pane)
+  sim:SetPoint("TOPLEFT", scene, "BOTTOMLEFT", 0, -14)
+  sim:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
+  sim:SetHeight(24)
+  local simHead = sim:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  simHead:SetPoint("LEFT", sim, "LEFT", 0, 0)
+  simHead:SetText(BIT.L("SIMULATE"))
+  local hc = BIT.UI.COLOR.heading
+  simHead:SetTextColor(hc[1], hc[2], hc[3])
+  local simBtn = BIT.UI.Button(sim, BIT.L("Glow 6 s"), 100, function() ns.Test(6) end)
+  simBtn:SetHeight(20)
+  simBtn:SetPoint("RIGHT", sim, "RIGHT", 0, 0)
+  simBtn:HookScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(BIT.L("Simulate on my bars"), 1, 0.82, 0)
+    GameTooltip:AddLine(BIT.L("Every button that holds one of the spells glows for six seconds, whatever your target is, so the "
+      .. "look can be judged without waiting for a low-health enemy."), 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  simBtn:HookScript("OnLeave", function() GameTooltip:Hide() end)
+  local simRule = sim:CreateTexture(nil, "ARTWORK")
+  local dc = BIT.UI.COLOR.divider
+  simRule:SetColorTexture(dc[1], dc[2], dc[3], dc[4])
+  simRule:SetHeight(1)
+  simRule:SetPoint("LEFT", simHead, "RIGHT", 8, 0)
+  simRule:SetPoint("RIGHT", simBtn, "LEFT", -8, 0)
+
+  local hint = BIT.UI.PreviewHint(pane, "The five buttons show the style, color, size and opacity as set. The glow on your action "
+    .. "bars appears only while the spell's condition holds. \"Simulate on my bars\" shows it on the real buttons.", SIDE)
 
   pane.title = title
   pane.hint = hint
@@ -381,19 +403,17 @@ if BIT.RegisterTab then
       if window == parent then return end
       window = parent
       controls = {}
-      local note1 = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-      note1:SetPoint("TOPLEFT", 12, -6)
-      note1:SetPoint("RIGHT", -12, 0)
-      note1:SetJustifyH("LEFT")
-      note1:SetText(BIT.L("Glows the button of a spell while it is the right moment to use it. The target's health "
+      BIT.UI.TabSummary(parent, BIT.L("Glows the button of a spell while it is the right moment to use it. The target's health "
         .. "may be hidden in a fight; the client's own comparison is used then."))
       local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-      pane:SetPoint("TOPLEFT", 10, -46)
+      pane:SetPoint("TOPLEFT", 10, -(BIT.UI.TAB_TOP or 44))
+      pane:SetPoint("BOTTOMLEFT", 10, 10)
+      pane:SetWidth(PREVIEW_WIDTH)
       buildPreview(pane)
       panel = pane
       local area = CreateFrame("Frame", nil, parent, "BackdropTemplate")
       area:SetPoint("TOPLEFT", pane, "TOPRIGHT", 10, 0)
-      area:SetSize(WINDOW_WIDTH - PREVIEW_WIDTH - 30, COL_HEIGHT)
+      area:SetPoint("BOTTOMRIGHT", -10, 10)
       BIT.UI.Backdrop(area, 0.09)
       local divider = area:CreateTexture(nil, "ARTWORK")
       divider:SetColorTexture(unpack(BIT.UI.COLOR.divider))
@@ -401,31 +421,37 @@ if BIT.RegisterTab then
       divider:SetPoint("TOPLEFT", 8, -34)
       divider:SetPoint("TOPRIGHT", -8, -34)
       local column = BIT.UI.ScrollColumn(area)
-      column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -42)
+      column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
       column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
       local lethalColumn = BIT.UI.ScrollColumn(area)
-      lethalColumn:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -42)
+      lethalColumn:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
       lethalColumn:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
       tabKeys = {}
       column:Fit((buildSettings(column.content) or 0) + 12)
       lethalColumn:Fit((buildLethal(lethalColumn.content) or 0) + 12)
       local keys = tabKeys
       tabKeys = nil
-      -- two pages in one tab: the settings, and the lethal spells by class
+      -- two pages in one tab: the settings, and the lethal spells by class (same native sub-tabs as every other module)
       local pageButtons = {}
       local function showPage(which)
         column:SetShown(which == "settings")
         lethalColumn:SetShown(which == "lethal")
-        for page, button in pairs(pageButtons) do button:SetEnabled(page ~= which) end
+        for page, button in pairs(pageButtons) do
+          BIT.UI.TabSelected(button, page == which)
+        end
       end
       local nSpells = 0
       for _, class in ipairs(ns.LETHAL_CLASSES) do nSpells = nSpells + #ns.LETHAL[class] end
+      local tx = 8
       for i, page in ipairs({ "settings", "lethal" }) do
-        local button = CreateFrame("Button", nil, area, "UIPanelButtonTemplate")
-        button:SetSize(i == 1 and 110 or 170, 22)
-        button:SetPoint("TOPLEFT", area, "TOPLEFT", i == 1 and 8 or 124, -6)
-        if BIT.UI.SkinButton then BIT.UI.SkinButton(button) end
+        local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
         button:SetText(i == 1 and BIT.L("Settings") or string.format(BIT.L("Lethal spells (%d)"), nSpells))
+        button.text = button:GetFontString()
+        button:SetSize(BIT.UI.TabWidth(button.text), 26)
+        button.text:SetPoint("CENTER")
+        BIT.UI.SkinTabButton(button, button.text)
+        button:SetPoint("TOPLEFT", area, "TOPLEFT", tx, -8)
+        tx = tx + button:GetWidth() + BIT.UI.TAB_GAP
         button:SetScript("OnClick", function() showPage(page) end)
         pageButtons[page] = button
       end

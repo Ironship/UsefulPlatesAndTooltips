@@ -256,12 +256,38 @@ local function styleOverlay(bar)
   if BIT.UI and BIT.UI.BarMask then pcall(BIT.UI.BarMask.Refresh, bar) end
 end
 
+-- Applies the resolved appearance style (font, outline, text color, opacity) and saved numberSize to an absorb label.
+-- Touches styling only, never the text value, so it is safe to run during style callbacks even in combat.
+local function styleNumber(text)
+  if type(text) ~= "table" then return end
+  local s = settings or DEFAULTS
+  local size = tonumber(s.numberSize) or DEFAULTS.numberSize
+  if size ~= size or size < 8 then size = 8 elseif size > 18 then size = 18 end
+  local style
+  if type(BIT.Style) == "table" and type(BIT.Style.Resolve) == "function" then
+    local okStyle, resolved = pcall(BIT.Style.Resolve, "ShieldsInfo")
+    if okStyle and type(resolved) == "table" then style = resolved end
+  end
+  local font = (style and type(style.font) == "string" and style.font ~= "" and style.font)
+    or (type(GameFontHighlightSmall) == "table" and GameFontHighlightSmall:GetFont())
+    or "Fonts\\FRIZQT__.TTF"
+  local flags = style and style.outline or "OUTLINE"
+  if flags == "NONE" then flags = "" end
+  local tc = style and type(style.colors) == "table" and style.colors.text or { 1, 1, 1, 1 }
+  local op = (style and type(style.opacity) == "number") and style.opacity or 1
+  text:SetFont(font, size, flags)
+  text:SetTextColor(tc[1], tc[2], tc[3], (tc[4] or 1) * op)
+end
+
 -- Style writes restyle the live overlays even while the settings are closed. Fully
 -- guarded: the subscriber registry calls back without pcall, so nothing here
 -- may error into an unrelated settings write.
 local function restyleOverlays()
   for _, o in pairs(overlays) do
-    if type(o) == "table" and type(o.bar) == "table" then styleOverlay(o.bar) end
+    if type(o) == "table" and type(o.bar) == "table" then
+      styleOverlay(o.bar)
+      if type(o.number) == "table" then pcall(styleNumber, o.number) end
+    end
   end
 end
 
@@ -311,11 +337,7 @@ local function paintNumber(holder, bar, anchor, value, wanted)
       holder.number = text
     end
     local s = settings or DEFAULTS
-    local size = tonumber(s.numberSize) or DEFAULTS.numberSize
-    if size ~= size or size < 8 then size = 8 elseif size > 18 then size = 18 end
-    local font = type(GameFontHighlightSmall) == "table" and GameFontHighlightSmall:GetFont() or nil
-    text:SetFont(font or "Fonts\\FRIZQT__.TTF", size, "OUTLINE")
-    text:SetTextColor(1, 1, 1, 1)
+    styleNumber(text)
     text:ClearAllPoints()
     -- Against the health bar, not the overlay: next to a DoT marker the overlay is only a thin edge.
     if s.numberPosition == "left" then text:SetPoint("LEFT", anchor, "LEFT", 3, 0)
@@ -914,7 +936,7 @@ local DISABLED_ALPHA = 0.35
 -- its own page scroll, the same as Range's tab. Shorter (the 460 a review once settled on)
 -- leaves the page a stub shorter than the window and the Effects tab still cannot fit its
 -- editor -- that one scrolls inside its tab instead (addTab below).
-local WINDOW_WIDTH, WINDOW_HEIGHT = 760, 500
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
 
 -- The preview's own numbers (plain sample data, in % of SAMPLE_MAX) and the mock the frame
 -- switch shows. The sample starts at SAMPLE_ABSORB; the sliders move health and absorb only,
@@ -1012,11 +1034,7 @@ local function sliderRow(parent, labelText, min, max, step, get, set, opts)
 end
 
 local function pushButton(parent, text, width, onClick)
-  local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  button:SetSize(width, 22)
-  button:SetText(text)
-  button:SetScript("OnClick", onClick)
-  return BIT.UI.SkinButton(button)
+  return BIT.UI.Button(parent, text, width, onClick)
 end
 
 -- The width the text needs in the panel button's own font (GameFontNormal), measured on a hidden
@@ -1092,41 +1110,29 @@ local function applyPreset(preset)
   styleChanged()
 end
 
+local resetButton
 local function selectTab(tab)
   closeMenu()
   activeTab = tab
   for _, other in ipairs(tabs) do
     local selected = other == tab
-    other.content:SetShown(selected)
+    other.column:SetShown(selected)
     BIT.UI.TabSelected(other.button, selected)
   end
+  if resetButton then resetButton:SetShown(not (tab and tab.hasOwnReset)) end
 end
 
 -- A tab whose methods add rows top to bottom and remember the setting keys, for "Reset this
--- tab". A tab may add resetExtra for the style keys its rows write. Every tab's content is a
--- scroll frame (Modules/HunterRangeFinder/HunterRangeFinder.lua): the Effects tab hosts the
--- shared appearance editor, which is taller than the area, and a scroll each keeps the
--- overflow inside the tab -- clipped and reachable -- instead of spilling past the window.
+-- tab". A tab may add resetExtra for the style keys its rows write. Every tab uses the shared
+-- UI.ScrollColumn so overflow gets the same vertical scrollbar as every other module.
 local function addTab(name, area)
   local tab = { keys = {}, y = 0 }
-  local content = CreateFrame("ScrollFrame", nil, area)
-  content:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -40)
-  content:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -8, 40)
-  content:EnableMouseWheel(true)
-  -- SetScrollChild owns the child's anchors (Core/Settings.lua): explicit geometry only.
-  local inner = CreateFrame("Frame", nil, content)
-  inner:SetWidth((area:GetWidth() or 400) - 16)
-  content:SetScrollChild(inner)
-  content:SetScript("OnMouseWheel", function(_, delta)
-    local maxScroll = math.max(0, (inner:GetHeight() or 0) - (content:GetHeight() or 0))
-    local at = (content:GetVerticalScroll() or 0) - delta * 24
-    content:SetVerticalScroll(math.min(math.max(at, 0), maxScroll))
-  end)
-  content:SetScript("OnSizeChanged", function(_, width)
-    if type(width) == "number" and width > 0 then inner:SetWidth(width) end
-  end)
-  tab.content, tab.inner = content, inner
-  content:Hide()
+  local column = BIT.UI.ScrollColumn(area)
+  column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
+  column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
+  column:Hide()
+  local inner = column.content
+  tab.column, tab.content, tab.inner = column, column.scroll, inner
 
   local button = CreateFrame("Button", nil, area, "PanelTopTabButtonTemplate")
   button:SetText(name)
@@ -1150,9 +1156,17 @@ local function addTab(name, area)
     return row
   end
   function tab:add(row, height, key) return place(row, height, key) end
+  function tab:header(text)
+    if self.y > 0 then self.y = self.y + 8 end
+    local row = BIT.UI.Header(self.inner, text)
+    row:SetPoint("TOPLEFT", self.inner, "TOPLEFT", 6, -self.y)
+    row:SetPoint("RIGHT", self.inner, "RIGHT", -6, 0)
+    self.y = self.y + 24
+    return row
+  end
   function tab:gap(n) self.y = self.y + (n or 8) end
   -- The scroll child grows to the rows just added; a tab that fits never scrolls.
-  function tab:finish() self.inner:SetHeight(math.max(self.y + 12, 1)) end
+  function tab:finish() self.column:Fit(math.max(self.y + 12, 1)) end
 
   tabs[#tabs + 1] = tab
   return tab
@@ -1184,30 +1198,7 @@ local function buildLivePreview(pane)
   local SCENE_HEIGHT = 170
   local BAR_SEAT = 40 -- the bar's bottom edge, above the caption it hangs over the floor
 
-  local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOPLEFT", pane, "TOPLEFT", SIDE, -12)
-  title:SetText(BIT.L("Live preview"))
-  local titleRule = pane:CreateTexture(nil, "ARTWORK")
-  titleRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
-  titleRule:SetHeight(1)
-  titleRule:SetPoint("TOPLEFT", 8, -34)
-  titleRule:SetPoint("TOPRIGHT", -8, -34)
-
-  -- Section header: small gold caps and a hairline to the right margin (the Range and
-  -- DoTInfo previews). Every block below is anchored to the one over it, never to a
-  -- hard-coded y, so the column holds together at any pane height.
-  local function header(text, anchor, gap)
-    local label = pane:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
-    label:SetText(text)
-    label:SetTextColor(0.85, 0.7, 0.3)
-    local rule = pane:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
-    rule:SetHeight(1)
-    rule:SetPoint("LEFT", label, "RIGHT", 8, 0)
-    rule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
-    return label
-  end
+  BIT.UI.PreviewHeader(pane, "Live preview", SIDE)
 
   -- The scene and the four mock frames come from the shared preview kit: the real player and
   -- target frames and the enemy nameplate rebuilt from the client's own atlases, plus a
@@ -1234,9 +1225,9 @@ local function buildLivePreview(pane)
   scene.overlay:SetValue(clampPercent(preview.absorb))
 
   -- The frame switch: which of the module's frames the mock stands for.
-  local which = header(BIT.L("FRAME"), scene, 12)
+  local which = BIT.Looks.TryItHeader(pane, scene, 0, -12, "FRAME")
   local switch = CreateFrame("Frame", nil, pane)
-  switch:SetSize(CARD_WIDTH, 24)
+  switch:SetSize(CARD_WIDTH, 22)
   switch:SetPoint("TOPLEFT", which, "BOTTOMLEFT", 0, -4)
   local switchButtons = {}
   local switchRow = {}
@@ -1251,7 +1242,7 @@ local function buildLivePreview(pane)
       changed()
     end)
     local width = math.max(56, math.ceil(labelWidth(switch, label)) + 18)
-    b:SetWidth(width)
+    b:SetSize(width, 20)
     b:SetPoint("TOPLEFT", switch, "TOPLEFT", left, 0)
     left = left + width + 3
     switchButtons[m.id] = b
@@ -1266,7 +1257,7 @@ local function buildLivePreview(pane)
 
   -- TRY IT: the preview's own numbers, in % of the sample bar. Plain sample percentages --
   -- the live overlays read the real absorb in combat, and no reading is taken here.
-  local tryIt = header(BIT.L("TRY IT"), switch, 12)
+  local tryIt = BIT.Looks.TryItHeader(pane, switch, 0, -12)
   local health = sliderRow(pane, "Bar health", 0, 100, 1,
     function() return preview.health end,
     function(value)
@@ -1311,17 +1302,8 @@ local function buildLivePreview(pane)
   })
   M._simulate = simulate
 
-  local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("TOPLEFT", simulate, "BOTTOMLEFT", 0, -10)
-  hint:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
-  hint:SetJustifyH("LEFT")
-  hint:SetText(BIT.L("The preview paints a fixed sample with the same painter as the live overlays; "
-    .. "no live absorb is read here."))
-  local hintRule = pane:CreateTexture(nil, "ARTWORK")
-  hintRule:SetColorTexture(RULE[1], RULE[2], RULE[3], RULE[4])
-  hintRule:SetHeight(1)
-  hintRule:SetPoint("BOTTOMLEFT", hint, "TOPLEFT", 0, 8)
-  hintRule:SetPoint("RIGHT", pane, "RIGHT", -SIDE, 0)
+  BIT.UI.PreviewHint(pane, "The preview paints a fixed sample with the same painter as the live overlays; "
+    .. "no live absorb is read here.", SIDE)
 
   -- One painter for the mock (styleOverlay, the live overlays' own) and the sample numbers:
   -- a settings change, a preset or a style write all land here at once.
@@ -1365,6 +1347,7 @@ local function buildTabs(area)
 
   -- Frames: the saved switches, exactly the four the runtime reads.
   local frames = addTab(BIT.L("Show on"), area)
+  frames:header("SHOW ON")
   local function toggle(key, labelText, tooltip)
     local row = checkbox(frames.inner, key, labelText, { tooltip = tooltip })
     frames:add(row, ROW_HEIGHT, key)
@@ -1387,7 +1370,7 @@ local function buildTabs(area)
     "The shields over compact raid member frames.")
   toggle("nameplates", "Show on nameplates",
     "The shields over every accessible nameplate.")
-  frames:gap()
+  frames:header("ABSORB NUMBER")
   local numberOn = function(s) return s.showNumber end
   frames:add(checkbox(frames.inner, "showNumber", "Show the absorb number",
     { enabledIf = function(s) return s.player ~= false or s.target ~= false or s.focus ~= false end,
@@ -1446,16 +1429,17 @@ local function buildTabs(area)
   -- The editor is taller than the tab area: it lives in the tab's scroll child and the tab
   -- scrolls to it (addTab), so "Reset this tab" and the window's bottom stay in view.
   local effects = addTab(BIT.L("Appearance"), area)
+  effects.hasOwnReset = true -- BIT.UI.Appearance owns its own scope-aware reset button
   local note = effects.inner:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   note:SetPoint("TOPLEFT", effects.inner, "TOPLEFT", 0, 0)
-  note:SetWidth(400)
+  note:SetWidth(460)
   note:SetJustifyH("LEFT")
   note:SetText(BIT.L("Extra shield effects land here later. The shared appearance editor below "
     .. "paints the overlay's colour, opacity and text."))
   effects.y = effects.y + 34
   if type(BIT.UI) == "table" and type(BIT.UI.Appearance) == "function" then
     local caps = { roles = CAPABILITIES.roles, shapes = false, geometry = false, border = false,
-      font = true, scale = false, opacity = true, width = 400 }
+      font = true, scale = false, opacity = true, width = 470, hideSample = true }
     local ok, editor = pcall(BIT.UI.Appearance, effects.inner, "ShieldsInfo", caps, changed)
     if ok and type(editor) == "table" then
       editor:SetPoint("TOPLEFT", effects.inner, "TOPLEFT", 0, -effects.y)
@@ -1495,9 +1479,10 @@ local function buildContent(parent)
   presetButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
   presetLabel:SetPoint("RIGHT", presetButton, "LEFT", -8, 0)
   presetLabel:SetText(BIT.L("Shields"))
+  BIT.UI.TabSummary(parent, BIT.L("The remaining absorb of a shield on your frames and nameplates."), presetLabel)
 
   local pane = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-  pane:SetPoint("TOPLEFT", 10, -44)
+  pane:SetPoint("TOPLEFT", 10, -(BIT.UI.TAB_TOP or 44))
   pane:SetPoint("BOTTOMLEFT", 10, 10)
   pane:SetWidth(PREVIEW_WIDTH)
   setBackdrop(pane, 0.09)
@@ -1516,10 +1501,8 @@ local function buildContent(parent)
   buildLivePreview(pane)
   buildTabs(area)
 
-  local resetText = BIT.L("Reset this tab")
-  local reset = pushButton(area, resetText, math.max(120, math.ceil(labelWidth(area, resetText)) + 18),
-    function() resetTab(activeTab) end)
-  reset:SetPoint("BOTTOMRIGHT", -10, 10)
+  resetButton = BIT.Looks.ResetButton(area, function() resetTab(activeTab) end)
+  resetButton:SetPoint("BOTTOMRIGHT", -10, 10)
 
   -- Style writes made elsewhere (the OFF-page editor, the shared scope) repaint the preview too.
   if type(BIT.Style) == "table" and type(BIT.Style.Subscribe) == "function" then
@@ -1534,6 +1517,7 @@ BIT.RegisterTab("ShieldsInfo", {
   defaults = DEFAULTS,
   buildPreview = buildShieldsPreview,
   previewRender = renderShieldsPreview,
+  usesStyle = true,
   capabilities = CAPABILITIES,
   title = "Shields",
   summary = "The remaining absorb of a shield on your frames and nameplates.",

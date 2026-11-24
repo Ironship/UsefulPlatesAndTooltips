@@ -20,9 +20,9 @@ local ns = BIT.Module and BIT.Module("SpellDamageInfo") or BIT
 local L, Estimate = ns.L, ns.Estimate
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
-local WINDOW_WIDTH, WINDOW_HEIGHT = 660, 780
+local WINDOW_WIDTH, WINDOW_HEIGHT = 840, 560
 local HEADER_HEIGHT = 46
-local PREVIEW_WIDTH = 250
+local PREVIEW_WIDTH = 290
 local ROW_HEIGHT = BIT.Looks.ROW_HEIGHT
 local LAYOUT = BIT.Looks.LAYOUT -- one geometry for every module's rows (Core/LookRows.lua)
 local DISABLED_ALPHA = 0.35
@@ -94,7 +94,11 @@ end
 local function db() return ns.GetSettings() end
 
 local function say(msg)
-  if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffSpellDamageInfo|r: " .. msg) end
+  if BIT and BIT.SayModule then
+    BIT.SayModule("SpellDamageInfo", msg, "66ccff")
+  elseif DEFAULT_CHAT_FRAME then
+    DEFAULT_CHAT_FRAME:AddMessage("|cff66ccffSpellDamageInfo|r: " .. tostring(msg))
+  end
 end
 
 local function findEntry(list, id)
@@ -130,9 +134,17 @@ local function sampleText(sample)
   return ns.ButtonText(view, sample.reduction)
 end
 
+local function fitResetButton()
+  if not (window and window.reset) then return end
+  local fs = window.reset.GetFontString and window.reset:GetFontString()
+  local w = fs and fs.GetStringWidth and fs:GetStringWidth() or 0
+  if type(w) == "number" then window.reset:SetWidth(math.max(140, math.ceil(w) + 24)) end
+end
+
 local function updatePreview()
   if not window then return end
   for widget, key in pairs(localized) do widget:SetText(L[key]) end
+  fitResetButton()
   for _, mock in ipairs(window.mocks) do
     local mainText, mainColor, sideText, sideColor, layout = sampleText(mock.sample)
     if db().button == "off" then mainText = nil end
@@ -193,8 +205,7 @@ local function mockButton(pane, sample, x, y)
 end
 
 local function buildPreview(pane)
-  local title = pane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  title:SetPoint("TOPLEFT", 12, -12)
+  local title = BIT.UI.PreviewHeader(pane, "Live preview", 12)
   localizedText(title, "OPT_PREVIEW")
 
   window.mocks = {}
@@ -213,10 +224,7 @@ local function buildPreview(pane)
   localizedText(window.offNote, "OPT_PREVIEW_OFF")
   window.offNote:Hide()
 
-  local hint = pane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  hint:SetPoint("BOTTOMLEFT", pane, "BOTTOMLEFT", 12, 12)
-  hint:SetWidth(PREVIEW_WIDTH - 24)
-  hint:SetJustifyH("LEFT")
+  local hint = BIT.UI.PreviewHint(pane, "", 12)
   localizedText(hint, "OPT_PREVIEW_HINT")
 end
 
@@ -266,11 +274,9 @@ local function choice(parent, key, labelText, list, opts)
 end
 
 local function pushButton(parent, text, width, onClick)
-  local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  button:SetSize(width, 22)
+  local button = BIT.UI.Button(parent, "", width, onClick)
   localizedText(button, localeKey(text))
-  button:SetScript("OnClick", onClick)
-  return BIT.UI.SkinButton(button)
+  return button
 end
 
 ---------------------------------------------------------------------------------------------
@@ -283,7 +289,7 @@ local function numbersShown(settings) return settings.button ~= "off" end
 local function heading(parent, key)
   local row = CreateFrame("Frame", nil, parent)
   row:SetHeight(20)
-  row:SetWidth(LAYOUT.label + LAYOUT.control)
+  row.fullWidth = true
   row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   row.label:SetPoint("LEFT", 6, 0)
   local c = BIT.UI.COLOR.heading
@@ -301,7 +307,8 @@ end
 local function buildSettings(area)
   local rows, y = {}, 0
   local function place(key, row)
-    row:SetPoint("TOPLEFT", area, "TOPLEFT", 8, -12 - y)
+    row:SetPoint("TOPLEFT", area, "TOPLEFT", 0, -2 - y)
+    if row.fullWidth then row:SetPoint("RIGHT", area, "RIGHT", -6, 0) end
     y = y + (row.standard and row:GetHeight() or ROW_HEIGHT)
     rows[key] = row
   end
@@ -382,45 +389,32 @@ local function buildContent(top)
   area:SetPoint("TOPLEFT", pane, "TOPRIGHT", 10, 0)
   area:SetPoint("BOTTOMRIGHT", -10, 10)
   setBackdrop(area, 0.09)
+  local settingsTitle = BIT.UI.PreviewHeader(area, "Settings", 12)
+  localizedText(settingsTitle, "OPT_SETTINGS")
+  local column = BIT.UI.ScrollColumn(area)
+  column:SetPoint("TOPLEFT", area, "TOPLEFT", 6, -40)
+  column:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -6, 40)
   local endY
-  window.rows, endY = buildSettings(area)
+  window.rows, endY = buildSettings(column.content)
+  column:Fit(endY + 14)
 
-  window.reset = pushButton(area, L.OPT_RESET, 170, function()
+  window.reset = BIT.Looks.ResetButton(area, function()
     ns.ResetSettings()
     changed()
     say(L.OPT_RESET_DONE)
-  end)
-  -- Under the last row, wherever it ended (a long label wraps and makes its row taller, more so in another language): a
-  -- button fixed to the bottom of the area lay over the last rows once the page had grown.
-  window.reset:SetPoint("TOPRIGHT", area, "TOPRIGHT", -10, -(12 + endY + 10))
+  end, 140)
+  localizedText(window.reset, localeKey(L.OPT_RESET))
+  fitResetButton()
+  window.reset:SetPoint("BOTTOMRIGHT", area, "BOTTOMRIGHT", -10, 10)
 
   window:SetScript("OnShow", changed)
   window:SetScript("OnHide", closeMenu)
 end
 
 local function createWindow()
-  window = CreateFrame("Frame", "SpellDamageInfoOptions", UIParent, "BackdropTemplate")
-  window:Hide() -- new frames start shown; ns.OpenOptions shows it, which runs OnShow
-  window:SetSize(WINDOW_WIDTH, WINDOW_HEIGHT)
+  window = BIT.UI.NativeWindow("SpellDamageInfoOptions", "SpellDamageInfo", WINDOW_WIDTH, WINDOW_HEIGHT)
   window:SetPoint("CENTER")
-  window:SetFrameStrata("DIALOG")
-  window:SetToplevel(true)
-  window:SetClampedToScreen(true)
-  window:EnableMouse(true)
-  window:SetMovable(true)
-  window:RegisterForDrag("LeftButton")
-  window:SetScript("OnDragStart", window.StartMoving)
-  window:SetScript("OnDragStop", window.StopMovingOrSizing)
-  setBackdrop(window, 0.06, 0.97)
-  if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "SpellDamageInfoOptions") end -- Escape closes it
-
-  local title = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOPLEFT", 16, -16)
-  title:SetText("SpellDamageInfo")
-  title:SetTextColor(BIT.UI.COLOR.heading[1], BIT.UI.COLOR.heading[2], BIT.UI.COLOR.heading[3])
-
-  local close = CreateFrame("Button", nil, window, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -8)
+  if BIT.UI and BIT.UI.CloseOnEscape then BIT.UI.CloseOnEscape(window) end
 
   buildContent(HEADER_HEIGHT)
 end
@@ -533,10 +527,11 @@ if BIT.RegisterTab then
   BIT.RegisterTab("SpellDamageInfo", {
     title = "SpellDamageInfo",
     summary = "The damage and healing from each spell's description on your action buttons and in its tooltip.",
-    width = WINDOW_WIDTH, height = WINDOW_HEIGHT - HEADER_HEIGHT + 10,
+    width = WINDOW_WIDTH, height = WINDOW_HEIGHT,
     build = function(parent)
       window = parent
-      buildContent(10)
+      BIT.UI.TabSummary(parent, BIT.L("The damage and healing from each spell's description on your action buttons and in its tooltip."))
+      buildContent(BIT.UI.TAB_TOP or 44)
       changed()
     end,
     buildPreview = buildSDIPreview,

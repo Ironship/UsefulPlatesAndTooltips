@@ -33,6 +33,17 @@ local function say(msg)
 end
 BIT.Say = say
 
+-- Unified chat line for every module: consistent "|cff<hex><name>|r: <msg>" format.
+function BIT.SayModule(name, msg, colorHex)
+  local hex = (type(colorHex) == "string" and #colorHex == 6) and colorHex or "66bbff"
+  local prefix = "|cff" .. hex .. tostring(name or "DoesItDiePlus") .. "|r: "
+  if DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+    DEFAULT_CHAT_FRAME:AddMessage(prefix .. tostring(msg))
+  elseif print then
+    print(tostring(name or "DoesItDiePlus") .. ": " .. tostring(msg))
+  end
+end
+
 ---------------------------------------------------------------------------------------------
 -- Saved settings and character profiles:
 --   UsefulPlatesAndTooltipsDB (root / BIT.GlobalDB()):

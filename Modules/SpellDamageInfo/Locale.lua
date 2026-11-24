@@ -111,12 +111,13 @@ Locales.en = {
   -- options window
   OPT_LANGUAGE = "Language",
   OPT_LANGUAGE_TIP = "Addon interface language: Auto follows the game text language, or choose English, German or Russian.",
-  OPT_H_NUMBERS = "Numbers on the buttons",
-  OPT_H_ESTIMATE = "What the numbers include",
-  OPT_H_TOOLTIP = "Tooltip",
-  OPT_H_KINDS = "What to show",
-  OPT_H_HISTORY = "History",
+  OPT_H_NUMBERS = "NUMBERS ON THE BUTTONS",
+  OPT_H_ESTIMATE = "WHAT THE NUMBERS INCLUDE",
+  OPT_H_TOOLTIP = "TOOLTIP",
+  OPT_H_KINDS = "WHAT TO SHOW",
+  OPT_H_HISTORY = "HISTORY",
   OPT_PREVIEW = "Live preview",
+  OPT_SETTINGS = "Settings",
   OPT_OFF_SAMPLE = "SpellDamageInfo sample (not your buttons)",
   OPT_PREVIEW_HINT = "Sample spells with 50 spell power and a 2.6 sec weapon hitting for 120, drawn by the same code as the numbers on your action bars.",
   OPT_PREVIEW_OFF = "No numbers on the buttons.",
@@ -287,12 +288,13 @@ Locales.de = {
   -- options window
   OPT_LANGUAGE = "Sprache",
   OPT_LANGUAGE_TIP = "Sprache der Addon-Oberfl\195\164che: Auto folgt der Textsprache des Spiels, oder w\195\164hlt English, Deutsch oder Russisch.",
-  OPT_H_NUMBERS = "Zahlen auf den Tasten",
-  OPT_H_ESTIMATE = "Was die Zahlen enthalten",
-  OPT_H_TOOLTIP = "Tooltip",
-  OPT_H_KINDS = "Was angezeigt wird",
-  OPT_H_HISTORY = "Verlauf",
+  OPT_H_NUMBERS = "ZAHLEN AUF DEN TASTEN",
+  OPT_H_ESTIMATE = "WAS DIE ZAHLEN ENTHALTEN",
+  OPT_H_TOOLTIP = "TOOLTIP",
+  OPT_H_KINDS = "WAS ANGEZEIGT WIRD",
+  OPT_H_HISTORY = "VERLAUF",
   OPT_PREVIEW = "Vorschau",
+  OPT_SETTINGS = "Einstellungen",
   OPT_OFF_SAMPLE = "SpellDamageInfo-Beispiel (nicht Eure Tasten)",
   OPT_PREVIEW_HINT = "Beispielzauber mit 50 Zaubermacht und einer 2,6-Sek.-Waffe mit 120 Schaden pro Treffer, gezeichnet vom selben Code wie die Zahlen auf Euren Aktionsleisten.",
   OPT_PREVIEW_OFF = "Keine Zahlen auf den Tasten.",
@@ -478,8 +480,8 @@ local DAMAGE_COLOR = { 1, 0.82, 0.3 }
 local WEAPON_COLOR = { 0.45, 0.85, 1 }
 local HEAL_COLOR = { 0.4, 1, 0.4 }
 local REDUCTION_COLOR = { 1, 0.25, 0.25 }
--- What a shield absorbs is neither damage nor healing, so it takes neither of their colours.
-local ABSORB_COLOR = { 0.8, 0.7, 1 }
+-- Absorb shields share the addon's canonical absorb blue (Core/Appearance.lua, ShieldsInfo).
+local ABSORB_COLOR = { 0.45, 0.75, 1 }
 -- Notes under a number.
 local NOTE_COLOR = { 0.7, 0.7, 0.7 }
 

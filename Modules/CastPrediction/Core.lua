@@ -144,16 +144,21 @@ end
 local COLOR_LIST = {}
 for _, preset in ipairs(COLOR_PRESETS) do COLOR_LIST[#COLOR_LIST + 1] = { id = preset.id, label = preset.label } end
 
-local KILL_ICONS = {
+local KILL_ICONS = (BIT.Looks and type(BIT.Looks.KillIcons) == "function") and BIT.Looks.KillIcons() or {
     { id = "skull",  label = "Raid skull",  path = "Interface\\TargetingFrame\\UI-RaidTargetingIcon_8" },
     { id = "cross",  label = "Red X",       path = "Interface\\RaidFrame\\ReadyCheck-NotReady" },
     { id = "impact", label = "Impact",      path = "Interface\\SpellShadow\\Spell_Shadow_Shadowfury" },
+    kind = "icon",
 }
 
 local settings
 
 local function print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffbb33CastPrediction|r " .. msg)
+    if BIT.SayModule then
+        BIT.SayModule("CastPrediction", msg, "ffbb33")
+    elseif DEFAULT_CHAT_FRAME then
+        DEFAULT_CHAT_FRAME:AddMessage("|cffffbb33CastPrediction|r: " .. tostring(msg))
+    end
 end
 
 -- Always recorded to SavedVariables (settings.log) for diagnosing accuracy; echoed to chat with
