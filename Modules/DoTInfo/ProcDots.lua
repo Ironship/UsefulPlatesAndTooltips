@@ -204,6 +204,7 @@ function P.StartTrapPreview()
     if now > trap.expiresAt then armed = nil return false end
     local key = I().unitKey("target")
     if not key then return false end
+    if trap.noPreview and trap.noPreview[key] then return false end
     local dot = I().newDot(trap.spellID, trap.spellID, trap.name, trap.total, trap.school, trap.duration,
         trap.interval, now)
     dot.name = trap.name
@@ -213,17 +214,24 @@ function P.StartTrapPreview()
     return true
 end
 
+local function expireTrapPreview(now)
+    local p = trapPreview
+    if not p then return false end
+    if now <= p.dot.appliedAt + p.dot.interval + TRAP_MATCH_WINDOW then return false end
+    trace(string.format("TRAP %s aura preview expired without a tick; trap stays armed", p.dot.name or "?"))
+    if armed then
+        armed.noPreview = armed.noPreview or {}
+        armed.noPreview[p.key] = true
+    end
+    trapPreview = nil
+    return true
+end
+
 -- Returns the provisional trap preview dot for `key`, or nil (expiring it if its first tick never arrived).
 function P.TrapPreviewFor(key)
-    local p = trapPreview
-    if not p then return nil end
-    local now = GetTime()
-    if now > p.dot.appliedAt + p.dot.interval + TRAP_MATCH_WINDOW then
-        trace(string.format("TRAP %s aura preview expired without a tick; trap stays armed", p.dot.name or "?"))
-        trapPreview = nil
-        return nil
-    end
-    return p.key == key and p.dot or nil
+    if not trapPreview then return nil end
+    if expireTrapPreview(GetTime()) then return nil end
+    return trapPreview.key == key and trapPreview.dot or nil
 end
 
 -- Single-tick hidden-amount trap spring (DoesItDie PR #38): in Forever combat UNIT_COMBAT amounts are secret, so an
@@ -589,9 +597,7 @@ function P.Housekeep(now)
         end
         return
     end
-    if trapPreview and now > trapPreview.dot.appliedAt + trapPreview.dot.interval + TRAP_MATCH_WINDOW then
-        trapPreview = nil
-    end
+    expireTrapPreview(now)
     if armed and now > armed.expiresAt + armed.interval + 0.45 then armed, trapPreview, chains = nil, nil, {} end
     for key, d in pairs(delayed) do
         if now > d.expiresAt then delayed[key], delayedChains[key] = nil, nil end

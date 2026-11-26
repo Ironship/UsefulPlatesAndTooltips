@@ -1289,7 +1289,15 @@ function ns._onPetCast(spellID)
     if not stacking or stacking.class then return nil end
     local total, school, duration, statedInterval = parseDot(desc, 1)
     if not total then return nil end
-    local key = unitKey("pettarget") or unitKey("target")
+    -- If the pet has a target whose key cannot be read (secret GUID and no plate in instances),
+    -- skip rather than attributing the poison to the player's target (DoesItDie PR #55).
+    local okPet, petHasTarget = pcall(UnitExists, "pettarget")
+    local key
+    if okPet and not isSecret(petHasTarget) and petHasTarget == true then
+        key = unitKey("pettarget")
+    else
+        key = unitKey("target")
+    end
     if not key then
         trace(string.format("PET CAST %s (id %d): no target, not tracked", name, spellID))
         return nil
@@ -1304,9 +1312,11 @@ function ns._onPetCast(spellID)
     if ns.Learn then ns.Learn.Cast(dot, 0, name) end
     local learned = db.ticks[spellID]
     dot.unsure = not learned
-    trace(string.format("PET CAST %s (id %d)%s: %d dmg over %ss, school %d, tick every %ss, per-tick %s",
-        name, spellID, dot.stacks and (" stack " .. dot.stacks) or "", total, duration, dot.school, dot.interval,
-        learned and ("learned " .. learned) or "from description"))
+    if not previous or (previous.stacks or 1) < (dot.stacks or 1) then
+        trace(string.format("PET CAST %s (id %d)%s: %d dmg over %ss, school %d, tick every %ss, per-tick %s",
+            name, spellID, dot.stacks and (" stack " .. dot.stacks) or "", total, duration, dot.school, dot.interval,
+            learned and ("learned " .. learned) or "from description"))
+    end
     return key
 end
 
@@ -3057,6 +3067,9 @@ local function updateLayering(now)
                 capped and "over 300 (stopped there)" or tostring(visited),
                 regionName(targetHost or healthBar), ms or -1))
         end
+        if ok and strata and BIT.Frames and BIT.Frames.BlizzardFloor then
+            strata, level = BIT.Frames.BlizzardFloor(targetHost or healthBar, strata, level)
+        end
         if ok and sawSecret then
             -- Secret strata/levels in Forever cannot be compared (DoesItDie PR #56): add a safe margin above them.
             if (STRATA_RANK[strata] or 0) < STRATA_RANK.HIGH then strata = "HIGH" end
@@ -3263,6 +3276,10 @@ local function refresh()
     end
 
     if not UnitExists("target") or targetIsDead() or (not targetHost and not healthBar) then return hideAll() end
+    if BIT.Frames and BIT.Frames.CoveredByWorldMap
+        and BIT.Frames.CoveredByWorldMap(targetHost or healthBar, lastStrata) then
+        return hideAll()
+    end
     local damage, count, breakdown = targetRemainingDamage()
     if damage ~= lastTracedDamage then
         lastTracedDamage = damage
@@ -3290,7 +3307,12 @@ local function refresh()
         return hideAll()
     end
 
+    local prevStrata = lastStrata
     updateLayering(now)
+    if lastStrata ~= prevStrata and BIT.Frames and BIT.Frames.CoveredByWorldMap
+        and BIT.Frames.CoveredByWorldMap(targetHost or healthBar, lastStrata) then
+        return hideAll()
+    end
     local daylightTint, daylightSkull = false, false
     if not previewHost and healthBar and BIT.Plate and BIT.Plate.DaylightDotDisplay then
         daylightTint, daylightSkull = BIT.Plate.DaylightDotDisplay("unit", "target", healthBar)

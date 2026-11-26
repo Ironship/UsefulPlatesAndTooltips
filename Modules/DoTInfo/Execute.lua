@@ -431,6 +431,9 @@ local function update()
     if visibilityFrame and readable("boolean", visibilityFrame.IsVisible, visibilityFrame) == false then
         return window:Hide()
     end
+    if BIT.Frames and BIT.Frames.WorldMapOpen and BIT.Frames.WorldMapOpen() then
+        return window:Hide()
+    end
     local hit, how = estimate()
     if not hit or not usable() then return window:Hide() end
     if how ~= lastTraced then

@@ -1425,6 +1425,9 @@ local function updateLayering(now)
             layerCheckedAt = now - 0.75 -- nothing to scan yet (the custom frame is hidden): look again soon
             return
         end
+        if BIT.Frames and BIT.Frames.BlizzardFloor then
+            strata, level = BIT.Frames.BlizzardFloor(targetHost or healthBar or TargetFrame, strata, level)
+        end
         if sawSecret then
             -- Secret strata/levels in Forever cannot be compared (DoesItDie PR #56): add a safe margin above them.
             if (STRATA_RANK[strata] or 0) < STRATA_RANK.HIGH then strata = "HIGH" end
@@ -1587,6 +1590,11 @@ local function updateMarker(now)
         hideAll()
         return false
     end
+    if BIT.Frames and BIT.Frames.CoveredByWorldMap
+        and BIT.Frames.CoveredByWorldMap(targetHost or healthBar or TargetFrame, lastStrata) then
+        hideAll()
+        return false
+    end
     if cast.landedAt then
         local prediction = cast.prediction
         return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
@@ -1603,7 +1611,13 @@ local function updateMarker(now)
         hideAll()
         return false
     end
+    local prevStrata = lastStrata
     updateLayering(now)
+    if lastStrata ~= prevStrata and BIT.Frames and BIT.Frames.CoveredByWorldMap
+        and BIT.Frames.CoveredByWorldMap(targetHost or healthBar or TargetFrame, lastStrata) then
+        hideAll()
+        return false
+    end
     local prediction = cast.prediction
     return drawMarker(prediction.value, UnitHealthMax("target"), UnitHealth("target"), {
         name = cast.name, min = prediction.min, max = prediction.max, value = prediction.value,
@@ -1758,6 +1772,10 @@ local function keepFrameWidgetsAbove(w, host, now)
         w.layerAt = now - 0.75 -- nothing to scan yet: look again soon
         return
     end
+    if BIT.Frames and BIT.Frames.BlizzardFloor then
+        strata, level = BIT.Frames.BlizzardFloor(host, strata, level)
+    end
+    w.layerStrata = strata
     for i, frame in ipairs({ w.clip, w.marker, w.labelLayer, w.killWindow, w.killBar }) do
         frame:SetFrameStrata(strata)
         frame:SetFrameLevel(level + i + 1)
@@ -1790,7 +1808,13 @@ local function drawFrameWidgets(w, entry, now)
         w.maskedBar = bar
         barMask.Apply(w.fill, bar, true)
     end
+    local prevStrata = w.layerStrata
     keepFrameWidgetsAbove(w, entry.host or bar, now)
+    if w.layerStrata ~= prevStrata and BIT.Frames and BIT.Frames.CoveredByWorldMap
+        and BIT.Frames.CoveredByWorldMap(entry.host or bar, w.layerStrata) then
+        hideFrameWidgets(w)
+        return
+    end
     w.marker:SetMinMaxValues(0, UnitHealthMax(unit))
     w.marker:SetValue(prediction.value)
     paintDamage(w.fill, settings.fillColor, settings.fillOpacity, state)
@@ -1838,7 +1862,9 @@ local function refreshFrameOverlays(now, recipient)
             or unit:match("^party%d+$") and settings.showPartyFrames
         local sameUnit = read(UnitIsUnit, unit, recipient) == true
         if enabled and (not entry.host or read(entry.host.IsVisible, entry.host) ~= false)
-            and sameUnit then
+            and sameUnit
+            and not (BIT.Frames and BIT.Frames.CoveredByWorldMap
+                and BIT.Frames.CoveredByWorldMap(entry.host or entry.bar, frameWidgets[entry.bar] and frameWidgets[entry.bar].layerStrata)) then
             local w = frameWidgets[entry.bar] or createFrameWidgets(entry.bar)
             drawFrameWidgets(w, entry, now)
         end

@@ -214,6 +214,37 @@ function Frames.Shown(bar)
   return type(alpha) ~= "number" or alpha > 0
 end
 
+local STRATA_RANK = {
+  BACKGROUND = 1, LOW = 2, MEDIUM = 3, HIGH = 4, DIALOG = 5, FULLSCREEN = 6, FULLSCREEN_DIALOG = 7, TOOLTIP = 8,
+}
+local BLIZZARD_FLOOR_LEVEL = 1000
+
+local function isBlizzardUnitFrame(root)
+  return root ~= nil and (root == TargetFrame or root == FocusFrame)
+end
+
+-- Blizzard's TargetFrame/FocusFrame need a MEDIUM/1000 floor so overlays kept on UIParent (kill/focus icons)
+-- stay above the frame art when hidden Edit Mode frames are skipped (DoesItDie PR #59).
+function Frames.BlizzardFloor(root, strata, level)
+  if not isBlizzardUnitFrame(root) then return strata, level end
+  local rank = STRATA_RANK[strata] or 0
+  if rank < STRATA_RANK.MEDIUM or (rank == STRATA_RANK.MEDIUM and (level or 0) < BLIZZARD_FLOOR_LEVEL) then
+    return "MEDIUM", BLIZZARD_FLOOR_LEVEL
+  end
+  return strata, level
+end
+
+function Frames.WorldMapOpen()
+  return plain(WorldMapFrame, "IsShown") == true
+end
+
+-- True when WorldMapFrame is shown and an overlay on `root` / `strata` would draw above it (MEDIUM+).
+function Frames.CoveredByWorldMap(root, strata)
+  if plain(WorldMapFrame, "IsShown") ~= true then return false end
+  if isBlizzardUnitFrame(root) then return true end
+  return strata ~= nil and (STRATA_RANK[strata] or 0) >= STRATA_RANK.MEDIUM
+end
+
 ---------------------------------------------------------------------------------------------
 -- Pick mode
 ---------------------------------------------------------------------------------------------

@@ -128,6 +128,9 @@ local function updateLayering(w, bar, now)
             ns.trace(string.format("SLOW focus layer check (logged once): %s frames, %.1f ms",
                 capped and ("over " .. MAX_LAYER_FRAMES .. " (stopped there)") or tostring(visited), ms or -1))
         end
+        if ok and BIT.Frames and BIT.Frames.BlizzardFloor then
+            strata, level = BIT.Frames.BlizzardFloor(root, strata, level)
+        end
         if ok and sawSecret then
             -- Secret strata/levels in Forever cannot be compared (DoesItDie PR #56): add a safe margin above them.
             if (STRATA_RANK[strata] or 0) < STRATA_RANK.HIGH then strata = "HIGH" end
@@ -177,8 +180,12 @@ local function refresh()
     prepare()
     local okExists, exists = pcall(UnitExists, "focus")
     if not okExists or isSecret(exists) or not exists or dead() then return hide() end
-    local _, bar = BIT.Plate.UnitFrame("focus")
+    local frameHost, bar = BIT.Plate.UnitFrame("focus")
     if type(bar) ~= "table" or not shown(bar) then return hide() end
+    if BIT.Frames and BIT.Frames.CoveredByWorldMap
+        and BIT.Frames.CoveredByWorldMap(frameHost or bar, topStrata) then
+        return hide()
+    end
     lastBar = bar
     local entries, total = ns.dotBreakdownForUnit("focus")
     if total <= 0 then return hide() end
@@ -186,7 +193,12 @@ local function refresh()
     widgets = ns.barMarker.widgetsFor(host, bar, ns.db.markerParent ~= "screen" and bar or nil)
     widgets.pinned = true
     ns.barMarker.draw(widgets, entries, total, UnitHealthMax("focus"), UnitHealth("focus"), focusLook, false, "focus")
+    local prevStrata = topStrata
     updateLayering(widgets, bar, GetTime())
+    if topStrata ~= prevStrata and BIT.Frames and BIT.Frames.CoveredByWorldMap
+        and BIT.Frames.CoveredByWorldMap(frameHost or bar, topStrata) then
+        return hide()
+    end
 end
 
 local driver = CreateFrame("Frame")

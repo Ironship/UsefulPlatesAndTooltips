@@ -62,7 +62,8 @@ their version-1 contract; version 2 adds `CanTrack` and shared callback registra
 ### `DoT.GetRemainingDamage(unit) -> damage, count`
 
 The total damage the player's DoTs on the mob behind `unit` still have to deal (rounded), and how many DoTs that is.
-`0, 0` when there are none, the unit can't be tracked or the DoTInfo module is off. `target`, `focus` and `nameplateN`
+With "Share DoTs with party" on, party members' DoTs on it count too. `0, 0` when there are none, the unit can't be
+tracked or the DoTInfo module is off. `target`, `focus` and `nameplateN`
 are the units the tracking can keep up to date, since `UNIT_COMBAT` only reports hits on those.
 
 ### `DoT.GetDoTs(unit) -> list`
@@ -77,6 +78,8 @@ The player's DoTs on that mob, oldest first. A new table on every call, safe to 
 | `damage` | Remaining damage (rounded) |
 | `appliedAt`, `expiresAt` | `GetTime()` seconds |
 | `provisional` | `true` while the spell is still being cast (it is dropped if the cast fails) |
+| `remote` | `true` for a party member's DoT shared via "Share DoTs with party" |
+| `sender` | Party member's name (`remote` only) |
 
 DoTs waiting for their first tick (when the addon isn't sure they landed) aren't listed.
 
