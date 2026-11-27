@@ -114,6 +114,38 @@ local function dotTotal(castIDs, fallbackID, spec)
     end
     id = id or fallbackID
     if not id then return spec and spec.lastCastTotal or nil end
+    -- Prefer meter-learned tick damage (db.ticks[id]) when available: spells that scale with stats outside
+    -- SpellCoefficients (e.g. Forever's Serpent Sting) otherwise draw at base tooltip damage while waiting
+    -- for the first tick and jump larger once the plain DoT segment takes over.
+    local learnedTick = ns.db and type(ns.db.ticks) == "table" and ns.db.ticks[id]
+    if type(learnedTick) == "number" and learnedTick > 0 and learnedTick < math.huge then
+        local duration, stated
+        local desc = ask(C_Spell and C_Spell.GetSpellDescription, id)
+        if desc and ns.ParseRogueAura then
+            local _, _, d, iv = ns.ParseRogueAura(id, desc)
+            if type(d) == "number" and d > 0 then duration, stated = d, iv end
+        end
+        if not duration then
+            local sdi = BIT.modules and BIT.modules.SpellDamageInfo
+            if type(sdi) == "table" and type(sdi.Compute) == "function" then
+                local ok, view = pcall(sdi.Compute, id, false)
+                local d = ok and type(view) == "table" and not view.finisher and type(view.dot) == "table"
+                    and tonumber(view.dot.duration)
+                if d and d > 0 then duration = d end
+            end
+        end
+        if duration and duration > 0 then
+            local intervals = ns.KNOWN_TICK_INTERVALS
+            local interval = (type(stated) == "number" and stated > 0 and stated)
+                or (intervals and spec and (intervals[spec.luaName] or intervals[spec.fallback])) or 3
+            local ticks = math.max(1, math.floor(duration / interval + 0.5))
+            return learnedTick * ticks
+        end
+        if spec and spec.lastCastID == id and type(spec.lastCastTotal) == "number"
+            and spec.lastCastTotal > 0 and spec.lastCastTotal < math.huge then
+            return spec.lastCastTotal
+        end
+    end
     local sdi = BIT.modules and BIT.modules.SpellDamageInfo
     if type(sdi) == "table" and type(sdi.Compute) == "function" then
         local ok, view = pcall(sdi.Compute, id, false)
