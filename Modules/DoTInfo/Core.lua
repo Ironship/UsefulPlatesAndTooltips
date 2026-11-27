@@ -2630,12 +2630,14 @@ local function applyAppearance()
         daylightTint = select(1, BIT.Plate.DaylightDotDisplay("unit", "target", healthBar))
     end
     ns._daylightTint = daylightTint
-    local parts = {}
-    for i, key in ipairs(APPEARANCE_KEYS) do parts[i] = tostring(db[key]) end
+    local parts = ns._appParts
+    if not parts then parts = {}; ns._appParts = parts end
+    local n = #APPEARANCE_KEYS
+    for i = 1, n do parts[i] = tostring(db[APPEARANCE_KEYS[i]]) end
     local reverse = ns._markerReversed()
-    parts[#parts + 1] = tostring(reverse)
-    parts[#parts + 1] = tostring(daylightTint)
-    local signature = table.concat(parts, "|")
+    parts[n + 1] = tostring(reverse)
+    parts[n + 2] = tostring(daylightTint)
+    local signature = table.concat(parts, "|", 1, n + 2)
     if signature == appliedSignature then return end
     appliedSignature = signature
     ns._applyMarkerDirection(reverse)
@@ -2826,17 +2828,21 @@ local function approach(shown, target, elapsed)
 end
 
 local function animateMarker(elapsed)
-    if not remainingBar:IsShown() then return end
+    if not remainingBar:IsShown() then return false end
+    local moved = false
     if markerShownValue ~= markerValue then
         markerShownValue = approach(markerShownValue, markerValue, elapsed)
         remainingBar:SetValue(markerShownValue)
+        moved = true
     end
     for _, segment in ipairs(segments) do
         if segment.shown ~= segment.target then
             segment.shown = approach(segment.shown, segment.target, elapsed)
             segment.bar:SetValue(segment.shown)
+            moved = true
         end
     end
+    return moved
 end
 
 -- Shows and colors one segment per entry ({ name, school, damage }), or hides them all when entries is nil.
@@ -3913,8 +3919,12 @@ end)
 
 local sinceUpdate = 0
 frame:SetScript("OnUpdate", function(self, elapsed)
-    if db then animateMarker(elapsed) end
-    if db and (ns.Retail or ns.RogueNative) and (ns.Retail or ns.RogueNative).UpdatePoisonOffset then (ns.Retail or ns.RogueNative).UpdatePoisonOffset(TargetFrame) end
+    if db then
+        if animateMarker(elapsed) then
+            local rn = ns.Retail or ns.RogueNative
+            if rn and rn.UpdatePoisonOffset then rn.UpdatePoisonOffset(TargetFrame) end
+        end
+    end
     sinceUpdate = sinceUpdate + elapsed
     if sinceUpdate < UPDATE_INTERVAL or not db then return end
     sinceUpdate = 0

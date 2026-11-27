@@ -220,11 +220,14 @@ end
 -- answers WOW_PROJECT_ID like Retail, so the client's version decides: Retail is 10 and up,
 -- Forever 1.60, Classic Era 1.15.
 local function isRetail()
+  if ns._retailFn == GetBuildInfo and ns._isRetail ~= nil then return ns._isRetail end
   if type(GetBuildInfo) ~= "function" then return false end
   local ok, version = pcall(GetBuildInfo)
   if not ok or isSecret(version) or type(version) ~= "string" then return false end
   local major = tonumber(version:match("^(%d+)"))
-  return major ~= nil and major >= 10
+  ns._retailFn = GetBuildInfo
+  ns._isRetail = (major ~= nil and major >= 10)
+  return ns._isRetail
 end
 ns.IsRetail = isRetail
 
@@ -350,12 +353,18 @@ end
 -- Which client's spell tables SpellCoefficients.lua holds for this one: "forever" (1.60),
 -- "era" (1.15), or nil for any other client.
 local function coefficientClient()
+  if ns._coefFn == GetBuildInfo and ns._coefClient ~= nil then return ns._coefClient or nil end
   if type(GetBuildInfo) ~= "function" then return nil end
   local ok, version = pcall(GetBuildInfo)
   if not ok or isSecret(version) or type(version) ~= "string" then return nil end
   local major, minor = version:match("^(%d+)%.(%d+)")
-  if tonumber(major) ~= 1 then return nil end
-  return (tonumber(minor) >= 60) and "forever" or "era"
+  ns._coefFn = GetBuildInfo
+  if tonumber(major) ~= 1 then
+    ns._coefClient = false
+    return nil
+  end
+  ns._coefClient = (tonumber(minor) >= 60) and "forever" or "era"
+  return ns._coefClient
 end
 
 -- The spell's entry in SpellCoefficients for the running client: a table of shares, false (a
@@ -408,6 +417,10 @@ local weaponStats = {}
 local function number(v) return not isSecret(v) and type(v) == "number" and v or nil end
 
 local function readWeapon()
+  if not weaponStats.class and type(UnitClass) == "function" then
+    local ok, _, file = pcall(UnitClass, "player")
+    if ok and not isSecret(file) and type(file) == "string" then weaponStats.class = file end
+  end
   if type(UnitDamage) == "function" then
     local ok, lo, hi, olo, ohi = pcall(UnitDamage, "player")
     if ok then
@@ -425,7 +438,11 @@ local function readWeapon()
       if speed and speed > 0 then
         weaponStats.meleeSpeed = speed
         -- the seal up while the speed was read: Seal of the Crusader's faster attacks are in it
-        weaponStats.speedSeal = ns.ActiveSeal and ns.ActiveSeal() or nil
+        if weaponStats.class == nil or weaponStats.class == "PALADIN" then
+          weaponStats.speedSeal = ns.ActiveSeal and ns.ActiveSeal() or nil
+        else
+          weaponStats.speedSeal = nil
+        end
       end
       off = number(off)
       if not offSecret then weaponStats.offhandSpeed = (off and off > 0) and off or nil end
@@ -455,10 +472,6 @@ local function readWeapon()
     local ok, v = pcall(UnitHealthMax, "player")
     v = ok and number(v) or nil
     if v and v > 0 then weaponStats.maxHealth = v end
-  end
-  if not weaponStats.class and type(UnitClass) == "function" then
-    local ok, _, file = pcall(UnitClass, "player")
-    if ok and not isSecret(file) and type(file) == "string" then weaponStats.class = file end
   end
   if type(GetShapeshiftFormID) == "function" then
     local ok, form = pcall(GetShapeshiftFormID)
@@ -671,8 +684,9 @@ ns.ActiveSeal = activeSeal
 
 local function noteSealCast(spellID)
   local e = getEntry(spellID)
-  if not e or not e.isSeal then return end
+  if not e or not e.isSeal then return false end
   sealCast.id, sealCast.at, sealCast.duration = spellID, now() or 0, e.sealDuration or 30
+  return true
 end
 
 -- A spell name, or nil.
@@ -696,11 +710,27 @@ end
 local function applyTalents(view, spellID, pet)
   local mods = BIT.TalentMods
   if not view or pet or not db.talents or not mods or isRetail() or type(spellID) ~= "number" then return view end
-  local ok, dDirect, dPeriodic, hDirect, hPeriodic = pcall(function()
-    return (mods.Percent(spellID, view.school, "d", false)), (mods.Percent(spellID, view.school, "o", false)),
-      (mods.Percent(spellID, nil, "d", true)), (mods.Percent(spellID, nil, "o", true))
-  end)
-  if not ok then return view end
+  local dDirect, dPeriodic, hDirect, hPeriodic = 0, 0, 0, 0
+  if view.direct then
+    local ok, v = pcall(mods.Percent, spellID, view.school, "d", false)
+    if not ok then return view end
+    dDirect = v or 0
+  end
+  if view.dot then
+    local ok, v = pcall(mods.Percent, spellID, view.school, "o", false)
+    if not ok then return view end
+    dPeriodic = v or 0
+  end
+  if view.heal then
+    local ok, v = pcall(mods.Percent, spellID, nil, "d", true)
+    if not ok then return view end
+    hDirect = v or 0
+  end
+  if view.hot then
+    local ok, v = pcall(mods.Percent, spellID, nil, "o", true)
+    if not ok then return view end
+    hPeriodic = v or 0
+  end
   if view.direct and dDirect > 0 then scaleRange(view.direct, 1 + dDirect) end
   if view.dot and dPeriodic > 0 then scalePeriodic(view.dot, 1 + dPeriodic) end
   if view.heal and hDirect > 0 then scaleRange(view.heal, 1 + hDirect) end
@@ -1625,12 +1655,16 @@ ns.PetSpellOnSlot = petSpellOnSlot
 -- healing is off is an ordinary damage button, and nothing left means no number.
 local function filterView(view)
   if not view then return nil end
-  local off = {}
   local any = false
-  for _, key in ipairs(SHOW_KEYS) do
-    if db[key] == false then off[key], any = true, true end
+  for i = 1, #SHOW_KEYS do
+    if db[SHOW_KEYS[i]] == false then any = true; break end
   end
   if not any then return view end
+  local off = {}
+  for i = 1, #SHOW_KEYS do
+    local key = SHOW_KEYS[i]
+    if db[key] == false then off[key] = true end
+  end
   local v = {}
   for k, x in pairs(view) do v[k] = x end
   if off.showDamage then v.direct = nil end
@@ -2110,8 +2144,16 @@ local function labContent(button)
   return nil
 end
 
+function ns._actionTarget(slot)
+  if isSecret(slot) or type(slot) ~= "number" or type(GetActionInfo) ~= "function" then return nil, nil end
+  local ok, kind, id, sub = pcall(GetActionInfo, slot)
+  if not ok or isSecret(kind) or isSecret(id) or isSecret(sub) or type(id) ~= "number" then return nil, nil end
+  if kind == "spell" or (kind == "macro" and sub == "spell") then return id, nil end
+  if kind == "item" or (kind == "macro" and sub == "item") then return nil, id end
+  return nil, nil
+end
+
 local function updateButton(button, pet)
-  local view, reduction
   local slot, labSpell, labItem, labCount
   if not pet then
     if gamepadButtons[button] then
@@ -2126,23 +2168,51 @@ local function updateButton(button, pet)
     elseif labButtons[button] then slot, labSpell, labItem, labCount = labContent(button)
     else slot = slotOf(button) end
   end
+  local mainText, mainColor, sideText, sideColor, layout
   if db.button ~= "off" then
-    local spellID
-    if pet then spellID = petSpellOnSlot(petSlots[button]) else spellID = labSpell or spellOnSlot(slot) end
+    local spellID, itemID
+    if pet then
+      spellID = petSpellOnSlot(petSlots[button])
+    elseif labSpell or labItem then
+      spellID, itemID = labSpell, labItem
+    else
+      spellID, itemID = ns._actionTarget(slot)
+    end
+    local memo = ns._memoActive and (not pet)
     if spellID then
-      view = ns.ComputeOrAverage(spellID, pet)
-      if db.reduction then reduction = ns.Reduction(spellID) end
-      noteMiss(spellID)
-    elseif not pet then
+      local cached = memo and ns._btnMemoSpell[spellID]
+      if cached ~= nil then
+        if cached then
+          mainText, mainColor, sideText, sideColor, layout = cached[1], cached[2], cached[3], cached[4], cached[5]
+        end
+      else
+        local view = ns.ComputeOrAverage(spellID, pet)
+        local reduction = db.reduction and ns.Reduction(spellID) or nil
+        noteMiss(spellID)
+        mainText, mainColor, sideText, sideColor, layout = buttonText(view, reduction)
+        if memo then
+          ns._btnMemoSpell[spellID] = mainText and { mainText, mainColor, sideText, sideColor, layout } or false
+        end
+      end
+    elseif itemID and not pet then
       -- SDI-ITEM-HEAL: a consumable on the bar (kind "item", or a /use macro):
       -- its raw healing, bandage total or mana, through the same button text
       -- as spells (Format.Short; healing green, mana blue). No reduction
       -- and no miss tracking: those read spell wordings only.
-      local itemID = labItem or itemOnSlot(slot)
-      if itemID then view = ns.ComputeItem(itemID) end
+      local cached = memo and ns._btnMemoItem[itemID]
+      if cached ~= nil then
+        if cached then
+          mainText, mainColor, sideText, sideColor, layout = cached[1], cached[2], cached[3], cached[4], cached[5]
+        end
+      else
+        local view = ns.ComputeItem(itemID)
+        mainText, mainColor, sideText, sideColor, layout = buttonText(view, nil)
+        if memo then
+          ns._btnMemoItem[itemID] = mainText and { mainText, mainColor, sideText, sideColor, layout } or false
+        end
+      end
     end
   end
-  local mainText, mainColor, sideText, sideColor, layout = buttonText(view, reduction)
   local d = drawn[button]
   if not d then
     d = {}
@@ -2342,6 +2412,45 @@ local run, requestUpdate
 local function schedule(delay)
   if C_Timer and type(C_Timer.After) == "function" then C_Timer.After(delay, run) else run() end
 end
+ns._barsDirty = true
+ns._btnMemoSpell = {}
+ns._btnMemoItem = {}
+ns._lastStats = {}
+ns._lastButtonsRun = -100
+
+function ns._statsUnchanged()
+  local prev = ns._lastStats
+  if not prev.ready then return false end
+  local dmg = bonus.damage
+  for i = 2, 7 do
+    if prev[i] ~= dmg[i] then return false end
+  end
+  if prev.heal ~= bonus.heal or prev.melee ~= weaponStats.melee or prev.offhand ~= weaponStats.offhand
+    or prev.meleeSpeed ~= weaponStats.meleeSpeed or prev.speedSeal ~= weaponStats.speedSeal
+    or prev.offhandSpeed ~= weaponStats.offhandSpeed or prev.ranged ~= weaponStats.ranged
+    or prev.rangedSpeed ~= weaponStats.rangedSpeed or prev.ap ~= weaponStats.ap
+    or prev.maxHealth ~= weaponStats.maxHealth or prev.form ~= weaponStats.form
+    or prev.targetSpeed ~= targetSpeed then
+    return false
+  end
+  if weaponStats.class == "PALADIN" and prev.seal ~= activeSeal() then return false end
+  return true
+end
+
+function ns._stampStats()
+  local prev = ns._lastStats
+  prev.ready = true
+  local dmg = bonus.damage
+  for i = 2, 7 do prev[i] = dmg[i] end
+  prev.heal = bonus.heal
+  prev.melee, prev.offhand = weaponStats.melee, weaponStats.offhand
+  prev.meleeSpeed, prev.speedSeal, prev.offhandSpeed = weaponStats.meleeSpeed, weaponStats.speedSeal, weaponStats.offhandSpeed
+  prev.ranged, prev.rangedSpeed = weaponStats.ranged, weaponStats.rangedSpeed
+  prev.ap, prev.maxHealth, prev.form = weaponStats.ap, weaponStats.maxHealth, weaponStats.form
+  prev.targetSpeed = targetSpeed
+  prev.seal = weaponStats.class == "PALADIN" and activeSeal() or nil
+end
+
 run = function()
   pending = false
   lastRun = textClock()
@@ -2352,18 +2461,31 @@ run = function()
       or type(GamepadMainActionBarFrame) == "table" or labSeen then
       if collectDue or lastRun - lastCollect >= COLLECT_EVERY then
         collectDue, lastCollect = false, lastRun
+        local prevMain, prevPet = #buttons, #petButtons
         local t0 = BIT.Perf and BIT.Perf.Begin()
         collectButtons()
         if BIT.Perf then BIT.Perf.End("SpellDamageInfo.collect", t0) end
+        if #buttons ~= prevMain or #petButtons ~= prevPet then ns._barsDirty = true end
       end
     end
     readBonus()
     readWeapon()
+    if not ns._barsDirty and not isRetail() and ns._statsUnchanged() and (lastRun - ns._lastButtonsRun) < RECHECK then
+      if BIT.Perf then BIT.Perf.End("SpellDamageInfo.refresh", runStart) end
+      return
+    end
+    ns._barsDirty = false
+    ns._stampStats()
+    ns._lastButtonsRun = lastRun
+    for k in pairs(ns._btnMemoSpell) do ns._btnMemoSpell[k] = nil end
+    for k in pairs(ns._btnMemoItem) do ns._btnMemoItem[k] = nil end
   end
   parseBudget, parseDeferred = PARSE_BUDGET, false
+  ns._memoActive = true
   local t1 = BIT.Perf and BIT.Perf.Begin()
   continuing = updateAllButtons()
   if BIT.Perf then BIT.Perf.End("SpellDamageInfo.buttons", t1) end
+  ns._memoActive = false
   parseBudget = nil
   if parseDeferred then deferred = true end
   if BIT.Perf then BIT.Perf.End("SpellDamageInfo.refresh", runStart) end
@@ -2376,10 +2498,17 @@ run = function()
   end
 end
 requestUpdate = function()
+  ns._barsDirty = true
   if continuing then again = true end
   if pending then return end
   pending = true
   -- A short delay lets Blizzard's own handlers set button.action after a page change first.
+  schedule(math.max(0.1, REFRESH_GAP - (textClock() - lastRun)))
+end
+function ns._requestStatUpdate()
+  if continuing then again = true end
+  if pending then return end
+  pending = true
   schedule(math.max(0.1, REFRESH_GAP - (textClock() - lastRun)))
 end
 ns.Refresh = requestUpdate
@@ -3047,16 +3176,23 @@ frame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     requestUpdate()
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
     if not isSecret(arg1) and arg1 == "player" and not isSecret(arg3) and type(arg3) == "number" then
-      noteSealCast(arg3)
-      requestUpdate()
+      if noteSealCast(arg3) then
+        requestUpdate()
+      else
+        ns._requestStatUpdate()
+      end
     end
-  elseif event == "UNIT_AURA" or event == "UNIT_PET" or event == "UNIT_ATTACK_POWER" or event == "UNIT_RANGED_ATTACK_POWER"
-    or event == "UNIT_DAMAGE" or event == "UNIT_ATTACK_SPEED" or event == "UNIT_RANGEDDAMAGE" or event == "UNIT_MAXHEALTH" then
+  elseif event == "UNIT_PET" then
     if not isSecret(arg1) and arg1 == "player" then
       requestUpdate()
+    end
+  elseif event == "UNIT_AURA" or event == "UNIT_ATTACK_POWER" or event == "UNIT_RANGED_ATTACK_POWER"
+    or event == "UNIT_DAMAGE" or event == "UNIT_ATTACK_SPEED" or event == "UNIT_RANGEDDAMAGE" or event == "UNIT_MAXHEALTH" then
+    if not isSecret(arg1) and arg1 == "player" then
+      ns._requestStatUpdate()
     elseif event == "UNIT_ATTACK_SPEED" and not isSecret(arg1) and arg1 == "target" then
       readTargetSpeed()
-      requestUpdate()
+      ns._requestStatUpdate()
     end
   elseif event == "PET_BAR_UPDATE" then
     -- collectPetButtons only grows. The skip has to drop a bar the event just found.

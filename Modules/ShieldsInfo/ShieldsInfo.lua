@@ -128,18 +128,20 @@ local overlays = setmetatable({}, { __mode = "k" })
 
 -- Hide runs from the event handlers too, where the client refuses work on a protected
 -- frame in combat: wrapped, so a refusal never takes a handler down (the tick hides the
--- overlay at the next pass anyway).
+-- overlay at the next pass anyway). Skip calling Hide (and creating closures) when already hidden.
 local function hideOverlay(overlay)
-  if overlay then pcall(function() overlay.bar:Hide() end) end
+  if not overlay or not overlay.shown then return end
+  overlay.shown = false
+  pcall(overlay.bar.Hide, overlay.bar)
 end
 
 -- The unit's health bar the module may draw on, or nil.
 local function usableBar(frame)
   if type(frame) ~= "table" then return nil end
-  local ok = pcall(function()
-    if type(frame.IsForbidden) == "function" and frame:IsForbidden() then error("forbidden") end
-  end)
-  if not ok then return nil end
+  if type(frame.IsForbidden) == "function" then
+    local ok, forbidden = pcall(frame.IsForbidden, frame)
+    if not ok or forbidden then return nil end
+  end
   return frame
 end
 
@@ -282,11 +284,16 @@ end
 -- Style writes restyle the live overlays even while the settings are closed. Fully
 -- guarded: the subscriber registry calls back without pcall, so nothing here
 -- may error into an unrelated settings write.
+local styleRev = 0
 local function restyleOverlays()
+  styleRev = styleRev + 1
   for _, o in pairs(overlays) do
     if type(o) == "table" and type(o.bar) == "table" then
       styleOverlay(o.bar)
-      if type(o.number) == "table" then pcall(styleNumber, o.number) end
+      if type(o.number) == "table" then
+        o.numStyleRev = nil
+        pcall(styleNumber, o.number)
+      end
     end
   end
 end
@@ -316,7 +323,7 @@ local function overlayFor(healthBar)
     return b
   end)
   if not ok or type(bar) ~= "table" then return nil end
-  o = { bar = bar, unit = nil, plate = false, party = false, current = false, edge = false }
+  o = { bar = bar, unit = nil, plate = false, party = false, current = false, edge = false, shown = false }
   overlays[healthBar] = o
   return o
 end
@@ -325,31 +332,47 @@ end
 -- client into the font string, so it also shows in combat, where it is secret. Lua never reads, compares or
 -- formats it itself. Only on the big frames: a party, raid or nameplate bar has no room for it.
 local NUMBER_UNITS = { player = true, target = true, focus = true }
-local function paintNumber(holder, bar, anchor, value, wanted)
-  if not wanted then
-    if holder.number then pcall(holder.number.Hide, holder.number) end
-    return
+
+local function applyNumber(holder, bar, anchor, value)
+  local text = holder.number
+  if not text then
+    text = bar:CreateFontString(nil, "OVERLAY")
+    holder.number = text
   end
-  pcall(function()
-    local text = holder.number
-    if not text then
-      text = bar:CreateFontString(nil, "OVERLAY")
-      holder.number = text
-    end
-    local s = settings or DEFAULTS
+  local s = settings or DEFAULTS
+  local pos, size = s.numberPosition, s.numberSize
+  if holder.numStyleRev ~= styleRev or holder.numSize ~= size then
     styleNumber(text)
+    holder.numStyleRev, holder.numSize = styleRev, size
+  end
+  if holder.numAnchor ~= anchor or holder.numPos ~= pos then
     text:ClearAllPoints()
     -- Against the health bar, not the overlay: next to a DoT marker the overlay is only a thin edge.
-    if s.numberPosition == "left" then text:SetPoint("LEFT", anchor, "LEFT", 3, 0)
-    elseif s.numberPosition == "center" then text:SetPoint("CENTER", anchor, "CENTER", 0, 0)
+    if pos == "left" then text:SetPoint("LEFT", anchor, "LEFT", 3, 0)
+    elseif pos == "center" then text:SetPoint("CENTER", anchor, "CENTER", 0, 0)
     else text:SetPoint("RIGHT", anchor, "RIGHT", -3, 0) end
-    if C_StringUtil and type(C_StringUtil.TruncateWhenZero) == "function" then
-      text:SetText(C_StringUtil.TruncateWhenZero(value))
-    else
-      text:SetFormattedText("%.0f", value)
-    end
+    holder.numAnchor, holder.numPos = anchor, pos
+  end
+  if C_StringUtil and type(C_StringUtil.TruncateWhenZero) == "function" then
+    text:SetText(C_StringUtil.TruncateWhenZero(value))
+  else
+    text:SetFormattedText("%.0f", value)
+  end
+  if not holder.numShown then
     text:Show()
-  end)
+    holder.numShown = true
+  end
+end
+
+local function paintNumber(holder, bar, anchor, value, wanted)
+  if not wanted then
+    if holder.number and holder.numShown ~= false then
+      holder.numShown = false
+      pcall(holder.number.Hide, holder.number)
+    end
+    return
+  end
+  pcall(applyNumber, holder, bar, anchor, value)
 end
 
 -- A DoT marker already paints the fill. The shield then keeps a thin edge along the top
@@ -379,6 +402,27 @@ end
 -- type() cannot reveal a combat-secret value, so a secret absorb (or health pool)
 -- flows on without one Lua comparison; only a proven-plain reading may be
 -- compared, and a depleted plain shield hides like any missing one.
+local function applyBar(o, unit, healthBar, absorb, maxHealth)
+  -- EUI can change fill direction on the same bar when its profile changes.
+  local orientation = ask(healthBar.GetOrientation, healthBar)
+  if isSecret(orientation) or (orientation ~= "VERTICAL" and orientation ~= "HORIZONTAL") then
+    orientation = "HORIZONTAL"
+  end
+  local reverse = ask(healthBar.GetReverseFill, healthBar)
+  if isSecret(reverse) or type(reverse) ~= "boolean" then reverse = orientation == "VERTICAL" end
+  if o.orientation ~= orientation then o.bar:SetOrientation(orientation); o.orientation = orientation end
+  if o.reverse ~= reverse then o.bar:SetReverseFill(reverse); o.reverse = reverse end
+  local dotOn = BIT.Plate and type(BIT.Plate.DotOnUnit) == "function" and BIT.Plate.DotOnUnit(unit)
+  applyOverlayMode(o, dotOn == true)
+  o.bar:SetMinMaxValues(0, maxHealth)
+  o.bar:SetValue(absorb)
+  if not o.shown then
+    o.bar:Show()
+    o.shown = true
+  end
+  paintNumber(o, o.bar, healthBar, absorb, (settings or DEFAULTS).showNumber and NUMBER_UNITS[unit] or false)
+end
+
 local function updateBar(unit, healthBar, enabled)
   local o = type(healthBar) == "table" and overlays[healthBar] or nil
   if not o and enabled and type(healthBar) == "table" and not isSecret(unit) and type(unit) == "string"
@@ -386,6 +430,10 @@ local function updateBar(unit, healthBar, enabled)
     o = overlayFor(healthBar)
   end
   if type(healthBar) ~= "table" or not enabled or isSecret(unit) or type(unit) ~= "string" then
+    hideOverlay(o)
+    return
+  end
+  if (unit == "target" or unit == "focus") and type(UnitExists) == "function" and ask(UnitExists, unit) == false then
     hideOverlay(o)
     return
   end
@@ -401,24 +449,11 @@ local function updateBar(unit, healthBar, enabled)
     if not o then return end
   end
   o.current = true
-  local ok = pcall(function()
-    -- EUI can change fill direction on the same bar when its profile changes.
-    local orientation = ask(healthBar.GetOrientation, healthBar)
-    if isSecret(orientation) or (orientation ~= "VERTICAL" and orientation ~= "HORIZONTAL") then
-      orientation = "HORIZONTAL"
-    end
-    local reverse = ask(healthBar.GetReverseFill, healthBar)
-    if isSecret(reverse) or type(reverse) ~= "boolean" then reverse = orientation == "VERTICAL" end
-    if o.orientation ~= orientation then o.bar:SetOrientation(orientation); o.orientation = orientation end
-    if o.reverse ~= reverse then o.bar:SetReverseFill(reverse); o.reverse = reverse end
-    local dotOn = BIT.Plate and type(BIT.Plate.DotOnUnit) == "function" and BIT.Plate.DotOnUnit(unit)
-    applyOverlayMode(o, dotOn == true)
-    o.bar:SetMinMaxValues(0, maxHealth)
-    o.bar:SetValue(absorb)
-    o.bar:Show()
-    paintNumber(o, o.bar, healthBar, absorb, (settings or DEFAULTS).showNumber and NUMBER_UNITS[unit] or false)
-  end)
-  if not ok then hideOverlay(o) end
+  local ok = pcall(applyBar, o, unit, healthBar, absorb, maxHealth)
+  if not ok then
+    o.shown = true
+    hideOverlay(o)
+  end
 end
 
 -- The real primary layout (PlayerFrame.Content...HealthBarsContainer.HealthBar; the primary
@@ -666,6 +701,7 @@ local function nameplateBars()
   return out
 end
 
+local partySeenScratch, plateSeenScratch = {}, {}
 local function updateAll()
   if not settings then return end
   for _, o in pairs(overlays) do o.current = false end
@@ -676,28 +712,29 @@ local function updateAll()
   if type(pBar) == "table" then local o = overlays[pBar]; if o then o.party = false end end
   if type(tBar) == "table" then local o = overlays[tBar]; if o then o.party = false end end
   if type(fBar) == "table" then local o = overlays[fBar]; if o then o.party = false end end
-  local partySeen = {}
-  for _, pb in ipairs(partyBars()) do
-    partySeen[pb.bar] = true
-    updateBar(pb.unit, pb.bar, groupEnabled(pb.unit, pb.kind))
-    local o = overlays[pb.bar]
-    if o then o.party = true; o.plate = false end
+  local partySeen = partySeenScratch
+  for k in pairs(partySeen) do partySeen[k] = nil end
+  if (settings.party or settings.raid) and (type(IsInGroup) ~= "function" or ask(IsInGroup) ~= false or next(compactFrames) ~= nil) then
+    for _, pb in ipairs(partyBars()) do
+      partySeen[pb.bar] = true
+      updateBar(pb.unit, pb.bar, groupEnabled(pb.unit, pb.kind))
+      local o = overlays[pb.bar]
+      if o then o.party = true; o.plate = false end
+    end
   end
-  local seen = {}
-  for _, np in ipairs(nameplateBars()) do
-    seen[np.bar] = true
-    updateBar(np.unit, np.bar, settings.nameplates)
-    local o = overlays[np.bar]
-    if o then o.plate = true; o.party = false end
+  local seen = plateSeenScratch
+  for k in pairs(seen) do seen[k] = nil end
+  if settings.nameplates then
+    for _, np in ipairs(nameplateBars()) do
+      seen[np.bar] = true
+      updateBar(np.unit, np.bar, settings.nameplates)
+      local o = overlays[np.bar]
+      if o then o.plate = true; o.party = false end
+    end
   end
   -- plates the client has handed back (recycled or gone): their overlays leave at once
   for bar, o in pairs(overlays) do
     if o.plate and not seen[bar] then hideOverlay(o) end
-  end
-  -- party members gone from every enumeration (left the party/raid): their overlays
-  -- leave one by one; player/target/nameplates are never marked party, so only
-  -- departed party bars are touched and overlay objects are kept for reuse
-  for bar, o in pairs(overlays) do
     if o.party and not partySeen[bar] then hideOverlay(o) end
     if not o.current then hideOverlay(o) end
   end

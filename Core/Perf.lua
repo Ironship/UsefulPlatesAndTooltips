@@ -22,6 +22,7 @@ BIT.Perf = Perf
 local clock = type(debugprofilestop) == "function" and debugprofilestop or nil
 local SLOW_MS, MAX_SLOW = 8, 40
 
+local active = false
 local sections = {}   -- label -> { calls, ms, peak, slow, kb }
 local slowCalls = {}  -- a ring of the latest calls of SLOW_MS or more: { at, label, ms, kb }
 local slowNext = 1
@@ -65,11 +66,15 @@ function Perf.Wrap(label, fn, memory)
   if type(fn) ~= "function" then return fn end
   if memory then
     return function(...)
+      if not active then return fn(...) end
       local m0 = collectgarbage("count")
       return finish(label, clock(), m0, fn(...))
     end
   end
-  return function(...) return finish(label, clock(), nil, fn(...)) end
+  return function(...)
+    if not active then return fn(...) end
+    return finish(label, clock(), nil, fn(...))
+  end
 end
 
 function Perf.Watch(frame, script, label)
@@ -79,10 +84,26 @@ function Perf.Watch(frame, script, label)
   pcall(frame.SetScript, frame, script, Perf.Wrap(label .. " " .. script, fn, script == "OnUpdate"))
 end
 
-function Perf.Begin() return clock() end
+function Perf.Begin()
+  if not active then return nil end
+  return clock()
+end
 
 function Perf.End(label, t0)
   if t0 then record(label, clock() - t0, nil) end
+end
+
+function Perf.Start()
+  Perf.Reset()
+  active = true
+end
+
+function Perf.Stop()
+  active = false
+end
+
+function Perf.IsActive()
+  return active
 end
 
 ---------------------------------------------------------------------------------------------
@@ -138,14 +159,25 @@ end
 -- The saved variables keep the live tables, so they hold this session's numbers after a /reload or a logout, where they
 -- can be read from the file. Called when the addon's own settings are loaded.
 function Perf.Attach(db)
-  startedAt = startedAt or GetTime()
   if type(db) == "table" then db.perf = { sections = sections, slow = slowCalls } end
   if BIT.RegisterCommand then
     BIT.RegisterCommand("perf", function(arg)
       arg = type(arg) == "string" and arg:lower() or ""
-      if arg == "reset" then
+      if arg == "on" or arg == "start" then
+        Perf.Start()
+        BIT.Say("perf: collecting. Play for a minute, then /upt perf")
+        return
+      elseif arg == "off" or arg == "stop" then
+        Perf.Stop()
+        BIT.Say("perf: stopped; /upt perf prints what was collected")
+        return
+      elseif arg == "reset" then
         Perf.Reset()
         BIT.Say("perf: counters cleared")
+        return
+      elseif arg == "" and not active and next(sections) == nil then
+        Perf.Start()
+        BIT.Say("perf: started collecting (was off to save CPU); run /upt perf again in a minute")
         return
       end
       for _, line in ipairs(arg == "slow" and Perf.SlowLines() or Perf.Report()) do BIT.Say(line) end

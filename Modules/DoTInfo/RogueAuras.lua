@@ -12,7 +12,7 @@ local R = ns.Retail or {}
 if forever then ns.RogueNative = R end
 
 local SIZE, GAP, MAX_PLATES = 18, 2, 40
-local AURA_REFRESH_INTERVAL = 0.25
+local AURA_REFRESH_INTERVAL = 1.0
 local spellIDs = forever and {
     [2818] = true, [2819] = true, [11353] = true, [11354] = true, [25349] = true, -- Deadly Poison I-V
 } or {
@@ -38,21 +38,28 @@ local function ask(fn, ...)
 end
 
 local function usable(object)
-    if secret(object) or object == nil then return false end
-    local ok, forbidden = pcall(function() return object.IsForbidden and object:IsForbidden() end)
-    return ok and not secret(forbidden) and not forbidden
+    if secret(object) or type(object) ~= "table" then return false end
+    if type(object.IsForbidden) == "function" then
+        local ok, forbidden = pcall(object.IsForbidden, object)
+        if not ok or secret(forbidden) or forbidden then return false end
+    end
+    return true
+end
+
+local function targetHealthBarOf(parent)
+    local main = parent.TargetFrameContent and parent.TargetFrameContent.TargetFrameContentMain
+    return (main and main.HealthBarsContainer and main.HealthBarsContainer.HealthBar)
+        or (main and main.HealthBar) or TargetFrameHealthBar or parent.healthbar
 end
 
 local function healthBar(parent, onPlate)
     if not usable(parent) then return end
-    local ok, bar = pcall(function()
-        if onPlate then
-            return BIT.Plate.HealthBar(parent)
-        end
-        local main = parent.TargetFrameContent and parent.TargetFrameContent.TargetFrameContentMain
-        return (main and main.HealthBarsContainer and main.HealthBarsContainer.HealthBar)
-            or (main and main.HealthBar) or TargetFrameHealthBar or parent.healthbar
-    end)
+    local ok, bar
+    if onPlate then
+        ok, bar = pcall(BIT.Plate.HealthBar, parent)
+    else
+        ok, bar = pcall(targetHealthBarOf, parent)
+    end
     if ok and usable(bar) then return bar end
 end
 
@@ -422,39 +429,81 @@ local function currentSpecs(allDots)
     return combined
 end
 
-local function poisonAppearance(entry, spec)
-    local config, parts = {}, {}
+local APPEARANCE_KEYS = {
+    "fillTexture", "fillColor", "fillOpacity", "dotColors", "outlineStyle",
+    "dashLength", "outlineThickness", "outlineColor", "outlineOpacity", "segmentDividers",
+    "pulseOutline", "showGlow", "glowSize", "showShine", "shineInterval", "scrollStripes", "labelSize", "labelColor",
+}
+local PLATE_SETTING_KEYS = {}
+for i = 1, #APPEARANCE_KEYS do
+    local key = APPEARANCE_KEYS[i]
+    if key ~= "segmentDividers" and key ~= "labelSize" and key ~= "labelColor" then
+        PLATE_SETTING_KEYS[i] = "plate" .. key:sub(1, 1):upper() .. key:sub(2)
+    else
+        PLATE_SETTING_KEYS[i] = key
+    end
+end
+local sigScratch = {}
+local baseSigStamp, baseSigUnit, baseSigPlate = -1, nil, nil
+
+local function baseAppearanceSig(onPlate)
+    local now = GetTime()
+    if now ~= baseSigStamp then
+        baseSigStamp, baseSigUnit, baseSigPlate = now, nil, nil
+    end
+    if onPlate and baseSigPlate then return baseSigPlate end
+    if not onPlate and baseSigUnit then return baseSigUnit end
+    local db, defaults = ns.db, ns.DEFAULTS
+    local map = onPlate and PLATE_SETTING_KEYS or APPEARANCE_KEYS
+    for i = 1, #APPEARANCE_KEYS do
+        local setting = map[i]
+        local v = db[setting]
+        if v == nil and defaults then v = defaults[setting] end
+        sigScratch[i] = tostring(v)
+    end
+    local n = #APPEARANCE_KEYS
+    sigScratch[n + 1] = tostring(db.nativeStacks == true)
+    sigScratch[n + 2] = tostring(forever and db.nativeShowAll == true)
+    sigScratch[n + 3] = tostring(gateReplace())
+    local sig = table.concat(sigScratch, "|", 1, n + 3)
+    if onPlate then baseSigPlate = sig else baseSigUnit = sig end
+    return sig
+end
+
+local function poisonSignature(entry, spec)
+    local base = baseAppearanceSig(entry.onPlate)
+    local flags = (spec.stacked and "1" or "0") .. (spec.gated and "1" or "0") .. tostring(spec.idsVersion or 0)
+    return base .. "|" .. flags
+end
+
+local function poisonConfig(entry, spec)
+    local config = {}
     local onPlate = entry.onPlate
-    for _, key in ipairs({ "fillTexture", "fillColor", "fillOpacity", "dotColors", "outlineStyle",
-        "dashLength", "outlineThickness", "outlineColor", "outlineOpacity", "segmentDividers",
-        "pulseOutline", "showGlow", "glowSize", "showShine", "shineInterval", "scrollStripes", "labelSize", "labelColor" }) do
-        local setting = onPlate and key ~= "segmentDividers" and key ~= "labelSize" and key ~= "labelColor"
-            and ("plate" .. key:sub(1, 1):upper() .. key:sub(2)) or key
-        config[key] = ns.db[setting]
-        if config[key] == nil and ns.DEFAULTS then config[key] = ns.DEFAULTS[setting] end
-        parts[#parts + 1] = tostring(config[key])
+    local db, defaults = ns.db, ns.DEFAULTS
+    local map = onPlate and PLATE_SETTING_KEYS or APPEARANCE_KEYS
+    for i = 1, #APPEARANCE_KEYS do
+        local key, setting = APPEARANCE_KEYS[i], map[i]
+        local v = db[setting]
+        if v == nil and defaults then v = defaults[setting] end
+        config[key] = v
     end
     config.onPlate = onPlate
     config.name = ask(C_Spell and C_Spell.GetSpellName, spec.nameID) or spec.fallback
     config.school = spec.school
-    config.stacksText = spec.stacked == true and ns.db.nativeStacks == true
-    parts[#parts + 1] = tostring(config.stacksText)
+    config.stacksText = spec.stacked == true and db.nativeStacks == true
     -- Diagnostic (nativeShowAll): the native segment is white and half transparent, so it can be told from the plain one of the
     -- same DoT, which is drawn in the DoT's own colour.
-    if forever and ns.db.nativeShowAll == true then
+    local probing = forever and db.nativeShowAll == true
+    if probing then
         config.dotColors, config.fillColor, config.fillOpacity = "single", "white", 55
     end
-    parts[#parts + 1] = tostring(forever and ns.db.nativeShowAll == true)
     -- In place the twin looks like the plain segment; with the diagnostic option on as well it is cyan and the plain
     -- segment stays, to see where the twin is drawn and whether its fill shows.
-    local probing = forever and ns.db.nativeShowAll == true
     if spec.gated and (not gateReplace() or probing) then config.dotColors, config.fillColor, config.fillOpacity = "single", "cyan", 70 end
     -- On Forever nameplates a fill texture directly on `timer` is not shown reliably (only a child frame is, like the
     -- outline), so every nameplate segment gets fillAbove — not only gated twins.
     config.fillAbove = forever and (onPlate == true or (spec.gated == true and gateReplace()))
-    parts[#parts + 1] = tostring(spec.gated == true) .. tostring(gateReplace()) .. tostring(probing)
-        .. tostring(config.fillAbove) .. tostring(spec.idsVersion or 0)
-    return config, table.concat(parts, "|")
+    return config
 end
 
 -- Lays a native segment's geometry bar over the bar the player sees: the HealthBar frame, or, where that is taller
@@ -639,7 +688,7 @@ local function updateNativeOffset(entry, unit, enabled, damage)
 end
 
 local function updatePoisonOffset(entry, unit, enabled)
-    if not entry or not entry.natives then return end
+    if not entry or not entry.natives or next(entry.natives) == nil then return end
     for _, damage in pairs(entry.natives) do
         -- Called from Core's frame update, outside any pcall of ours: an error here would reach the player's error
         -- window every frame. The segment is switched off for good instead and the reason kept for /upt native.
@@ -706,22 +755,25 @@ end
 
 local function updateNativeDamage(entry, unit, enabled, spec, entries)
     if not entry.natives[spec.key] and not specAvailable(spec) then return end
-    local config, signature = poisonAppearance(entry, spec)
-    if enabled and signature ~= entry.signatures[spec.key] and not (ask(InCombatLockdown) == true
-        and ask(entry.parent.IsProtected, entry.parent) == true) then
-        -- Restricted descendants cannot be restyled; replace only the poison slot, not the aura icons.
-        local old = entry.natives[spec.key]
-        local replacement = createNativeDamage(entry, spec, config, signature)
-        if replacement then
-            if old then pcall(old.container.SetEnabled, old.container, false); pcall(old.container.Hide, old.container) end
-            entry.natives[spec.key] = replacement
-            local planName = spec.gated and specPlanName(spec) or nil
-            if planName then
-                entry.gated = entry.gated or {}
-                entry.gated[planName] = replacement
+    if enabled then
+        local signature = poisonSignature(entry, spec)
+        if signature ~= entry.signatures[spec.key] and not (ask(InCombatLockdown) == true
+            and ask(entry.parent.IsProtected, entry.parent) == true) then
+            -- Restricted descendants cannot be restyled; replace only the poison slot, not the aura icons.
+            local config = poisonConfig(entry, spec)
+            local old = entry.natives[spec.key]
+            local replacement = createNativeDamage(entry, spec, config, signature)
+            if replacement then
+                if old then pcall(old.container.SetEnabled, old.container, false); pcall(old.container.Hide, old.container) end
+                entry.natives[spec.key] = replacement
+                local planName = spec.gated and specPlanName(spec) or nil
+                if planName then
+                    entry.gated = entry.gated or {}
+                    entry.gated[planName] = replacement
+                end
             end
+            entry.signatures[spec.key] = signature
         end
-        entry.signatures[spec.key] = signature
     end
     local damage = entry.natives[spec.key]
     if not damage or damage.failed then return end
@@ -865,6 +917,7 @@ local NO_SPECS = {}
 local function display(entry, unit, enabled, refresh)
     if not entry then return end
     if forever and ns.db and ns.db.nativeDots == false then enabled = false end
+    if not enabled and entry.heavyEnabled == false and entry.heavyUnit == unit and refresh ~= true then return end
     local allDots = wantGeneric()
     local now = GetTime()
     local heavy = not forever or refresh == true or not entry.heavyAt or now - entry.heavyAt >= HEAVY_INTERVAL
@@ -920,6 +973,7 @@ local function hostile(unit)
     return ask(UnitExists, unit) == true and ask(UnitCanAttack, "player", unit) == true
 end
 
+local currentPlates = {}
 local function update(refresh)
     if not started or not ns.db then return end
     if wantGeneric() then advanceGeneric() end
@@ -948,7 +1002,8 @@ local function update(refresh)
     else
         display(targetEntry, nil, false)
     end
-    local current = {}
+    local current = currentPlates
+    for k in pairs(current) do current[k] = nil end
     for unit in pairs(activeUnits) do
         local plate = ask(C_NamePlate and C_NamePlate.GetNamePlateForUnit, unit)
         local bar = healthBar(plate, true)

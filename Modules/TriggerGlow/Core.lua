@@ -446,9 +446,10 @@ local function styleGlow(f, button, groupId, place, detector)
   local w, h = buttonSize(button)
   local scale = clampNumber(cfg().size, 100, 250, 140) / 100
   local rgb = groupId and colorOf(groupId)
-  local key = string.format("%d/%d/%.2f/%s", w, h, scale, rgb and table.concat(rgb, ",") or "native")
-  if f.styleKey == key then return end
-  f.styleKey = key
+  local cr, cg, cb = rgb and rgb[1] or -1, rgb and rgb[2] or -1, rgb and rgb[3] or -1
+  if f.styleKey and f.sw == w and f.sh == h and f.ss == scale and f.sr == cr and f.sg == cg and f.sb == cb then return end
+  f.styleKey = true
+  f.sw, f.sh, f.ss, f.sr, f.sg, f.sb = w, h, scale, cr, cg, cb
   local gw, gh = w * scale, h * scale
   if f.glowKind ~= "blizzard" then gw, gh = gw * 1.35, gh * 1.35 end
   if place then
@@ -461,9 +462,9 @@ local function styleGlow(f, button, groupId, place, detector)
     f:SetSize(w * scale, h * scale)
     local r, g, b = 1, 1, 1
     if rgb then r, g, b = rgb[1], rgb[2], rgb[3] end
-    for _, region in ipairs({ f.ProcStartFlipbook, f.ProcLoopFlipbook, f.ProcAltGlow }) do
-      if region then region:SetVertexColor(r, g, b) end
-    end
+    if f.ProcStartFlipbook then f.ProcStartFlipbook:SetVertexColor(r, g, b) end
+    if f.ProcLoopFlipbook then f.ProcLoopFlipbook:SetVertexColor(r, g, b) end
+    if f.ProcAltGlow then f.ProcAltGlow:SetVertexColor(r, g, b) end
   else
     f:SetSize(w * scale * 1.35, h * scale * 1.35)
     local r, g, b = 1, 0.85, 0.35
@@ -856,10 +857,12 @@ local function updateKill(entry, testing)
       if has then alpha = a end
     end
   end
-  d.clip:Show()
-  showGlow(g, true)
+  if not d.on then
+    d.clip:Show()
+    showGlow(g, true)
+    d.on = true
+  end
   g:SetAlpha(alpha)
-  d.on = true
   if not testing and not lastKill[button] then
     lastKill[button] = true
     trace(string.format("kill detector armed on %s (damage %d)", entry.name, math.floor(damage + 0.5)))
@@ -883,12 +886,24 @@ local DISPEL_RETRY = 5
 local DISPEL_FILTER = { friend = "HARMFUL", enemy = "HELPFUL" }
 local targetStamp = 0
 
-local function dispelSignature(button, rule)
+local function dispelMatches(bank, button, rule)
+  if not bank or bank.rule ~= rule then return false end
   local w, h = buttonSize(button)
   local scale = clampNumber(cfg().size, 100, 250, 140)
+  local op = clampNumber(cfg().opacity, 10, 100, 100)
   local rgb = colorOf("dispel")
-  return string.format("%s/%d/%d/%d/%s/%d", rule.key, w, h, scale, rgb and table.concat(rgb, ",") or "native",
-    clampNumber(cfg().opacity, 10, 100, 100))
+  local cr, cg, cb = rgb and rgb[1] or -1, rgb and rgb[2] or -1, rgb and rgb[3] or -1
+  return bank.dw == w and bank.dh == h and bank.dScale == scale and bank.dOp == op
+    and bank.dr == cr and bank.dg == cg and bank.db == cb
+end
+
+local function stampDispel(bank, button)
+  local w, h = buttonSize(button)
+  local rgb = colorOf("dispel")
+  bank.dw, bank.dh = w, h
+  bank.dScale = clampNumber(cfg().size, 100, 250, 140)
+  bank.dOp = clampNumber(cfg().opacity, 10, 100, 100)
+  bank.dr, bank.dg, bank.db = rgb and rgb[1] or -1, rgb and rgb[2] or -1, rgb and rgb[3] or -1
 end
 
 local function makeDispelSide(button, rule, side)
@@ -1003,13 +1018,13 @@ local function updateDispel(entry, testing)
   local lockdown = ask(InCombatLockdown) == true
   local enabled = ruleEnabled(rule)
   if enabled and not lockdown then
-    local sig = dispelSignature(button, rule)
-    if bank and (bank.sig ~= sig or bank.rule ~= rule) then
+    if bank and not dispelMatches(bank, button, rule) then
       retireDispel(bank)
       bank = nil
     end
     if not bank then
-      bank = { sig = sig, rule = rule }
+      bank = { rule = rule }
+      stampDispel(bank, button)
       dispelBank[button] = bank
     end
     -- a build that failed is tried again after DISPEL_RETRY seconds, not on every update
@@ -1178,7 +1193,7 @@ ns.Rescan = rescan
 local frame = CreateFrame("Frame")
 local dirtyUpdate = false
 local sinceUpdate, sinceScan = 0, 0
-local UPDATE_EVERY, SCAN_EVERY = 0.1, 2
+local UPDATE_EVERY, SCAN_EVERY = 0.1, 30
 -- A pass that an event asked for (the target's health, a usable change, a shapeshift, ...) waits until this long after the last
 -- pass, capping event-driven passes at 20 a second (as ShieldsInfo's EVENT_GAP does); the glows still follow within a
 -- twentieth of a second, and at once when no pass ran in the last 50 ms.

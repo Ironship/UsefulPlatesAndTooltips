@@ -134,20 +134,19 @@ ns.ReadIncoming = readIncoming
 local overlays = setmetatable({}, { __mode = "k" })
 
 local function hideOverlay(o)
-    if not o then return end
-    pcall(function()
-        o.clip:Hide()
-        if o.others then o.others.clip:Hide() end
-        if o.hot then o.hot.clip:Hide() end
-    end)
+    if not o or not o.shown then return end
+    o.shown = false
+    pcall(o.clip.Hide, o.clip)
+    if o.others then pcall(o.others.clip.Hide, o.others.clip) end
+    if o.hot then pcall(o.hot.clip.Hide, o.hot.clip) end
 end
 
 local function usableBar(frame)
     if type(frame) ~= "table" then return nil end
-    local ok = pcall(function()
-        if type(frame.IsForbidden) == "function" and frame:IsForbidden() then error("forbidden") end
-    end)
-    if not ok then return nil end
+    if type(frame.IsForbidden) == "function" then
+        local ok, forbidden = pcall(frame.IsForbidden, frame)
+        if not ok or forbidden then return nil end
+    end
     return frame
 end
 
@@ -351,11 +350,34 @@ local function setLabel(o, incoming, hot, everyone)
     end
 end
 
+local function applyHealBar(o, healthBar, maxHealth, incoming, plainZero, everyone, hot)
+    paintOverlay(o)
+    layoutOverlay(o, healthBar, not plainZero, everyone ~= nil)
+    -- Keep the direct band empty while only the other bands carry healing.
+    if plainZero then
+        o.bar:SetMinMaxValues(0, maxHealth)
+        o.bar:SetValue(0)
+        o.bar:Show()
+        o.clip:Show()
+    else
+        setLayer(o, maxHealth, incoming)
+    end
+    setLayer(o.others, maxHealth, everyone)
+    setLayer(o.hot, maxHealth, hot)
+    setLabel(o, plainZero and 0 or incoming, hot, everyone)
+    o.shown = true
+end
+
 -- One unit's incoming heals on one health bar. Secret-safe: the reading (plain or secret) is
 -- fed only into SetMinMaxValues/SetValue; only a proven-plain zero hides the segment.
 local function updateBar(unit, healthBar, enabled)
     local o = type(healthBar) == "table" and overlays[healthBar] or nil
     if type(healthBar) ~= "table" or not enabled or isSecret(unit) or type(unit) ~= "string" then
+        hideOverlay(o)
+        return
+    end
+    if (unit == "target" or unit == "focus" or unit == "targettarget") and type(UnitExists) == "function"
+        and ask(UnitExists, unit) == false then
         hideOverlay(o)
         return
     end
@@ -388,24 +410,10 @@ local function updateBar(unit, healthBar, enabled)
         if not o then return end
     end
     o.unit = unit
-    local ok, err = pcall(function()
-        paintOverlay(o)
-        layoutOverlay(o, healthBar, not plainZero, everyone ~= nil)
-        -- Keep the direct band empty while only the other bands carry healing.
-        if plainZero then
-            o.bar:SetMinMaxValues(0, maxHealth)
-            o.bar:SetValue(0)
-            o.bar:Show()
-            o.clip:Show()
-        else
-            setLayer(o, maxHealth, incoming)
-        end
-        setLayer(o.others, maxHealth, everyone)
-        setLayer(o.hot, maxHealth, hot)
-        setLabel(o, plainZero and 0 or incoming, hot, everyone)
-    end)
+    local ok, err = pcall(applyHealBar, o, healthBar, maxHealth, incoming, plainZero, everyone, hot)
     if not ok then
         o.layoutSignature = nil
+        o.shown = true
         hideOverlay(o)
         if o.lastError ~= err then
             o.lastError = err
@@ -582,23 +590,27 @@ local function updateMana()
     o.clip:SetShown(ok)
 end
 
+local seenScratch = {}
 local function updateAll()
     if not settings then return end
-    local seen = {}
-    local function update(unit, bar, enabled)
-        if type(bar) == "table" then seen[bar] = true end
-        updateBar(unit, bar, enabled)
-    end
-    update("player", playerBar(), settings.player)
-    update("target", targetBar(), settings.target)
-    update("focus", focusBar(), settings.focus)
-    update("targettarget", targetTargetBar(), settings.targettarget)
-    if settings.party or settings.raid then
+    local seen = seenScratch
+    for k in pairs(seen) do seen[k] = nil end
+    local pBar, tBar, fBar, ttBar = playerBar(), targetBar(), focusBar(), targetTargetBar()
+    if type(pBar) == "table" then seen[pBar] = true end
+    updateBar("player", pBar, settings.player)
+    if type(tBar) == "table" then seen[tBar] = true end
+    updateBar("target", tBar, settings.target)
+    if type(fBar) == "table" then seen[fBar] = true end
+    updateBar("focus", fBar, settings.focus)
+    if type(ttBar) == "table" then seen[ttBar] = true end
+    updateBar("targettarget", ttBar, settings.targettarget)
+    if (settings.party or settings.raid) and (type(IsInGroup) ~= "function" or ask(IsInGroup) ~= false) then
         for _, entry in ipairs(groupBars()) do
             local isRaid = entry.kind == "raid" or (entry.kind == nil and entry.unit:match("^raid%d+$") ~= nil)
             local wanted
             if isRaid then wanted = settings.raid else wanted = settings.party end
-            update(entry.unit, entry.bar, wanted)
+            if type(entry.bar) == "table" then seen[entry.bar] = true end
+            updateBar(entry.unit, entry.bar, wanted)
         end
     end
     -- Replaced primary bars and departed group bars must both leave the display.
@@ -796,6 +808,7 @@ function ns.DrawSample(healthBar, maxHealth, heal, others, hot, flag)
         local shownHot = settings.showHots ~= false and hot or nil
         setLayer(o.hot, maxHealth, shownHot)
         setLabel(o, incoming, shownHot, everyone)
+        o.shown = true
     end)
     return ok
 end

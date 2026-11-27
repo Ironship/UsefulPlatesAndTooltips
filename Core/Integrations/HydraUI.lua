@@ -11,25 +11,32 @@ local _, BIT = ...
 local Plate = BIT.Plate
 local read = Plate.Read
 
+local hydraLoaded, hydraCheckedAt = nil, -100
 local function loaded()
+  if hydraLoaded == true then return true end
+  local now = GetTime and GetTime() or 0
+  if hydraLoaded == false and now - hydraCheckedAt < 5 then return false end
+  hydraCheckedAt = now
   local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
-  return read(isLoaded, "HydraUI") == true
+  hydraLoaded = read(isLoaded, "HydraUI") == true
+  return hydraLoaded
 end
 
 local PART = { player = "Player", focus = "Focus", target = "Target" }
 
 Plate.RegisterUnitFrameSource("HydraUI", function(_, part)
-  if PART[string.lower(part)] ~= part or not loaded() then return end
+  if PART[string.lower(part)] ~= part then return end
   local hydra = _G["HydraUI " .. part]
-  if type(hydra) ~= "table" or read(hydra.IsForbidden, hydra) == true or read(hydra.IsVisible, hydra) ~= true then return end
-  local bar = read(function() return hydra.Health end)
+  if type(hydra) ~= "table" or not loaded() then return end
+  if read(hydra.IsForbidden, hydra) == true or read(hydra.IsVisible, hydra) ~= true then return end
+  local bar = hydra.Health
   if type(bar) ~= "table" or read(bar.IsForbidden, bar) == true then return end
   return hydra, bar, nil
 end)
 
 Plate.RegisterPlateBarSource("HydraUI", function(plate)
-  local hydra = read(function() return plate._unitFrame end)
+  local hydra = type(plate) == "table" and plate._unitFrame
   if type(hydra) ~= "table" or not loaded() then return end
-  local bar = read(function() return hydra.Health end)
+  local bar = hydra.Health
   if Plate.VisibleHealthBar(bar) then return bar, "HydraUI._unitFrame.Health" end
 end)

@@ -25,6 +25,16 @@ local function isSecret(v)
   return ok and r == true
 end
 
+local function field(tbl, key)
+  return tbl[key]
+end
+
+local function readField(tbl, key)
+  if type(tbl) ~= "table" then return nil end
+  local ok, value = pcall(field, tbl, key)
+  if ok and not isSecret(value) then return value end
+end
+
 local function read(fn, ...)
   if type(fn) ~= "function" then return end
   local ok, value = pcall(fn, ...)
@@ -142,7 +152,7 @@ local function unitFrameBase(unit)
   local blizzard = unit ~= "targettarget"
     and ((unit == "player" and PlayerFrame) or (unit == "focus" and FocusFrame) or (unit ~= "player" and unit ~= "focus" and TargetFrame))
     or nil
-  if type(blizzard) == "table" and read(function() return blizzard._eqolUFHidden end) == true then
+  if type(blizzard) == "table" and readField(blizzard, "_eqolUFHidden") == true then
     local frame, bar = _G["EQOLUF" .. part .. "Frame"], _G["EQOLUF" .. part .. "Health"]
     if type(frame) ~= "table" or type(bar) ~= "table" or read(frame.IsForbidden, frame) == true
         or read(bar.IsForbidden, bar) == true or read(frame.IsVisible, frame) ~= true then return end
@@ -153,12 +163,12 @@ local function unitFrameBase(unit)
   -- off, so its frame only counts while it is on screen or Blizzard's carries X-Perl's own "disabled" flag.
   local perl = unit ~= "targettarget" and _G["XPerl_" .. part] or nil
   if type(perl) == "table" and read(perl.IsForbidden, perl) ~= true and (read(perl.IsVisible, perl) == true
-      or (type(blizzard) == "table" and read(function() return blizzard.XPerlDisabled end) == true)) then
-    local stats = read(function() return perl.statsFrame end)
-    local bar = type(stats) == "table" and read(function() return stats.healthBar end)
+      or (type(blizzard) == "table" and readField(blizzard, "XPerlDisabled") == true)) then
+    local stats = readField(perl, "statsFrame")
+    local bar = type(stats) == "table" and readField(stats, "healthBar")
     if type(bar) ~= "table" then bar = _G["XPerl_" .. part .. "statsFramehealthBar"] end
     if type(bar) == "table" and read(bar.IsForbidden, bar) ~= true then
-      local portrait = read(function() return perl.portraitFrame end)
+      local portrait = readField(perl, "portraitFrame")
       if type(portrait) ~= "table" then portrait = _G["XPerl_" .. part .. "portraitFrame"] end
       if type(portrait) ~= "table" or read(portrait.IsVisible, portrait) ~= true then portrait = nil end
       return perl, bar, portrait
@@ -402,13 +412,11 @@ function Plate.CollectActionButtons(add)
 end
 
 local function visibleHealthBar(bar)
-  local ok, visible = pcall(function()
-    if type(bar) ~= "table" or read(bar.IsForbidden, bar) == true
-      or read(bar.IsVisible, bar) == false then return false end
-    local alpha = read(bar.GetEffectiveAlpha, bar)
-    return type(alpha) ~= "number" or alpha > 0
-  end)
-  return ok and visible == true
+  if type(bar) ~= "table" then return false end
+  if read(bar.IsForbidden, bar) == true then return false end
+  if read(bar.IsVisible, bar) == false then return false end
+  local alpha = read(bar.GetEffectiveAlpha, bar)
+  return type(alpha) ~= "number" or alpha > 0
 end
 
 -- For the integrations: Plate.Read is the pcall reader of this file, Plate.VisibleHealthBar its visibility test.
@@ -417,7 +425,7 @@ function Plate.VisibleHealthBar(bar) return visibleHealthBar(bar) end
 
 local function isUnder(frame, plate)
   for _ = 1, 12 do
-    frame = read(function() return frame:GetParent() end)
+    frame = read(frame.GetParent, frame)
     if type(frame) ~= "table" then return false end
     if frame == plate then return true end
   end
@@ -516,11 +524,38 @@ end
 -- Prefer known integrations, then visible Blizzard bars, then a cached search of addon fields.
 function Plate.WidgetHost(plate)
   if type(plate) ~= "table" then return nil end
-  local unitFrame = read(function() return plate.unitFrame end)
-  if type(unitFrame) == "table" and read(function() return unitFrame.PlateFrame end) == plate then
+  local unitFrame = readField(plate, "unitFrame")
+  if type(unitFrame) == "table" and readField(unitFrame, "PlateFrame") == plate then
     return unitFrame
   end
   return plate
+end
+
+local function ellesmereChildBar(child, plate)
+  if child.nameplate == plate and type(child.health) == "table" and child:IsVisible()
+    and visibleHealthBar(child.health) then return child.health end
+end
+
+local function platynatorChildBar(child)
+  if type(child.widgets) ~= "table" or not child:IsVisible() then return end
+  for _, widget in ipairs(child.widgets) do
+    if type(widget.details) == "table" and widget.details.kind == "health"
+      and visibleHealthBar(widget.statusBar) then
+      return widget.statusBar
+    end
+  end
+end
+
+local function blizzardPlateBar(plate)
+  local unitFrame = plate.UnitFrame
+  if type(unitFrame) ~= "table" then return end
+  local container = unitFrame.HealthBarsContainer
+  if type(container) == "table" then
+    if visibleHealthBar(container.healthBar) then return container.healthBar, "UnitFrame.HealthBarsContainer.healthBar" end
+    if visibleHealthBar(container.HealthBar) then return container.HealthBar, "UnitFrame.HealthBarsContainer.HealthBar" end
+  end
+  if visibleHealthBar(unitFrame.healthBar) then return unitFrame.healthBar, "UnitFrame.healthBar" end
+  if visibleHealthBar(unitFrame.HealthBar) then return unitFrame.HealthBar, "UnitFrame.HealthBar" end
 end
 
 local function resolveHealthBar(plate)
@@ -544,11 +579,7 @@ local function resolveHealthBar(plate)
     local children = { pcall(plate.GetChildren, plate) }
     if children[1] then
       for i = 2, #children do
-        local ok, bar = pcall(function()
-          local child = children[i]
-          if child.nameplate == plate and type(child.health) == "table" and child:IsVisible()
-            and visibleHealthBar(child.health) then return child.health end
-        end)
+        local ok, bar = pcall(ellesmereChildBar, children[i], plate)
         if ok and type(bar) == "table" then return bar, "EllesmereUINameplates.health" end
       end
     end
@@ -557,49 +588,29 @@ local function resolveHealthBar(plate)
     local children = { pcall(plate.GetChildren, plate) }
     if children[1] then
       for i = 2, #children do
-        local child = children[i]
-        local ok, bar = pcall(function()
-          if type(child.widgets) ~= "table" or not child:IsVisible() then return end
-          for _, widget in ipairs(child.widgets) do
-            if type(widget.details) == "table" and widget.details.kind == "health"
-              and visibleHealthBar(widget.statusBar) then
-              return widget.statusBar
-            end
-          end
-        end)
+        local ok, bar = pcall(platynatorChildBar, children[i])
         if ok and type(bar) == "table" then return bar, "Platynator.widgets.health.statusBar" end
       end
     end
   end
   local host = Plate.WidgetHost(plate)
   if host ~= plate then
-    local bar = read(function() return host.healthBar end)
+    local bar = readField(host, "healthBar")
     if visibleHealthBar(bar) then return bar, "Plater.unitFrame.healthBar" end
   end
   local tpOk, tpBar = pcall(threatPlatesBar, plate)
   if tpOk and tpBar then return tpBar, "ThreatPlates.TPFrame.visual.Healthbar" end
-  local ok, bar, path = pcall(function()
-    local unitFrame = plate.UnitFrame
-    if type(unitFrame) ~= "table" then return end
-    local container = unitFrame.HealthBarsContainer
-    if type(container) == "table" then
-      if visibleHealthBar(container.healthBar) then return container.healthBar, "UnitFrame.HealthBarsContainer.healthBar" end
-      if visibleHealthBar(container.HealthBar) then return container.HealthBar, "UnitFrame.HealthBarsContainer.HealthBar" end
-    end
-    if visibleHealthBar(unitFrame.healthBar) then return unitFrame.healthBar, "UnitFrame.healthBar" end
-    if visibleHealthBar(unitFrame.HealthBar) then return unitFrame.HealthBar, "UnitFrame.HealthBar" end
-  end)
+  local ok, bar, path = pcall(blizzardPlateBar, plate)
   if ok and bar then return bar, path end
   return autoHealthBar(plate)
 end
 
 -- Every module with something on a plate asks for its health bar, several of them on every tick (ShieldsInfo for every
--- plate on screen, the DoT markers, the cast marker, the range icon): the answer, a bar or none, is kept for a quarter
--- of a second per plate, so the lookup above runs a few times a second for a plate however many ask. A plate that is
--- handed to another unit forgets it at once.
+-- plate on screen, the DoT markers, the cast marker, the range icon): the answer, a bar or none, is kept for a second
+-- per plate, so the lookup above runs rarely however many ask. A plate that is handed to another unit forgets it at once.
 local lookupCache = setmetatable({}, { __mode = "k" })
 local rightEdgeCache = setmetatable({}, { __mode = "k" })
-local LOOKUP_TTL = 0.25
+local LOOKUP_TTL = 1.0
 
 clearPlateCaches = function()
   for k in pairs(lookupCache) do lookupCache[k] = nil end
